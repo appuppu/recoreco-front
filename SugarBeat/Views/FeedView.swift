@@ -431,16 +431,60 @@ struct PostCardView: View {
     }
 
     var body: some View {
-        let screenWidth = UIScreen.main.bounds.width
-        let albumLeftPadding = (screenWidth - 280) / 2
+        GeometryReader { geometry in
+            let screenWidth = geometry.size.width
+            let screenHeight = geometry.size.height
+            let albumLeftPadding = (screenWidth - 280) / 2
 
-        ZStack(alignment: .bottom) {
-            // Black background to prevent white background showing
-            Color.black
-                .zIndex(0)
+            ZStack(alignment: .bottom) {
+                // Black background to prevent white background showing
+                Color.black
+                    .frame(width: screenWidth, height: screenHeight)
+                    .zIndex(0)
 
-            // Content
-            VStack(spacing: 0) {
+                // Background artwork with blur
+                AsyncImage(url: URL(string: post.artworkUrl ?? "")) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: screenWidth, height: screenHeight)
+                        .blur(radius: 50)
+                        .clipped()
+                } placeholder: {
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.purple.opacity(0.6),
+                                    Color.blue.opacity(0.6)
+                                ]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: screenWidth, height: screenHeight)
+                }
+                .allowsHitTesting(false)
+                .zIndex(1)
+
+                // Dark overlay
+                Rectangle()
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.black.opacity(0.3),
+                                Color.black.opacity(0.7)
+                            ]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: screenWidth, height: screenHeight)
+                    .allowsHitTesting(false)
+                    .zIndex(2)
+
+                // Content
+                VStack(spacing: 0) {
                     Spacer().frame(height: 80)
 
                 // Track info (top, with reduced spacing)
@@ -608,7 +652,8 @@ struct PostCardView: View {
                 }
                 .padding(.bottom, 140)
             }
-            .zIndex(100)
+            .zIndex(1000)
+            }
         }
         .onChange(of: isCurrent) { newValue in
             if !newValue && isPlaying {

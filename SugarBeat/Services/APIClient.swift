@@ -3,7 +3,7 @@ import Foundation
 enum APIError: Error {
     case invalidURL
     case requestFailed(Error)
-    case invalidResponse
+    case invalidResponse(statusCode: Int, data: Data?)
     case decodingFailed(Error)
     case unauthorized
 }
@@ -122,6 +122,11 @@ class APIClient {
         return try await performRequest(url: url, method: "GET")
     }
 
+    func deletePost(postId: Int64) async throws {
+        let url = URL(string: "\(baseURL)/posts/\(postId)")!
+        let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
+    }
+
     // MARK: - Follow Endpoints
 
     func followUser(userId: Int64) async throws {
@@ -226,7 +231,7 @@ class APIClient {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
+            throw APIError.invalidResponse(statusCode: -1, data: nil)
         }
 
         if httpResponse.statusCode == 401 {
@@ -234,7 +239,8 @@ class APIClient {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
+            print("❌ API Error - Status: \(httpResponse.statusCode), URL: \(url), Response: \(String(data: data, encoding: .utf8) ?? "No data")")
+            throw APIError.invalidResponse(statusCode: httpResponse.statusCode, data: data)
         }
 
         return data
@@ -262,7 +268,7 @@ class APIClient {
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.invalidResponse
+            throw APIError.invalidResponse(statusCode: -1, data: nil)
         }
 
         if httpResponse.statusCode == 401 {
@@ -270,7 +276,8 @@ class APIClient {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            throw APIError.invalidResponse
+            print("❌ API Error - Status: \(httpResponse.statusCode), URL: \(url), Response: \(String(data: data, encoding: .utf8) ?? "No data")")
+            throw APIError.invalidResponse(statusCode: httpResponse.statusCode, data: data)
         }
 
         // Handle empty responses

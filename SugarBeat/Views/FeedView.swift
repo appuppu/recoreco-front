@@ -44,7 +44,12 @@ struct FeedView: View {
                 // Current user's posts with horizontal navigation for other users
                 AllUserPostsView(
                     allUserPosts: viewModel.userPosts,
-                    currentUserPosts: viewModel.currentUserPosts
+                    currentUserPosts: viewModel.currentUserPosts,
+                    onRefresh: {
+                        Task {
+                            await viewModel.refreshFeed()
+                        }
+                    }
                 )
             }
 
@@ -186,6 +191,7 @@ struct FloatingMenuButton: View {
 struct AllUserPostsView: View {
     let allUserPosts: [UserPosts]
     let currentUserPosts: UserPosts?
+    let onRefresh: () -> Void
     @State private var currentUserIndex = 0
     @State private var horizontalDragOffset: CGFloat = 0
 
@@ -213,7 +219,7 @@ struct AllUserPostsView: View {
                                 let previousIndex = (currentUserIndex - 1 + allUserPosts.count) % allUserPosts.count
                                 // Previous starts at -90° and rotates to 0° as swipe progresses
                                 let previousHorizontalRotation = -90.0 + (clampedHorizontalProgress * 90.0)
-                                UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false)
+                                UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, onRefresh: onRefresh)
                                     .frame(width: screenWidth, height: screenHeight)
                                     .rotation3DEffect(
                                         .degrees(previousHorizontalRotation),
@@ -223,7 +229,7 @@ struct AllUserPostsView: View {
                             }
 
                             // Current user's posts (main view)
-                            UserPostsScrollView(userPosts: currentUserPosts, isCurrent: true)
+                            UserPostsScrollView(userPosts: currentUserPosts, isCurrent: true, onRefresh: onRefresh)
                                 .frame(width: screenWidth, height: screenHeight)
                                 .rotation3DEffect(
                                     .degrees(currentHorizontalRotation),
@@ -236,7 +242,7 @@ struct AllUserPostsView: View {
                                 let nextIndex = (currentUserIndex + 1) % allUserPosts.count
                                 // Next starts at +90° and rotates to 0° as swipe progresses
                                 let nextHorizontalRotation = 90.0 + (clampedHorizontalProgress * 90.0)
-                                UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false)
+                                UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, onRefresh: onRefresh)
                                     .frame(width: screenWidth, height: screenHeight)
                                     .rotation3DEffect(
                                         .degrees(nextHorizontalRotation),
@@ -304,6 +310,7 @@ struct AllUserPostsView: View {
 struct UserPostsScrollView: View {
     let userPosts: UserPosts
     let isCurrent: Bool
+    let onRefresh: () -> Void
     @State private var currentPostIndex = 0
     @State private var dragOffset: CGFloat = 0
     @State private var isAnimating = false
@@ -335,19 +342,19 @@ struct UserPostsScrollView: View {
                     Color.black.ignoresSafeArea()
 
                     // Previous post - always rendered
-                    PostCardView(post: userPosts.posts[previousIndex], isCurrent: false)
+                    PostCardView(post: userPosts.posts[previousIndex], isCurrent: false, onDelete: onRefresh)
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: -screenHeight + dragOffset)
                         .zIndex(dragOffset > 0 ? 1 : 0)
 
                     // Current post - always rendered
-                    PostCardView(post: userPosts.posts[currentPostIndex], isCurrent: true)
+                    PostCardView(post: userPosts.posts[currentPostIndex], isCurrent: true, onDelete: onRefresh)
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: dragOffset)
                         .zIndex(2)
 
                     // Next post - always rendered
-                    PostCardView(post: userPosts.posts[nextIndex], isCurrent: false)
+                    PostCardView(post: userPosts.posts[nextIndex], isCurrent: false, onDelete: onRefresh)
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: screenHeight + dragOffset)
                         .zIndex(dragOffset < 0 ? 1 : 0)
@@ -416,16 +423,19 @@ struct UserPostsScrollView: View {
 struct PostCardView: View {
     let post: Post
     let isCurrent: Bool
+    var onDelete: (() -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
     private let playbackStateManager = PlaybackStateManager.shared
     private let musicPlayer = MusicKitManager.shared
     @State private var isLiked: Bool
     @State private var likeCount: Int
     @State private var isPlaying: Bool = false
+    @State private var showingDeleteConfirmation = false
 
-    init(post: Post, isCurrent: Bool) {
+    init(post: Post, isCurrent: Bool, onDelete: (() -> Void)? = nil) {
         self.post = post
         self.isCurrent = isCurrent
+        self.onDelete = onDelete
         _isLiked = State(initialValue: post.isLiked ?? false)
         _likeCount = State(initialValue: post.likeCount ?? 0)
     }
@@ -512,7 +522,7 @@ struct PostCardView: View {
                 .padding(.bottom, 20)
 
                     // Album artwork with play button overlay (moved up)
-                    ZStack(alignment: .bottomLeading) {
+                    ZStack {
                         AsyncImage(url: URL(string: post.artworkUrl ?? "")) { phase in
                             switch phase {
                             case .empty:
@@ -534,43 +544,74 @@ struct PostCardView: View {
                         .cornerRadius(20)
                         .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
 
-                        // Play button with waveform overlay
-                        HStack(spacing: 12) {
-                            Button(action: {
-                                Task {
-                                    await togglePlayback()
-                                }
-                            }) {
-                                ZStack {
-                                    Circle()
-                                        .fill(
-                                            LinearGradient(
-                                                gradient: Gradient(colors: [
-                                                    Color.white.opacity(0.95),
-                                                    Color.white.opacity(0.85)
-                                                ]),
-                                                startPoint: .topLeading,
-                                                endPoint: .bottomTrailing
+                        // Three-dot menu button (top-right) - only for own posts
+                        if let currentUserId = APIClient.shared.currentUserId, currentUserId == post.user.id {
+                            VStack {
+                                HStack {
+                                    Spacer()
+                                    Button(action: {
+                                        showingDeleteConfirmation = true
+                                    }) {
+                                        Circle()
+                                            .fill(Color.black.opacity(0.5))
+                                            .frame(width: 36, height: 36)
+                                            .overlay(
+                                                Image(systemName: "ellipsis")
+                                                    .font(.system(size: 16, weight: .semibold))
+                                                    .foregroundColor(.white)
+                                                    .rotationEffect(.degrees(90))
                                             )
-                                        )
-                                        .frame(width: 60, height: 60)
-                                        .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
-
-                                    Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                        .font(.system(size: 24))
-                                        .foregroundColor(.black)
-                                        .offset(x: isPlaying ? 0 : 2)
+                                    }
+                                    .padding(8)
                                 }
+                                Spacer()
                             }
-
-                            if isPlaying {
-                                WaveformView()
-                                    .frame(width: 80, height: 50)
-                                    .transition(.scale.combined(with: .opacity))
-                            }
+                            .frame(width: 280, height: 280)
                         }
-                        .padding(16)
-                        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isPlaying)
+
+                        // Play button with waveform overlay (bottom-left)
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 12) {
+                                Button(action: {
+                                    Task {
+                                        await togglePlayback()
+                                    }
+                                }) {
+                                    ZStack {
+                                        Circle()
+                                            .fill(
+                                                LinearGradient(
+                                                    gradient: Gradient(colors: [
+                                                        Color.white.opacity(0.95),
+                                                        Color.white.opacity(0.85)
+                                                    ]),
+                                                    startPoint: .topLeading,
+                                                    endPoint: .bottomTrailing
+                                                )
+                                            )
+                                            .frame(width: 60, height: 60)
+                                            .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
+
+                                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                                            .font(.system(size: 24))
+                                            .foregroundColor(.black)
+                                            .offset(x: isPlaying ? 0 : 2)
+                                    }
+                                }
+
+                                if isPlaying {
+                                    WaveformView()
+                                        .frame(width: 80, height: 50)
+                                        .transition(.scale.combined(with: .opacity))
+                                }
+
+                                Spacer()
+                            }
+                            .padding(16)
+                            .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isPlaying)
+                        }
+                        .frame(width: 280, height: 280)
                     }
                     .padding(.bottom, 20)
 
@@ -670,6 +711,16 @@ struct PostCardView: View {
                 isPlaying = false
             }
         }
+        .alert("投稿を削除", isPresented: $showingDeleteConfirmation) {
+            Button("キャンセル", role: .cancel) { }
+            Button("削除", role: .destructive) {
+                Task {
+                    await deletePost()
+                }
+            }
+        } message: {
+            Text("この投稿を削除してもよろしいですか？")
+        }
     }
 
     private func togglePlayback() async {
@@ -727,6 +778,28 @@ struct PostCardView: View {
             isLiked = previousLiked
             likeCount = previousCount
             print("❌ Failed to toggle like: \(error)")
+        }
+    }
+
+    private func deletePost() async {
+        do {
+            print("🔄 Attempting to delete post: \(post.id)")
+            try await APIClient.shared.deletePost(postId: post.id)
+            print("✅ Post deleted successfully")
+            // Call the onDelete callback to refresh the feed
+            onDelete?()
+        } catch let error as APIError {
+            switch error {
+            case .invalidResponse(let statusCode, let data):
+                let responseBody = data.flatMap { String(data: $0, encoding: .utf8) } ?? "No data"
+                print("❌ Failed to delete post - Status: \(statusCode), Response: \(responseBody)")
+            case .unauthorized:
+                print("❌ Failed to delete post - Unauthorized")
+            default:
+                print("❌ Failed to delete post: \(error)")
+            }
+        } catch {
+            print("❌ Failed to delete post: \(error)")
         }
     }
 }

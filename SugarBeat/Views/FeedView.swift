@@ -27,7 +27,7 @@ struct FeedView: View {
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.7))
                 }
-            } else if viewModel.userPosts.isEmpty && viewModel.currentUserPosts == nil {
+            } else if viewModel.allUserPosts.isEmpty {
                 VStack(spacing: 20) {
                     Image(systemName: "music.note")
                         .font(.system(size: 60))
@@ -35,16 +35,15 @@ struct FeedView: View {
                     Text("投稿がありません")
                         .font(.title2)
                         .foregroundColor(.white.opacity(0.7))
-                    Text("ユーザーをフォローして音楽を共有しましょう")
+                    Text("投稿を作成するか、ユーザーをフォローして音楽を共有しましょう")
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.5))
                         .multilineTextAlignment(.center)
                 }
             } else {
-                // Current user's posts with horizontal navigation for other users
+                // All user posts with horizontal and vertical navigation
                 AllUserPostsView(
-                    allUserPosts: viewModel.userPosts,
-                    currentUserPosts: viewModel.currentUserPosts,
+                    allUserPosts: viewModel.allUserPosts,
                     onRefresh: {
                         Task {
                             await viewModel.refreshFeed()
@@ -190,118 +189,130 @@ struct FloatingMenuButton: View {
 // Horizontal view for navigating between all users' posts
 struct AllUserPostsView: View {
     let allUserPosts: [UserPosts]
-    let currentUserPosts: UserPosts?
     let onRefresh: () -> Void
     @State private var currentUserIndex = 0
     @State private var horizontalDragOffset: CGFloat = 0
+    @State private var isAnimating = false
 
     var body: some View {
         GeometryReader { geometry in
             let screenWidth = geometry.size.width
             let screenHeight = geometry.size.height
 
-            Color.black
-                .ignoresSafeArea()
-                .overlay(
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+
+                // Main content with horizontal slide (same as vertical)
+                if !allUserPosts.isEmpty && currentUserIndex < allUserPosts.count {
                     ZStack {
-                        if let currentUserPosts = currentUserPosts {
-                            // 3D rotation logic for horizontal swipe (Y-axis):
-                            // Swipe left (negative drag): current rotates to -90°, next enters from +90° to 0°
-                            // Swipe right (positive drag): current rotates to +90°, previous enters from -90° to 0°
-                            let normalizedHorizontalProgress = horizontalDragOffset / screenWidth
-                            let clampedHorizontalProgress = max(-1.0, min(1.0, normalizedHorizontalProgress))
+                        let previousIndex = (currentUserIndex - 1 + allUserPosts.count) % allUserPosts.count
+                        let nextIndex = (currentUserIndex + 1) % allUserPosts.count
 
-                            // Current screen rotation angle (0° to ±90°)
-                            let currentHorizontalRotation = -clampedHorizontalProgress * 90.0
-
-                            // Previous user (visible when swiping right - positive drag)
-                            if clampedHorizontalProgress > 0 && !allUserPosts.isEmpty {
-                                let previousIndex = (currentUserIndex - 1 + allUserPosts.count) % allUserPosts.count
-                                // Previous starts at -90° and rotates to 0° as swipe progresses
-                                let previousHorizontalRotation = -90.0 + (clampedHorizontalProgress * 90.0)
-                                UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, onRefresh: onRefresh)
-                                    .frame(width: screenWidth, height: screenHeight)
-                                    .rotation3DEffect(
-                                        .degrees(previousHorizontalRotation),
-                                        axis: (x: 0.0, y: 1.0, z: 0.0),
-                                        perspective: 1.0
-                                    )
-                            }
-
-                            // Current user's posts (main view)
-                            UserPostsScrollView(userPosts: currentUserPosts, isCurrent: true, onRefresh: onRefresh)
+                        // Previous user - always rendered (on the left)
+                        if previousIndex < allUserPosts.count {
+                            UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, onRefresh: onRefresh)
                                 .frame(width: screenWidth, height: screenHeight)
-                                .rotation3DEffect(
-                                    .degrees(currentHorizontalRotation),
-                                    axis: (x: 0.0, y: 1.0, z: 0.0),
-                                    perspective: 1.0
-                                )
+                                .offset(x: -screenWidth + horizontalDragOffset)
+                                .zIndex(horizontalDragOffset > 0 ? 1 : 0)
+                                .id("\(allUserPosts[previousIndex].id)-\(previousIndex)")
+                        }
 
-                            // Next user (visible when swiping left - negative drag)
-                            if clampedHorizontalProgress < 0 && !allUserPosts.isEmpty {
-                                let nextIndex = (currentUserIndex + 1) % allUserPosts.count
-                                // Next starts at +90° and rotates to 0° as swipe progresses
-                                let nextHorizontalRotation = 90.0 + (clampedHorizontalProgress * 90.0)
-                                UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, onRefresh: onRefresh)
-                                    .frame(width: screenWidth, height: screenHeight)
-                                    .rotation3DEffect(
-                                        .degrees(nextHorizontalRotation),
-                                        axis: (x: 0.0, y: 1.0, z: 0.0),
-                                        perspective: 1.0
-                                    )
-                            }
+                        // Current user - always rendered
+                        UserPostsScrollView(userPosts: allUserPosts[currentUserIndex], isCurrent: true, onRefresh: onRefresh)
+                            .frame(width: screenWidth, height: screenHeight)
+                            .offset(x: horizontalDragOffset)
+                            .zIndex(2)
+                            .id("\(allUserPosts[currentUserIndex].id)-\(currentUserIndex)")
+
+                        // Next user - always rendered (on the right)
+                        if nextIndex < allUserPosts.count {
+                            UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, onRefresh: onRefresh)
+                                .frame(width: screenWidth, height: screenHeight)
+                                .offset(x: screenWidth + horizontalDragOffset)
+                                .zIndex(horizontalDragOffset < 0 ? 1 : 0)
+                                .id("\(allUserPosts[nextIndex].id)-\(nextIndex)")
                         }
                     }
-                )
-                .gesture(
-                    DragGesture()
-                        .onChanged { value in
-                            // Determine if this is a horizontal or vertical swipe
-                            let horizontalAmount = abs(value.translation.width)
-                            let verticalAmount = abs(value.translation.height)
+                    .clipped()
+                    .frame(width: screenWidth, height: screenHeight)
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 20)
+                            .onChanged { value in
+                                // Ignore gestures while animating
+                                guard !isAnimating else { return }
 
-                            // Only capture horizontal swipes for user switching
-                            // Vertical swipes will be handled by UserPostsScrollView
-                            if horizontalAmount > verticalAmount {
-                                horizontalDragOffset = value.translation.width
+                                // Determine if this is a horizontal or vertical swipe
+                                let horizontalAmount = abs(value.translation.width)
+                                let verticalAmount = abs(value.translation.height)
+
+                                // Only capture horizontal swipes for user switching
+                                // Vertical swipes will be handled by UserPostsScrollView
+                                if horizontalAmount > verticalAmount {
+                                    horizontalDragOffset = value.translation.width
+                                }
                             }
-                        }
-                        .onEnded { value in
-                            let horizontalAmount = abs(value.translation.width)
-                            let verticalAmount = abs(value.translation.height)
+                            .onEnded { value in
+                                // Ignore gestures while animating
+                                guard !isAnimating else { return }
 
-                            // Only handle horizontal swipes here
-                            if horizontalAmount > verticalAmount {
-                                let threshold = screenWidth * 0.15
-                                let velocity = value.predictedEndTranslation.width - value.translation.width
+                                let horizontalAmount = abs(value.translation.width)
+                                let verticalAmount = abs(value.translation.height)
 
-                                if !allUserPosts.isEmpty {
+                                // Only handle horizontal swipes here
+                                if horizontalAmount > verticalAmount {
+                                    let threshold = screenWidth * 0.3
+                                    let velocity = value.predictedEndTranslation.width - value.translation.width
+
                                     if value.translation.width < -threshold || velocity < -500 {
                                         // Swipe left - next user
-                                        withAnimation(.interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0.25)) {
-                                            currentUserIndex = (currentUserIndex + 1) % allUserPosts.count
-                                            horizontalDragOffset = 0
+                                        isAnimating = true
+
+                                        // Animate to show next user
+                                        withAnimation(.easeOut(duration: 0.1)) {
+                                            horizontalDragOffset = -screenWidth
+                                        }
+
+                                        // Update state immediately to prepare new views
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                                            var transaction = Transaction()
+                                            transaction.disablesAnimations = true
+                                            withTransaction(transaction) {
+                                                currentUserIndex = (currentUserIndex + 1) % allUserPosts.count
+                                                horizontalDragOffset = 0
+                                                isAnimating = false
+                                            }
                                         }
                                     } else if value.translation.width > threshold || velocity > 500 {
                                         // Swipe right - previous user
-                                        withAnimation(.interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0.25)) {
-                                            currentUserIndex = (currentUserIndex - 1 + allUserPosts.count) % allUserPosts.count
-                                            horizontalDragOffset = 0
+                                        isAnimating = true
+
+                                        // Animate to show previous user
+                                        withAnimation(.easeOut(duration: 0.1)) {
+                                            horizontalDragOffset = screenWidth
+                                        }
+
+                                        // Update state immediately to prepare new views
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                                            var transaction = Transaction()
+                                            transaction.disablesAnimations = true
+                                            withTransaction(transaction) {
+                                                currentUserIndex = (currentUserIndex - 1 + allUserPosts.count) % allUserPosts.count
+                                                horizontalDragOffset = 0
+                                                isAnimating = false
+                                            }
                                         }
                                     } else {
                                         // Return to center
-                                        withAnimation(.interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0.25)) {
+                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                             horizontalDragOffset = 0
                                         }
                                     }
-                                } else {
-                                    withAnimation(.interactiveSpring(response: 0.4, dampingFraction: 0.8, blendDuration: 0.25)) {
-                                        horizontalDragOffset = 0
-                                    }
                                 }
                             }
-                        }
-                )
+                    )
+                }
+            }
         }
     }
 }
@@ -363,9 +374,27 @@ struct UserPostsScrollView: View {
                 .gesture(
                     DragGesture()
                         .onChanged { value in
-                            dragOffset = value.translation.height
+                            // Only handle vertical drags
+                            let horizontalAmount = abs(value.translation.width)
+                            let verticalAmount = abs(value.translation.height)
+
+                            if verticalAmount > horizontalAmount {
+                                dragOffset = value.translation.height
+                            }
                         }
                         .onEnded { value in
+                            // Only handle vertical drags
+                            let horizontalAmount = abs(value.translation.width)
+                            let verticalAmount = abs(value.translation.height)
+
+                            if horizontalAmount > verticalAmount {
+                                // Horizontal drag - reset and let parent handle
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                    dragOffset = 0
+                                }
+                                return
+                            }
+
                             let threshold = screenHeight * 0.3
                             let velocity = value.predictedEndTranslation.height - value.translation.height
 
@@ -425,11 +454,10 @@ struct PostCardView: View {
     let isCurrent: Bool
     var onDelete: (() -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
-    private let playbackStateManager = PlaybackStateManager.shared
+    @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
     private let musicPlayer = MusicKitManager.shared
     @State private var isLiked: Bool
     @State private var likeCount: Int
-    @State private var isPlaying: Bool = false
     @State private var showingDeleteConfirmation = false
 
     init(post: Post, isCurrent: Bool, onDelete: (() -> Void)? = nil) {
@@ -438,6 +466,10 @@ struct PostCardView: View {
         self.onDelete = onDelete
         _isLiked = State(initialValue: post.isLiked ?? false)
         _likeCount = State(initialValue: post.likeCount ?? 0)
+    }
+
+    private var isPlaying: Bool {
+        playbackStateManager.currentlyPlayingPostId == post.id
     }
 
     var body: some View {
@@ -700,7 +732,6 @@ struct PostCardView: View {
             if !newValue && isPlaying {
                 musicPlayer.stopPreview()
                 playbackStateManager.stopPlayback()
-                isPlaying = false
             }
         }
         .onDisappear {
@@ -708,7 +739,6 @@ struct PostCardView: View {
             if isPlaying {
                 musicPlayer.stopPreview()
                 playbackStateManager.stopPlayback()
-                isPlaying = false
             }
         }
         .alert("投稿を削除", isPresented: $showingDeleteConfirmation) {
@@ -727,7 +757,6 @@ struct PostCardView: View {
         if isPlaying {
             musicPlayer.stopPreview()
             playbackStateManager.stopPlayback()
-            isPlaying = false
         } else {
             guard let previewUrl = post.previewUrl else {
                 print("❌ No preview URL available")
@@ -741,16 +770,14 @@ struct PostCardView: View {
                 // Start playback for this post
                 try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
                 playbackStateManager.startPlayback(for: post.id)
-                isPlaying = true
 
                 // Auto-stop after duration
                 let duration = post.endTime - post.startTime
                 Task {
                     try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                    if isPlaying {
+                    if playbackStateManager.currentlyPlayingPostId == post.id {
                         musicPlayer.stopPreview()
                         playbackStateManager.stopPlayback()
-                        isPlaying = false
                     }
                 }
             } catch {

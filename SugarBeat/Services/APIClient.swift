@@ -163,11 +163,39 @@ class APIClient {
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
 
+    // MARK: - Comment Endpoints
+
+    func createComment(request: CreateCommentRequest) async throws -> Comment {
+        let url = URL(string: "\(baseURL)/comments")!
+        return try await performRequest(url: url, method: "POST", body: request)
+    }
+
+    func getComments(postId: Int64) async throws -> [Comment] {
+        let url = URL(string: "\(baseURL)/comments/post/\(postId)")!
+        return try await performRequest(url: url, method: "GET")
+    }
+
+    func deleteComment(commentId: Int64) async throws {
+        let url = URL(string: "\(baseURL)/comments/\(commentId)")!
+        let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
+    }
+
     // MARK: - Report Endpoints
 
     func reportPost(postId: Int64, reason: String, description: String?) async throws {
         let url = URL(string: "\(baseURL)/reports")!
         let body = CreateReportRequest(postId: postId, reason: reason, description: description)
+        let _: EmptyResponse = try await performRequest(url: url, method: "POST", body: body)
+    }
+
+    func reportComment(commentId: Int64, reason: String, description: String?) async throws {
+        let url = URL(string: "\(baseURL)/reports/comment")!
+        struct ReportCommentRequest: Codable {
+            let commentId: Int64
+            let reason: String
+            let description: String?
+        }
+        let body = ReportCommentRequest(commentId: commentId, reason: reason, description: description)
         let _: EmptyResponse = try await performRequest(url: url, method: "POST", body: body)
     }
 

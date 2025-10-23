@@ -137,6 +137,14 @@ struct FeedView: View {
                 await viewModel.refreshFeed()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Clear like and comment state and refresh feed when app returns to foreground
+            LikeStateManager.shared.clear()
+            CommentStateManager.shared.clear()
+            Task {
+                await viewModel.refreshFeed()
+            }
+        }
         .sheet(isPresented: $showingUserSearch) {
             UserSearchView()
         }
@@ -314,6 +322,11 @@ struct AllUserPostsView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Reset animation states when app returns to foreground
+            horizontalDragOffset = 0
+            isAnimating = false
+        }
     }
 }
 
@@ -357,18 +370,21 @@ struct UserPostsScrollView: View {
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: -screenHeight + dragOffset)
                         .zIndex(dragOffset > 0 ? 1 : 0)
+                        .id(userPosts.posts[previousIndex].id)
 
                     // Current post - always rendered
                     PostCardView(post: userPosts.posts[currentPostIndex], isCurrent: true, onDelete: onRefresh)
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: dragOffset)
                         .zIndex(2)
+                        .id(userPosts.posts[currentPostIndex].id)
 
                     // Next post - always rendered
                     PostCardView(post: userPosts.posts[nextIndex], isCurrent: false, onDelete: onRefresh)
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: screenHeight + dragOffset)
                         .zIndex(dragOffset < 0 ? 1 : 0)
+                        .id(userPosts.posts[nextIndex].id)
                 }
                 .clipped()
                 .gesture(
@@ -446,6 +462,11 @@ struct UserPostsScrollView: View {
                 )
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Reset animation states when app returns to foreground
+            dragOffset = 0
+            isAnimating = false
+        }
     }
 }
 
@@ -455,21 +476,47 @@ struct PostCardView: View {
     var onDelete: (() -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
+    @ObservedObject private var likeStateManager = LikeStateManager.shared
+    @ObservedObject private var commentStateManager = CommentStateManager.shared
     private let musicPlayer = MusicKitManager.shared
-    @State private var isLiked: Bool
-    @State private var likeCount: Int
     @State private var showingDeleteConfirmation = false
+    @State private var showingComments = false
+    @State private var showingReportSheet = false
+    @State private var commentToReport: Comment?
 
     init(post: Post, isCurrent: Bool, onDelete: (() -> Void)? = nil) {
         self.post = post
         self.isCurrent = isCurrent
         self.onDelete = onDelete
-        _isLiked = State(initialValue: post.isLiked ?? false)
-        _likeCount = State(initialValue: post.likeCount ?? 0)
+
+        // Initialize like state in the manager
+        LikeStateManager.shared.initialize(
+            postId: post.id,
+            isLiked: post.isLiked ?? false,
+            count: post.likeCount ?? 0
+        )
+
+        // Initialize comment state in the manager
+        CommentStateManager.shared.initialize(
+            postId: post.id,
+            count: post.commentCount ?? 0
+        )
     }
 
     private var isPlaying: Bool {
         playbackStateManager.currentlyPlayingPostId == post.id
+    }
+
+    private var isLiked: Bool {
+        likeStateManager.isLiked(post.id)
+    }
+
+    private var likeCount: Int {
+        likeStateManager.getLikeCount(post.id)
+    }
+
+    private var commentCount: Int {
+        commentStateManager.getCommentCount(post.id)
     }
 
     var body: some View {
@@ -644,6 +691,54 @@ struct PostCardView: View {
                             .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isPlaying)
                         }
                         .frame(width: 280, height: 280)
+
+                        // Like and Comment buttons (bottom-right)
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Spacer()
+                                VStack(spacing: 12) {
+                                    // Like button
+                                    Button(action: {
+                                        Task {
+                                            await toggleLike()
+                                        }
+                                    }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: isLiked ? "heart.fill" : "heart")
+                                                .font(.system(size: 20))
+                                                .foregroundColor(isLiked ? .red : .white)
+                                            Text("\(likeCount)")
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundColor(.white)
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color.black.opacity(0.5))
+                                        .cornerRadius(20)
+                                    }
+
+                                    // Comment button
+                                    Button(action: {
+                                        showingComments = true
+                                    }) {
+                                        HStack(spacing: 6) {
+                                            Image(systemName: "bubble.right")
+                                                .font(.system(size: 20))
+                                            Text("\(commentCount)")
+                                                .font(.system(size: 14, weight: .semibold))
+                                        }
+                                        .foregroundColor(.white)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color.black.opacity(0.5))
+                                        .cornerRadius(20)
+                                    }
+                                }
+                                .padding(16)
+                            }
+                        }
+                        .frame(width: 280, height: 280)
                     }
                     .padding(.bottom, 20)
 
@@ -691,39 +786,6 @@ struct PostCardView: View {
                     }
 
                 Spacer()
-
-                // Action buttons (Like and Comment)
-                HStack(spacing: 40) {
-                    // Like button
-                    Button(action: {
-                        Task {
-                            await toggleLike()
-                        }
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: isLiked ? "heart.fill" : "heart")
-                                .font(.system(size: 22))
-                                .foregroundColor(isLiked ? .red : .white)
-                            Text("\(likeCount)")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.white)
-                        }
-                    }
-
-                    // Comment button
-                    Button(action: {
-                        // TODO: Implement comment functionality
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: "bubble.right")
-                                .font(.system(size: 22))
-                            Text("0")
-                                .font(.system(size: 16, weight: .medium))
-                        }
-                        .foregroundColor(.white)
-                    }
-                }
-                .padding(.bottom, 140)
             }
             .zIndex(1000)
             }
@@ -741,6 +803,11 @@ struct PostCardView: View {
                 playbackStateManager.stopPlayback()
             }
         }
+        .sheet(isPresented: $showingReportSheet) {
+            if let comment = commentToReport {
+                ReportCommentView(comment: comment)
+            }
+        }
         .alert("投稿を削除", isPresented: $showingDeleteConfirmation) {
             Button("キャンセル", role: .cancel) { }
             Button("削除", role: .destructive) {
@@ -751,6 +818,27 @@ struct PostCardView: View {
         } message: {
             Text("この投稿を削除してもよろしいですか？")
         }
+        .overlay(
+            Group {
+                if showingComments {
+                    CommentsOverlayView(
+                        post: post,
+                        isPresented: $showingComments,
+                        onReport: { comment in
+                            // Set comment first
+                            commentToReport = comment
+                            // Close comments overlay
+                            showingComments = false
+                            // Then show report sheet after a short delay
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                showingReportSheet = true
+                            }
+                        }
+                    )
+                    .transition(.move(edge: .bottom))
+                }
+            }
+        )
     }
 
     private func togglePlayback() async {
@@ -788,11 +876,8 @@ struct PostCardView: View {
 
     private func toggleLike() async {
         // Optimistic update
-        let previousLiked = isLiked
-        let previousCount = likeCount
-
-        isLiked.toggle()
-        likeCount += isLiked ? 1 : -1
+        let wasLiked = isLiked
+        likeStateManager.toggleLike(postId: post.id)
 
         do {
             if isLiked {
@@ -802,8 +887,9 @@ struct PostCardView: View {
             }
         } catch {
             // Revert on error
-            isLiked = previousLiked
-            likeCount = previousCount
+            if wasLiked != isLiked {
+                likeStateManager.toggleLike(postId: post.id)
+            }
             print("❌ Failed to toggle like: \(error)")
         }
     }
@@ -849,6 +935,354 @@ struct WaveformView: View {
             for index in 0..<5 {
                 animationValues[index] = CGFloat.random(in: 0.3...1.0)
             }
+        }
+    }
+}
+
+// Comments overlay view
+struct CommentsOverlayView: View {
+    let post: Post
+    @Binding var isPresented: Bool
+    let onReport: (Comment) -> Void
+    @ObservedObject private var commentStateManager = CommentStateManager.shared
+    @State private var comments: [Comment] = []
+    @State private var newCommentText = ""
+    @State private var isLoading = false
+    @State private var showingDeleteAlert = false
+    @State private var commentToDelete: Comment?
+    @State private var keyboardHeight: CGFloat = 0
+    @State private var dragOffset: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Semi-transparent background
+                Color.black.opacity(0.4)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        hideKeyboard()
+                        withAnimation {
+                            isPresented = false
+                        }
+                    }
+
+                // Comments list container (70% height, fixed)
+                VStack(spacing: 0) {
+                    Spacer()
+
+                    VStack(spacing: 0) {
+                        // Header with drag indicator
+                        VStack(spacing: 8) {
+                            // Drag indicator
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 40, height: 5)
+                                .padding(.top, 8)
+
+                            HStack {
+                                Text("コメント")
+                                    .font(.system(size: 18, weight: .bold))
+                                Spacer()
+                                Button(action: {
+                                    hideKeyboard()
+                                    withAnimation {
+                                        isPresented = false
+                                    }
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(.gray)
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 8)
+                        }
+                        .background(Color(.systemBackground))
+                        .gesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    if value.translation.height > 0 {
+                                        dragOffset = value.translation.height
+                                    }
+                                }
+                                .onEnded { value in
+                                    if value.translation.height > 100 {
+                                        hideKeyboard()
+                                        withAnimation {
+                                            isPresented = false
+                                        }
+                                    } else {
+                                        withAnimation {
+                                            dragOffset = 0
+                                        }
+                                    }
+                                }
+                        )
+
+                        Divider()
+
+                        // Comments list
+                        if isLoading && comments.isEmpty {
+                            Spacer()
+                            ProgressView()
+                            Spacer()
+                        } else if comments.isEmpty {
+                            Spacer()
+                            VStack(spacing: 12) {
+                                Image(systemName: "bubble.left.and.bubble.right")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.gray.opacity(0.5))
+                                Text("コメントがありません")
+                                    .foregroundColor(.gray)
+                            }
+                            Spacer()
+                        } else {
+                            ScrollView {
+                                LazyVStack(spacing: 16) {
+                                    ForEach(comments) { comment in
+                                        CommentRowView(
+                                            comment: comment,
+                                            onDelete: {
+                                                commentToDelete = comment
+                                                showingDeleteAlert = true
+                                            },
+                                            onReport: {
+                                                onReport(comment)
+                                            }
+                                        )
+                                    }
+                                }
+                                .padding()
+                                .padding(.bottom, 80)
+                            }
+                        }
+                    }
+                    .frame(height: geometry.size.height * 0.7)
+                    .background(Color(.systemBackground))
+                    .cornerRadius(20, corners: [.topLeft, .topRight])
+                    .offset(y: dragOffset)
+                }
+                .ignoresSafeArea()
+
+                // Comment input (separate layer, above keyboard)
+                VStack {
+                    Spacer()
+
+                    TextField("コメントを入力...", text: $newCommentText)
+                        .textFieldStyle(.roundedBorder)
+                        .submitLabel(.send)
+                        .onSubmit {
+                            Task {
+                                await postComment()
+                            }
+                        }
+                        .padding()
+                        .background(Color(.systemBackground))
+                        .cornerRadius(10)
+                        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: -2)
+                        .padding(.horizontal)
+                        .padding(.bottom, max(geometry.safeAreaInsets.bottom, 8))
+                }
+                .offset(y: dragOffset - keyboardHeight)
+                .ignoresSafeArea()
+            }
+        }
+        .onAppear {
+            setupKeyboardObservers()
+        }
+        .onDisappear {
+            removeKeyboardObservers()
+        }
+        .task {
+            await loadComments()
+        }
+        .alert("コメントを削除", isPresented: $showingDeleteAlert) {
+            Button("キャンセル", role: .cancel) { }
+            Button("削除", role: .destructive) {
+                Task {
+                    await deleteComment()
+                }
+            }
+        } message: {
+            Text("このコメントを削除してもよろしいですか？")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            // Reset animation states when app returns to foreground
+            dragOffset = 0
+        }
+    }
+
+    private func setupKeyboardObservers() {
+        NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillShowNotification,
+            object: nil,
+            queue: .main
+        ) { notification in
+            if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                withAnimation {
+                    keyboardHeight = keyboardFrame.height
+                }
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: UIResponder.keyboardWillHideNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            withAnimation {
+                keyboardHeight = 0
+            }
+        }
+    }
+
+    private func removeKeyboardObservers() {
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillShowNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillHideNotification, object: nil)
+    }
+
+    private func hideKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func loadComments() async {
+        isLoading = true
+        do {
+            let loadedComments = try await APIClient.shared.getComments(postId: post.id)
+            // Sort by oldest first
+            comments = loadedComments.sorted { $0.createdAt < $1.createdAt }
+            print("✅ Loaded \(comments.count) comments")
+        } catch {
+            print("❌ Failed to load comments: \(error)")
+        }
+        isLoading = false
+    }
+
+    private func postComment() async {
+        guard !newCommentText.isEmpty else { return }
+
+        let content = newCommentText
+        newCommentText = ""
+
+        do {
+            let request = CreateCommentRequest(postId: post.id, content: content)
+            let newComment = try await APIClient.shared.createComment(request: request)
+            // Add new comment at the end (newest at bottom)
+            comments.append(newComment)
+            commentStateManager.incrementCount(postId: post.id)
+            print("✅ Comment posted successfully")
+        } catch {
+            print("❌ Failed to post comment: \(error)")
+            newCommentText = content // Restore text on error
+        }
+    }
+
+    private func deleteComment() async {
+        guard let comment = commentToDelete else { return }
+
+        do {
+            try await APIClient.shared.deleteComment(commentId: comment.id)
+            comments.removeAll { $0.id == comment.id }
+            commentStateManager.decrementCount(postId: post.id)
+            print("✅ Comment deleted successfully")
+        } catch {
+            print("❌ Failed to delete comment: \(error)")
+        }
+    }
+}
+
+// Extension for corner radius on specific corners
+extension View {
+    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
+        clipShape(RoundedCorner(radius: radius, corners: corners))
+    }
+}
+
+struct RoundedCorner: Shape {
+    var radius: CGFloat = .infinity
+    var corners: UIRectCorner = .allCorners
+
+    func path(in rect: CGRect) -> Path {
+        let path = UIBezierPath(
+            roundedRect: rect,
+            byRoundingCorners: corners,
+            cornerRadii: CGSize(width: radius, height: radius)
+        )
+        return Path(path.cgPath)
+    }
+}
+
+// Comment row view
+struct CommentRowView: View {
+    let comment: Comment
+    let onDelete: () -> Void
+    let onReport: () -> Void
+    @State private var showingActions = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            // User avatar
+            Circle()
+                .fill(Color.gray.opacity(0.3))
+                .frame(width: 36, height: 36)
+                .overlay(
+                    Text(String(comment.user.displayName.prefix(1)))
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                )
+
+            VStack(alignment: .leading, spacing: 4) {
+                // Username and time
+                HStack {
+                    Text(comment.user.displayName)
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("@\(comment.user.username)")
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                    Spacer()
+                    Text(timeAgoString(from: comment.createdAt))
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray)
+                }
+
+                // Comment content
+                Text(comment.content)
+                    .font(.system(size: 15))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            // More button
+            Button(action: {
+                showingActions = true
+            }) {
+                Image(systemName: "ellipsis")
+                    .foregroundColor(.gray)
+            }
+            .confirmationDialog("", isPresented: $showingActions) {
+                if let currentUserId = APIClient.shared.currentUserId, currentUserId == comment.user.id {
+                    Button("削除", role: .destructive) {
+                        onDelete()
+                    }
+                } else {
+                    Button("報告", role: .destructive) {
+                        onReport()
+                    }
+                }
+                Button("キャンセル", role: .cancel) { }
+            }
+        }
+    }
+
+    private func timeAgoString(from date: Date) -> String {
+        let seconds = Date().timeIntervalSince(date)
+        if seconds < 60 {
+            return "たった今"
+        } else if seconds < 3600 {
+            return "\(Int(seconds / 60))分前"
+        } else if seconds < 86400 {
+            return "\(Int(seconds / 3600))時間前"
+        } else {
+            return "\(Int(seconds / 86400))日前"
         }
     }
 }

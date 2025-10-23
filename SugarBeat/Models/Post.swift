@@ -16,4 +16,5 @@ struct Post: Codable, Identifiable {
     let createdAt: Date
     let likeCount: Int?
     let isLiked: Bool?
+    let commentCount: Int?
 }

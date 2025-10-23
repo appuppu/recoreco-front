@@ -3,21 +3,25 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 63;
+	objectVersion = 77;
 	objects = {
 
 /* Begin PBXBuildFile section */
 		008D9DA98E3D92AA0CF1F742 /* WaveformRangeSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0520DF8701555C7D9FDE6B1 /* WaveformRangeSelectorView.swift */; };
 		0EBC7900F2E77A575BB868DD /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250136EC4050EE8B36C510F0 /* SearchViewModel.swift */; };
+		1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */; };
 		219FE52D6AF412D066A7E6B6 /* PlaybackStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DF565896700D09A709FBDCF /* PlaybackStateManager.swift */; };
 		22374B8C915C6C2A632B5CB4 /* CreatePostViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 768D8C22E45F8AE834820E74 /* CreatePostViewModel.swift */; };
 		28037D9B9E9E38F3A16864F0 /* FeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 350488B629EE3F78ECB253A4 /* FeedView.swift */; };
 		37519DAEFD2AFAF8140A10CF /* SugarBeatApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5EC006309F1FF7C328CBEB44 /* SugarBeatApp.swift */; };
 		423A8DAC58D7DCD6A6EB95C5 /* AuthModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 911D9E5277B18C5968D58A59 /* AuthModels.swift */; };
+		4330CF90B8BC7F5DCFD7B3EE /* Comment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 760BCEECA6AEEF2E0043C8EF /* Comment.swift */; };
 		4698B03E006E9296A0426AAD /* MusicKitManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B26CCED5DF000501172A4A27 /* MusicKitManager.swift */; };
 		4DFA5E2032F7D459A2F331C0 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */; };
+		5293E5DCAF836184BA11806E /* CommentStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3351B47836AD31B921B1AA /* CommentStateManager.swift */; };
 		54E4C722674ADCAC481A8229 /* UserProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81162C40CE0C846263B8F88 /* UserProfileViewModel.swift */; };
 		5839C234EB4D5E683531E46D /* MusicModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C9884B287176970FED46424 /* MusicModels.swift */; };
+		59F9EA298EDF367D824D11DD /* ReportCommentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2982798B19A2ED82053F9D1 /* ReportCommentView.swift */; };
 		7E0D0D7D401DA7C39DFBDF64 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D4536DFDF93BD9B357F9A0D /* LoginView.swift */; };
 		80F4900014D1D2CA0053AD11 /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1C82CDB2FF0F1088058E82 /* UserProfileView.swift */; };
 		834B1D11FBBC34645F022B66 /* FeedViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97B170ADCF486B7113F37C76 /* FeedViewModel.swift */; };
@@ -40,10 +44,11 @@
 		250136EC4050EE8B36C510F0 /* SearchViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchViewModel.swift; sourceTree = "<group>"; };
 		2C11195FE0D38EC0C1838891 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		350488B629EE3F78ECB253A4 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
-		39C67D0037D92E07F82A211A /* SugarBeat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SugarBeat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		39C67D0037D92E07F82A211A /* SugarBeat.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SugarBeat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FE9F9756265FB4681327DAF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		5EC006309F1FF7C328CBEB44 /* SugarBeatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SugarBeatApp.swift; sourceTree = "<group>"; };
 		6D4536DFDF93BD9B357F9A0D /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		760BCEECA6AEEF2E0043C8EF /* Comment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Comment.swift; sourceTree = "<group>"; };
 		768D8C22E45F8AE834820E74 /* CreatePostViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostViewModel.swift; sourceTree = "<group>"; };
 		7929B89469BBAABBB60C28FA /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
 		7DF565896700D09A709FBDCF /* PlaybackStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackStateManager.swift; sourceTree = "<group>"; };
@@ -57,10 +62,13 @@
 		B26CCED5DF000501172A4A27 /* MusicKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicKitManager.swift; sourceTree = "<group>"; };
 		BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		C81162C40CE0C846263B8F88 /* UserProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileViewModel.swift; sourceTree = "<group>"; };
+		D2982798B19A2ED82053F9D1 /* ReportCommentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCommentView.swift; sourceTree = "<group>"; };
+		D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LikeStateManager.swift; sourceTree = "<group>"; };
 		DD72D37F34C087EDA9BBCBDF /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		E0520DF8701555C7D9FDE6B1 /* WaveformRangeSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaveformRangeSelectorView.swift; sourceTree = "<group>"; };
 		E349706DCC43B2086706E01A /* SugarBeat.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SugarBeat.entitlements; sourceTree = "<group>"; };
 		E91A2AE203D5FDC534ACD2AE /* UserSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserSearchView.swift; sourceTree = "<group>"; };
+		EA3351B47836AD31B921B1AA /* CommentStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommentStateManager.swift; sourceTree = "<group>"; };
 		F3BBF0A127E07FBDE8DB480A /* User.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = User.swift; sourceTree = "<group>"; };
 		FADD45EA0EE661AA341F1AD0 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -94,6 +102,8 @@
 			children = (
 				7929B89469BBAABBB60C28FA /* APIClient.swift */,
 				BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */,
+				EA3351B47836AD31B921B1AA /* CommentStateManager.swift */,
+				D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */,
 				B26CCED5DF000501172A4A27 /* MusicKitManager.swift */,
 				7DF565896700D09A709FBDCF /* PlaybackStateManager.swift */,
 			);
@@ -114,6 +124,7 @@
 				DD72D37F34C087EDA9BBCBDF /* ContentView.swift */,
 				350488B629EE3F78ECB253A4 /* FeedView.swift */,
 				6D4536DFDF93BD9B357F9A0D /* LoginView.swift */,
+				D2982798B19A2ED82053F9D1 /* ReportCommentView.swift */,
 				FADD45EA0EE661AA341F1AD0 /* SearchView.swift */,
 				13C3331FD9F72180FDA3F984 /* SignUpView.swift */,
 				AB188FDA1D0978E1D3ECA85D /* UserPostsView.swift */,
@@ -128,6 +139,7 @@
 			isa = PBXGroup;
 			children = (
 				911D9E5277B18C5968D58A59 /* AuthModels.swift */,
+				760BCEECA6AEEF2E0043C8EF /* Comment.swift */,
 				ACE0B665A5F1830C3DA11AC2 /* CreatePostRequest.swift */,
 				8EDF588E72E6362CF25F5CBB /* CreateReportRequest.swift */,
 				8C9884B287176970FED46424 /* MusicModels.swift */,
@@ -194,6 +206,7 @@
 			);
 			mainGroup = CD609ABFCC5E8427C3719355;
 			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -221,17 +234,21 @@
 				F1F8A637CF27E3AF82C4B7C5 /* APIClient.swift in Sources */,
 				4DFA5E2032F7D459A2F331C0 /* AuthManager.swift in Sources */,
 				423A8DAC58D7DCD6A6EB95C5 /* AuthModels.swift in Sources */,
+				4330CF90B8BC7F5DCFD7B3EE /* Comment.swift in Sources */,
+				5293E5DCAF836184BA11806E /* CommentStateManager.swift in Sources */,
 				AA1B69BE32110332D191F683 /* ContentView.swift in Sources */,
 				D8FE7888F27D690A5556042D /* CreatePostRequest.swift in Sources */,
 				22374B8C915C6C2A632B5CB4 /* CreatePostViewModel.swift in Sources */,
 				E395DB4F3C55DB0B8FE6659A /* CreateReportRequest.swift in Sources */,
 				28037D9B9E9E38F3A16864F0 /* FeedView.swift in Sources */,
 				834B1D11FBBC34645F022B66 /* FeedViewModel.swift in Sources */,
+				1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */,
 				7E0D0D7D401DA7C39DFBDF64 /* LoginView.swift in Sources */,
 				4698B03E006E9296A0426AAD /* MusicKitManager.swift in Sources */,
 				5839C234EB4D5E683531E46D /* MusicModels.swift in Sources */,
 				219FE52D6AF412D066A7E6B6 /* PlaybackStateManager.swift in Sources */,
 				D4FF4B6A7713A74DCB7DC183 /* Post.swift in Sources */,
+				59F9EA298EDF367D824D11DD /* ReportCommentView.swift in Sources */,
 				97DD6E05CEE8ED3EEC18E3D3 /* SearchView.swift in Sources */,
 				0EBC7900F2E77A575BB868DD /* SearchViewModel.swift in Sources */,
 				B87F65882C387C176C3F5339 /* SignUpView.swift in Sources */,
@@ -315,7 +332,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = M86QCKBHW8;
 				INFOPLIST_FILE = SugarBeat/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -401,7 +418,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = M86QCKBHW8;
 				INFOPLIST_FILE = SugarBeat/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

@@ -94,31 +94,26 @@ class CreatePostViewModel: ObservableObject {
                let url = firstPreview["url"] as? String {
                 previewURL = url
                 isFetchingPreview = false
-                print("✅ プレビューURL取得成功: \(url)")
             } else {
                 // No preview available in response - retry up to 2 times
                 if retryCount < 2 {
-                    print("⚠️ プレビューURLが見つかりません。リトライ \(retryCount + 1)/2")
                     try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
                     await fetchPreviewURL(for: song, retryCount: retryCount + 1)
                 } else {
                     previewURL = nil
                     isFetchingPreview = false
                     errorMessage = "この曲には30秒プレビューがありません"
-                    print("❌ プレビューURLが見つかりませんでした")
                 }
             }
         } catch {
             // Network error - retry up to 2 times
             if retryCount < 2 {
-                print("⚠️ プレビューURL取得エラー。リトライ \(retryCount + 1)/2")
                 try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
                 await fetchPreviewURL(for: song, retryCount: retryCount + 1)
             } else {
                 previewURL = nil
                 isFetchingPreview = false
                 errorMessage = "プレビューの取得に失敗しました"
-                print("❌ プレビューURL取得失敗: \(error)")
             }
         }
     }
@@ -204,7 +199,6 @@ class CreatePostViewModel: ObservableObject {
             )
 
             let createdPost = try await APIClient.shared.createPost(request: request)
-            print("✅ 投稿成功: \(createdPost.id)")
 
             // Clear state and mark as created
             stopPreview()
@@ -218,15 +212,12 @@ class CreatePostViewModel: ObservableObject {
             searchResults = []
         } catch APIError.unauthorized {
             errorMessage = "認証エラー"
-            print("❌ 認証エラー")
             postCreated = false
         } catch APIError.invalidResponse {
             errorMessage = "サーバーエラー"
-            print("❌ サーバーエラー")
             postCreated = false
-        } catch APIError.decodingFailed(let decodingError) {
+        } catch APIError.decodingFailed {
             errorMessage = "投稿は成功しましたが、表示に問題があります"
-            print("❌ デコードエラー: \(decodingError)")
             // Still mark as created since post was likely successful
             postCreated = true
 
@@ -238,7 +229,6 @@ class CreatePostViewModel: ObservableObject {
             searchResults = []
         } catch {
             errorMessage = "投稿に失敗しました"
-            print("❌ エラー: \(error)")
             postCreated = false
         }
 

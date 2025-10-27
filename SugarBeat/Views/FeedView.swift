@@ -338,6 +338,8 @@ struct UserPostsScrollView: View {
     @State private var currentPostIndex = 0
     @State private var dragOffset: CGFloat = 0
     @State private var isAnimating = false
+    @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
+    private let musicPlayer = MusicKitManager.shared
 
     var body: some View {
         GeometryReader { geometry in
@@ -366,21 +368,39 @@ struct UserPostsScrollView: View {
                     Color.black.ignoresSafeArea()
 
                     // Previous post - always rendered
-                    PostCardView(post: userPosts.posts[previousIndex], isCurrent: false, onDelete: onRefresh)
+                    PostCardView(
+                        post: userPosts.posts[previousIndex],
+                        isCurrent: false,
+                        currentPostIndex: $currentPostIndex,
+                        expectedIndex: previousIndex,
+                        onDelete: onRefresh
+                    )
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: -screenHeight + dragOffset)
                         .zIndex(dragOffset > 0 ? 1 : 0)
                         .id(userPosts.posts[previousIndex].id)
 
                     // Current post - always rendered
-                    PostCardView(post: userPosts.posts[currentPostIndex], isCurrent: true, onDelete: onRefresh)
+                    PostCardView(
+                        post: userPosts.posts[currentPostIndex],
+                        isCurrent: true,
+                        currentPostIndex: $currentPostIndex,
+                        expectedIndex: currentPostIndex,
+                        onDelete: onRefresh
+                    )
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: dragOffset)
                         .zIndex(2)
                         .id(userPosts.posts[currentPostIndex].id)
 
                     // Next post - always rendered
-                    PostCardView(post: userPosts.posts[nextIndex], isCurrent: false, onDelete: onRefresh)
+                    PostCardView(
+                        post: userPosts.posts[nextIndex],
+                        isCurrent: false,
+                        currentPostIndex: $currentPostIndex,
+                        expectedIndex: nextIndex,
+                        onDelete: onRefresh
+                    )
                         .frame(width: screenWidth, height: screenHeight)
                         .offset(y: screenHeight + dragOffset)
                         .zIndex(dragOffset < 0 ? 1 : 0)
@@ -432,6 +452,11 @@ struct UserPostsScrollView: View {
                                         dragOffset = 0
                                         isAnimating = false
                                     }
+
+                                    // Auto-play the new current post
+                                    Task { @MainActor in
+                                        await startPlaybackForCurrentPost()
+                                    }
                                 }
                             } else if value.translation.height > threshold || velocity > 500 {
                                 // Swipe down - previous post (infinite loop)
@@ -451,6 +476,11 @@ struct UserPostsScrollView: View {
                                         dragOffset = 0
                                         isAnimating = false
                                     }
+
+                                    // Auto-play the new current post
+                                    Task { @MainActor in
+                                        await startPlaybackForCurrentPost()
+                                    }
                                 }
                             } else {
                                 // Return to original position
@@ -468,11 +498,44 @@ struct UserPostsScrollView: View {
             isAnimating = false
         }
     }
+
+    private func startPlaybackForCurrentPost() async {
+        guard !userPosts.posts.isEmpty else { return }
+
+        let post = userPosts.posts[currentPostIndex]
+        guard let previewUrl = post.previewUrl else { return }
+
+        do {
+            // Stop any currently playing post
+            musicPlayer.stopPreview()
+
+            // Small delay to ensure smooth transition
+            try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
+
+            // Start playback for this post
+            try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
+            playbackStateManager.startPlayback(for: post.id)
+
+            // Auto-stop after duration
+            let duration = post.endTime - post.startTime
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+                if playbackStateManager.currentlyPlayingPostId == post.id {
+                    musicPlayer.stopPreview()
+                    playbackStateManager.stopPlayback()
+                }
+            }
+        } catch {
+            // Silently fail
+        }
+    }
 }
 
 struct PostCardView: View {
     let post: Post
     let isCurrent: Bool
+    @Binding var currentPostIndex: Int
+    let expectedIndex: Int
     var onDelete: (() -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
@@ -486,23 +549,12 @@ struct PostCardView: View {
     @State private var showingReportPostSheet = false
     @State private var showingPostActions = false
 
-    init(post: Post, isCurrent: Bool, onDelete: (() -> Void)? = nil) {
+    init(post: Post, isCurrent: Bool, currentPostIndex: Binding<Int>, expectedIndex: Int, onDelete: (() -> Void)? = nil) {
         self.post = post
         self.isCurrent = isCurrent
+        self._currentPostIndex = currentPostIndex
+        self.expectedIndex = expectedIndex
         self.onDelete = onDelete
-
-        // Initialize like state in the manager
-        LikeStateManager.shared.initialize(
-            postId: post.id,
-            isLiked: post.isLiked ?? false,
-            count: post.likeCount ?? 0
-        )
-
-        // Initialize comment state in the manager
-        CommentStateManager.shared.initialize(
-            postId: post.id,
-            count: post.commentCount ?? 0
-        )
     }
 
     private var isPlaying: Bool {
@@ -790,11 +842,17 @@ struct PostCardView: View {
             .zIndex(1000)
             }
         }
-        .onChange(of: isCurrent) { newValue in
-            if !newValue && isPlaying {
-                musicPlayer.stopPreview()
-                playbackStateManager.stopPlayback()
-            }
+        .onAppear {
+            // Initialize state managers
+            LikeStateManager.shared.initialize(
+                postId: post.id,
+                isLiked: post.isLiked ?? false,
+                count: post.likeCount ?? 0
+            )
+            CommentStateManager.shared.initialize(
+                postId: post.id,
+                count: post.commentCount ?? 0
+            )
         }
         .onDisappear {
             // Stop playback when post disappears
@@ -856,36 +914,37 @@ struct PostCardView: View {
         )
     }
 
+    private func startPlayback() async {
+        guard let previewUrl = post.previewUrl else { return }
+
+        do {
+            // Stop any currently playing post
+            musicPlayer.stopPreview()
+
+            // Start playback for this post
+            try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
+            playbackStateManager.startPlayback(for: post.id)
+
+            // Auto-stop after duration
+            let duration = post.endTime - post.startTime
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+                if playbackStateManager.currentlyPlayingPostId == post.id {
+                    musicPlayer.stopPreview()
+                    playbackStateManager.stopPlayback()
+                }
+            }
+        } catch {
+            // Silently fail
+        }
+    }
+
     private func togglePlayback() async {
         if isPlaying {
             musicPlayer.stopPreview()
             playbackStateManager.stopPlayback()
         } else {
-            guard let previewUrl = post.previewUrl else {
-                print("❌ No preview URL available")
-                return
-            }
-
-            do {
-                // Stop any currently playing post
-                musicPlayer.stopPreview()
-
-                // Start playback for this post
-                try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
-                playbackStateManager.startPlayback(for: post.id)
-
-                // Auto-stop after duration
-                let duration = post.endTime - post.startTime
-                Task {
-                    try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                    if playbackStateManager.currentlyPlayingPostId == post.id {
-                        musicPlayer.stopPreview()
-                        playbackStateManager.stopPlayback()
-                    }
-                }
-            } catch {
-                print("❌ Failed to play preview: \(error)")
-            }
+            await startPlayback()
         }
     }
 

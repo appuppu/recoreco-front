@@ -156,10 +156,6 @@ struct LoginView: View {
             do {
                 try await authManager.login(email: email, password: password)
             } catch {
-                print("❌ Login error: \(error)")
-                if let apiError = error as? APIError {
-                    print("❌ API Error details: \(apiError)")
-                }
                 errorMessage = "ログインに失敗しました"
             }
             isLoading = false

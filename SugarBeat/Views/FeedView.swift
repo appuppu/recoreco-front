@@ -481,8 +481,10 @@ struct PostCardView: View {
     private let musicPlayer = MusicKitManager.shared
     @State private var showingDeleteConfirmation = false
     @State private var showingComments = false
-    @State private var showingReportSheet = false
+    @State private var showingReportCommentSheet = false
     @State private var commentToReport: Comment?
+    @State private var showingReportPostSheet = false
+    @State private var showingPostActions = false
 
     init(post: Post, isCurrent: Bool, onDelete: (() -> Void)? = nil) {
         self.post = post
@@ -623,30 +625,28 @@ struct PostCardView: View {
                         .cornerRadius(20)
                         .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
 
-                        // Three-dot menu button (top-right) - only for own posts
-                        if let currentUserId = APIClient.shared.currentUserId, currentUserId == post.user.id {
-                            VStack {
-                                HStack {
-                                    Spacer()
-                                    Button(action: {
-                                        showingDeleteConfirmation = true
-                                    }) {
-                                        Circle()
-                                            .fill(Color.black.opacity(0.5))
-                                            .frame(width: 36, height: 36)
-                                            .overlay(
-                                                Image(systemName: "ellipsis")
-                                                    .font(.system(size: 16, weight: .semibold))
-                                                    .foregroundColor(.white)
-                                                    .rotationEffect(.degrees(90))
-                                            )
-                                    }
-                                    .padding(8)
-                                }
+                        // Three-dot menu button (top-right) - for all posts
+                        VStack {
+                            HStack {
                                 Spacer()
+                                Button(action: {
+                                    showingPostActions = true
+                                }) {
+                                    Circle()
+                                        .fill(Color.black.opacity(0.5))
+                                        .frame(width: 36, height: 36)
+                                        .overlay(
+                                            Image(systemName: "ellipsis")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(.white)
+                                                .rotationEffect(.degrees(90))
+                                        )
+                                }
+                                .padding(8)
                             }
-                            .frame(width: 280, height: 280)
+                            Spacer()
                         }
+                        .frame(width: 280, height: 280)
 
                         // Play button with waveform overlay (bottom-left)
                         VStack {
@@ -803,10 +803,25 @@ struct PostCardView: View {
                 playbackStateManager.stopPlayback()
             }
         }
-        .sheet(isPresented: $showingReportSheet) {
+        .sheet(isPresented: $showingReportCommentSheet) {
             if let comment = commentToReport {
                 ReportCommentView(comment: comment)
             }
+        }
+        .sheet(isPresented: $showingReportPostSheet) {
+            ReportPostView(post: post)
+        }
+        .confirmationDialog("", isPresented: $showingPostActions) {
+            if let currentUserId = APIClient.shared.currentUserId, currentUserId == post.user.id {
+                Button("削除", role: .destructive) {
+                    showingDeleteConfirmation = true
+                }
+            } else {
+                Button("報告", role: .destructive) {
+                    showingReportPostSheet = true
+                }
+            }
+            Button("キャンセル", role: .cancel) { }
         }
         .alert("投稿を削除", isPresented: $showingDeleteConfirmation) {
             Button("キャンセル", role: .cancel) { }
@@ -831,7 +846,7 @@ struct PostCardView: View {
                             showingComments = false
                             // Then show report sheet after a short delay
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                showingReportSheet = true
+                                showingReportCommentSheet = true
                             }
                         }
                     )

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		008D9DA98E3D92AA0CF1F742 /* WaveformRangeSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0520DF8701555C7D9FDE6B1 /* WaveformRangeSelectorView.swift */; };
+		04E3E4F391AE053F2589DFE8 /* ReportPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D7D8C7F199F76C143A79CF /* ReportPostView.swift */; };
 		0EBC7900F2E77A575BB868DD /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250136EC4050EE8B36C510F0 /* SearchViewModel.swift */; };
 		1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */; };
 		219FE52D6AF412D066A7E6B6 /* PlaybackStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DF565896700D09A709FBDCF /* PlaybackStateManager.swift */; };
@@ -45,6 +46,7 @@
 		2C11195FE0D38EC0C1838891 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		350488B629EE3F78ECB253A4 /* FeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedView.swift; sourceTree = "<group>"; };
 		39C67D0037D92E07F82A211A /* SugarBeat.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = SugarBeat.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		43D7D8C7F199F76C143A79CF /* ReportPostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportPostView.swift; sourceTree = "<group>"; };
 		4FE9F9756265FB4681327DAF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		5EC006309F1FF7C328CBEB44 /* SugarBeatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SugarBeatApp.swift; sourceTree = "<group>"; };
 		6D4536DFDF93BD9B357F9A0D /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
@@ -125,6 +127,7 @@
 				350488B629EE3F78ECB253A4 /* FeedView.swift */,
 				6D4536DFDF93BD9B357F9A0D /* LoginView.swift */,
 				D2982798B19A2ED82053F9D1 /* ReportCommentView.swift */,
+				43D7D8C7F199F76C143A79CF /* ReportPostView.swift */,
 				FADD45EA0EE661AA341F1AD0 /* SearchView.swift */,
 				13C3331FD9F72180FDA3F984 /* SignUpView.swift */,
 				AB188FDA1D0978E1D3ECA85D /* UserPostsView.swift */,
@@ -249,6 +252,7 @@
 				219FE52D6AF412D066A7E6B6 /* PlaybackStateManager.swift in Sources */,
 				D4FF4B6A7713A74DCB7DC183 /* Post.swift in Sources */,
 				59F9EA298EDF367D824D11DD /* ReportCommentView.swift in Sources */,
+				04E3E4F391AE053F2589DFE8 /* ReportPostView.swift in Sources */,
 				97DD6E05CEE8ED3EEC18E3D3 /* SearchView.swift in Sources */,
 				0EBC7900F2E77A575BB868DD /* SearchViewModel.swift in Sources */,
 				B87F65882C387C176C3F5339 /* SignUpView.swift in Sources */,

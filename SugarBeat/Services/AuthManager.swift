@@ -26,9 +26,16 @@ class AuthManager: ObservableObject {
     }
 
     func login(email: String, password: String) async throws {
+        print("🔵 AuthManager.login() called with email: \(email)")
         let request = LoginRequest(email: email, password: password)
-        let response = try await APIClient.shared.login(request: request)
-        saveAuth(response: response)
+        do {
+            let response = try await APIClient.shared.login(request: request)
+            print("✅ Login response received: userId=\(response.userId), username=\(response.username)")
+            saveAuth(response: response)
+        } catch {
+            print("❌ AuthManager.login() error: \(error)")
+            throw error
+        }
     }
 
     func logout() {

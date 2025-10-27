@@ -11,7 +11,7 @@ enum APIError: Error {
 class APIClient {
     static let shared = APIClient()
 
-    private let baseURL = "http://192.168.0.3:8080/api"
+    private let baseURL = "http://192.168.0.2:8080/api"
     private var authToken: String?
     private(set) var currentUserId: Int64?
 
@@ -182,12 +182,6 @@ class APIClient {
 
     // MARK: - Report Endpoints
 
-    func reportPost(postId: Int64, reason: String, description: String?) async throws {
-        let url = URL(string: "\(baseURL)/reports")!
-        let body = CreateReportRequest(postId: postId, reason: reason, description: description)
-        let _: EmptyResponse = try await performRequest(url: url, method: "POST", body: body)
-    }
-
     func reportComment(commentId: Int64, reason: String, description: String?) async throws {
         let url = URL(string: "\(baseURL)/reports/comment")!
         struct ReportCommentRequest: Codable {
@@ -196,6 +190,17 @@ class APIClient {
             let description: String?
         }
         let body = ReportCommentRequest(commentId: commentId, reason: reason, description: description)
+        let _: EmptyResponse = try await performRequest(url: url, method: "POST", body: body)
+    }
+
+    func reportPost(postId: Int64, reason: String, description: String?) async throws {
+        let url = URL(string: "\(baseURL)/reports")!
+        struct ReportPostRequest: Codable {
+            let postId: Int64
+            let reason: String
+            let description: String?
+        }
+        let body = ReportPostRequest(postId: postId, reason: reason, description: description)
         let _: EmptyResponse = try await performRequest(url: url, method: "POST", body: body)
     }
 
@@ -321,6 +326,9 @@ class APIClient {
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
+            print("❌ Decoding failed for type \(T.self)")
+            print("❌ Data: \(String(data: data, encoding: .utf8) ?? "Unable to decode data")")
+            print("❌ Error: \(error)")
             throw APIError.decodingFailed(error)
         }
     }

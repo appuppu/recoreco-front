@@ -13,6 +13,7 @@ class CreatePostViewModel: ObservableObject {
     @Published var isPlaying = false
     @Published var postCreated = false
     @Published var errorMessage: String?
+    @Published var isFetchingPreview = false
 
     private let musicKitManager = MusicKitManager.shared
     private var previewURL: String?
@@ -68,18 +69,19 @@ class CreatePostViewModel: ObservableObject {
         isSearching = false
     }
 
-    func selectSong(_ song: Song) {
+    func selectSong(_ song: Song) async {
         selectedSong = song
         searchResults = []
         searchQuery = ""
 
-        // Fetch preview URL
-        Task {
-            await fetchPreviewURL(for: song)
-        }
+        // Fetch preview URL with retries
+        await fetchPreviewURL(for: song)
     }
 
-    private func fetchPreviewURL(for song: Song) async {
+    private func fetchPreviewURL(for song: Song, retryCount: Int = 0) async {
+        isFetchingPreview = true
+        errorMessage = nil
+
         do {
             let songDetails = try await APIClient.shared.getSongDetails(songId: song.id.rawValue)
 
@@ -91,11 +93,33 @@ class CreatePostViewModel: ObservableObject {
                let firstPreview = previews.first,
                let url = firstPreview["url"] as? String {
                 previewURL = url
+                isFetchingPreview = false
+                print("✅ プレビューURL取得成功: \(url)")
             } else {
-                previewURL = nil
+                // No preview available in response - retry up to 2 times
+                if retryCount < 2 {
+                    print("⚠️ プレビューURLが見つかりません。リトライ \(retryCount + 1)/2")
+                    try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
+                    await fetchPreviewURL(for: song, retryCount: retryCount + 1)
+                } else {
+                    previewURL = nil
+                    isFetchingPreview = false
+                    errorMessage = "この曲には30秒プレビューがありません"
+                    print("❌ プレビューURLが見つかりませんでした")
+                }
             }
         } catch {
-            previewURL = nil
+            // Network error - retry up to 2 times
+            if retryCount < 2 {
+                print("⚠️ プレビューURL取得エラー。リトライ \(retryCount + 1)/2")
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
+                await fetchPreviewURL(for: song, retryCount: retryCount + 1)
+            } else {
+                previewURL = nil
+                isFetchingPreview = false
+                errorMessage = "プレビューの取得に失敗しました"
+                print("❌ プレビューURL取得失敗: \(error)")
+            }
         }
     }
 

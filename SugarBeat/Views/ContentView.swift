@@ -86,7 +86,9 @@ struct CreatePostView: View {
                         LazyVStack(spacing: 8) {
                             ForEach(viewModel.searchResults, id: \.id) { song in
                                 Button(action: {
-                                    viewModel.selectSong(song)
+                                    Task {
+                                        await viewModel.selectSong(song)
+                                    }
                                 }) {
                                     MusicKitSearchRow(song: song)
                                 }
@@ -141,6 +143,18 @@ struct CreatePostView: View {
                         }
                         .padding(.horizontal)
 
+                        // Preview loading indicator
+                        if viewModel.isFetchingPreview {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .tint(.white)
+                                Text("プレビューを取得中...")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                            .padding(.vertical, 8)
+                        }
+
                         // Play/Stop button
                         Button(action: {
                             if viewModel.isPlaying {
@@ -173,6 +187,8 @@ struct CreatePostView: View {
                             )
                             .cornerRadius(10)
                         }
+                        .disabled(viewModel.isFetchingPreview)
+                        .opacity(viewModel.isFetchingPreview ? 0.5 : 1.0)
                         .padding(.horizontal)
 
                         // Comment field
@@ -229,7 +245,7 @@ struct CreatePostView: View {
                                     .cornerRadius(12)
                             }
                         }
-                        .disabled(viewModel.isPosting)
+                        .disabled(viewModel.isPosting || viewModel.isFetchingPreview)
                         .padding(.horizontal)
                         .padding(.bottom, 20)
                     }

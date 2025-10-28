@@ -78,7 +78,7 @@ struct FeedView: View {
                             }
                         }
                         .padding(.leading, 20)
-                        .padding(.top, 60)
+                        .padding(.top, 80)
 
                         Spacer()
                     }
@@ -564,6 +564,22 @@ struct UserPostsScrollView: View {
             dragOffset = 0
             isAnimating = false
         }
+        .onChange(of: isCurrent) { newValue in
+            if newValue {
+                // Auto-play music when this user becomes current
+                Task {
+                    await startPlaybackForCurrentPost()
+                }
+            }
+        }
+        .onAppear {
+            if isCurrent {
+                // Auto-play music when first displayed
+                Task {
+                    await startPlaybackForCurrentPost()
+                }
+            }
+        }
     }
 
     private func startPlaybackForCurrentPost() async {
@@ -645,7 +661,8 @@ struct PostCardView: View {
         GeometryReader { geometry in
             let screenWidth = geometry.size.width
             let screenHeight = geometry.size.height
-            let albumLeftPadding = (screenWidth - 280) / 2
+            let albumSize: CGFloat = 340
+            let albumLeftPadding = (screenWidth - albumSize) / 2
 
             ZStack(alignment: .bottom) {
                 // Black background to prevent white background showing
@@ -696,31 +713,25 @@ struct PostCardView: View {
 
                 // Content
                 VStack(spacing: 0) {
-                    Spacer().frame(height: 80)
+                    Spacer().frame(height: 140)
 
-                // Track info (top, with reduced spacing)
-                VStack(spacing: 4) {
-                    Text(post.trackName)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                        .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
-                        .lineLimit(2)
+                // Track info (top, single line with marquee)
+                VStack(spacing: 0) {
+                    let trackInfo = [post.trackName, post.artistName, post.albumName]
+                        .compactMap { $0 }
+                        .joined(separator: " / ")
 
-                    Text(post.artistName)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.9))
-                        .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
-
-                    if let albumName = post.albumName {
-                        Text(albumName)
-                            .font(.system(size: 13))
-                            .foregroundColor(.white.opacity(0.7))
-                            .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
-                    }
+                    MarqueeText(
+                        text: trackInfo,
+                        font: .system(size: 20, weight: .semibold),
+                        color: .white,
+                        frameWidth: albumSize
+                    )
+                    .frame(height: 30)
+                    .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 20)
+                .padding(.horizontal, albumLeftPadding)
+                .padding(.bottom, 12)
 
                     // Album artwork with play button overlay (moved up)
                     ZStack {
@@ -741,7 +752,7 @@ struct PostCardView: View {
                                     .fill(Color.gray.opacity(0.3))
                             }
                         }
-                        .frame(width: 280, height: 280)
+                        .frame(width: albumSize, height: albumSize)
                         .cornerRadius(20)
                         .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
 
@@ -766,7 +777,7 @@ struct PostCardView: View {
                             }
                             Spacer()
                         }
-                        .frame(width: 280, height: 280)
+                        .frame(width: albumSize, height: albumSize)
 
                         // Play button with waveform overlay (bottom-left)
                         VStack {
@@ -810,7 +821,7 @@ struct PostCardView: View {
                             .padding(16)
                             .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isPlaying)
                         }
-                        .frame(width: 280, height: 280)
+                        .frame(width: albumSize, height: albumSize)
 
                         // Like and Comment buttons (bottom-right)
                         VStack {
@@ -858,7 +869,7 @@ struct PostCardView: View {
                                 .padding(16)
                             }
                         }
-                        .frame(width: 280, height: 280)
+                        .frame(width: albumSize, height: albumSize)
                     }
                     .padding(.bottom, 20)
 
@@ -1086,6 +1097,65 @@ struct WaveformView: View {
             for index in 0..<5 {
                 animationValues[index] = CGFloat.random(in: 0.3...1.0)
             }
+        }
+    }
+}
+
+// Marquee scrolling text view
+struct MarqueeText: View {
+    let text: String
+    let font: Font
+    let color: Color
+    let frameWidth: CGFloat
+
+    @State private var offset: CGFloat = 0
+    @State private var textWidth: CGFloat = 0
+
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 40) {
+                Text(text)
+                    .font(font)
+                    .foregroundColor(color)
+                    .fixedSize()
+
+                // Duplicate text for seamless loop
+                Text(text)
+                    .font(font)
+                    .foregroundColor(color)
+                    .fixedSize()
+            }
+            .background(
+                GeometryReader { textGeometry in
+                    Color.clear.onAppear {
+                        textWidth = textGeometry.size.width
+                    }
+                }
+            )
+            .offset(x: offset)
+            .onAppear {
+                startScrolling()
+            }
+        }
+        .frame(width: frameWidth)
+        .clipped()
+    }
+
+    private func startScrolling() {
+        // Only scroll if text is wider than frame
+        guard textWidth > frameWidth else { return }
+
+        // Calculate single text width (including spacing)
+        let singleTextWidth = (textWidth + 40) / 2
+
+        // Start from right edge
+        offset = 0
+
+        // Animate continuously
+        let duration = Double(singleTextWidth / 25)
+
+        withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+            offset = -singleTextWidth
         }
     }
 }

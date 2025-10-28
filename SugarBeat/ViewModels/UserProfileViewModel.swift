@@ -14,7 +14,7 @@ class UserProfileViewModel: ObservableObject {
 
         do {
             user = try await APIClient.shared.getUser(id: userId)
-            posts = try await APIClient.shared.getUserPosts(userId: userId)
+            posts = try await APIClient.shared.getUserPosts(userId: userId, sort: "asc")
         } catch {
             errorMessage = "Failed to load user: \(error.localizedDescription)"
         }

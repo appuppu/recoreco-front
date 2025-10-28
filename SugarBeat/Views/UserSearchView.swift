@@ -238,7 +238,9 @@ class UserSearchViewModel: ObservableObject {
                     createdAt: updatedUser.createdAt,
                     isFollowing: true,
                     isFollower: updatedUser.isFollower,
-                    isMutual: updatedUser.isFollower == true ? true : false
+                    isMutual: updatedUser.isFollower == true ? true : false,
+                    followingCount: updatedUser.followingCount,
+                    followerCount: updatedUser.followerCount
                 )
             }
         } catch {
@@ -262,7 +264,9 @@ class UserSearchViewModel: ObservableObject {
                     createdAt: updatedUser.createdAt,
                     isFollowing: false,
                     isFollower: updatedUser.isFollower,
-                    isMutual: false
+                    isMutual: false,
+                    followingCount: updatedUser.followingCount,
+                    followerCount: updatedUser.followerCount
                 )
             }
         } catch {

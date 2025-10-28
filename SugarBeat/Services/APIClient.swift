@@ -117,8 +117,8 @@ class APIClient {
         return try await performRequest(url: url, method: "GET")
     }
 
-    func getUserPosts(userId: Int64, page: Int = 0, size: Int = 20) async throws -> [Post] {
-        let url = URL(string: "\(baseURL)/posts/user/\(userId)?page=\(page)&size=\(size)")!
+    func getUserPosts(userId: Int64, page: Int = 0, size: Int = 20, sort: String = "desc") async throws -> [Post] {
+        let url = URL(string: "\(baseURL)/posts/user/\(userId)?page=\(page)&size=\(size)&sort=\(sort)")!
         return try await performRequest(url: url, method: "GET")
     }
 

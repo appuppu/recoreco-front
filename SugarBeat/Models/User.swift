@@ -11,4 +11,6 @@ struct User: Codable, Identifiable {
     let isFollowing: Bool?
     let isFollower: Bool?
     let isMutual: Bool?
+    let followingCount: Int?
+    let followerCount: Int?
 }

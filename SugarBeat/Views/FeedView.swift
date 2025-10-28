@@ -8,6 +8,7 @@ struct FeedView: View {
     @State private var showingCreatePost = false
     @State private var showingProfile = false
     @State private var postCreated = false
+    @State private var showingUserList = false
 
     var body: some View {
         ZStack {
@@ -50,6 +51,65 @@ struct FeedView: View {
                         }
                     }
                 )
+            }
+
+            // List button at top left
+            if !viewModel.allUserPosts.isEmpty {
+                VStack {
+                    HStack {
+                        Button(action: {
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                showingUserList.toggle()
+                            }
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.15))
+                                    .frame(width: 44, height: 44)
+                                    .blur(radius: 8)
+
+                                Circle()
+                                    .fill(Color.white.opacity(0.2))
+                                    .frame(width: 44, height: 44)
+
+                                Image(systemName: "list.bullet")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .padding(.leading, 20)
+                        .padding(.top, 60)
+
+                        Spacer()
+                    }
+                    Spacer()
+                }
+            }
+
+            // User list overlay
+            if showingUserList {
+                UserPostsListView(
+                    allUserPosts: viewModel.allUserPosts,
+                    onUserTapped: { index in
+                        // Close the list
+                        withAnimation {
+                            showingUserList = false
+                        }
+
+                        // Navigate to user's posts
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("ScrollToUser"),
+                            object: nil,
+                            userInfo: ["index": index]
+                        )
+                    },
+                    onDismiss: {
+                        withAnimation {
+                            showingUserList = false
+                        }
+                    }
+                )
+                .transition(.move(edge: .leading))
             }
 
             // Dark overlay when menu is shown
@@ -327,6 +387,13 @@ struct AllUserPostsView: View {
             horizontalDragOffset = 0
             isAnimating = false
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ScrollToUser"))) { notification in
+            if let index = notification.userInfo?["index"] as? Int {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentUserIndex = index
+                }
+            }
+        }
     }
 }
 
@@ -548,6 +615,7 @@ struct PostCardView: View {
     @State private var commentToReport: Comment?
     @State private var showingReportPostSheet = false
     @State private var showingPostActions = false
+    @State private var showingUserProfile = false
 
     init(post: Post, isCurrent: Bool, currentPostIndex: Binding<Int>, expectedIndex: Int, onDelete: (() -> Void)? = nil) {
         self.post = post
@@ -819,6 +887,10 @@ struct PostCardView: View {
 
                         Spacer()
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        showingUserProfile = true
+                    }
                     .padding(.leading, albumLeftPadding)
                     .padding(.trailing, 32)
                     .padding(.bottom, 16)
@@ -912,6 +984,11 @@ struct PostCardView: View {
                 }
             }
         )
+        .sheet(isPresented: $showingUserProfile) {
+            NavigationView {
+                UserProfileView(userId: post.user.id)
+            }
+        }
     }
 
     private func startPlayback() async {

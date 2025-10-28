@@ -1195,6 +1195,11 @@ struct CommentsOverlayView: View {
                 // Semi-transparent background
                 Color.black.opacity(0.4)
                     .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onEnded { _ in }
+                    )
                     .onTapGesture {
                         hideKeyboard()
                         withAnimation {
@@ -1291,6 +1296,26 @@ struct CommentsOverlayView: View {
                                 .padding()
                                 .padding(.bottom, 80)
                             }
+                            .simultaneousGesture(
+                                DragGesture(minimumDistance: 20)
+                                    .onChanged { value in
+                                        if value.translation.height > 0 {
+                                            dragOffset = value.translation.height
+                                        }
+                                    }
+                                    .onEnded { value in
+                                        if value.translation.height > 100 {
+                                            hideKeyboard()
+                                            withAnimation {
+                                                isPresented = false
+                                            }
+                                        } else {
+                                            withAnimation {
+                                                dragOffset = 0
+                                            }
+                                        }
+                                    }
+                            )
                         }
                     }
                     .frame(height: geometry.size.height * 0.7)

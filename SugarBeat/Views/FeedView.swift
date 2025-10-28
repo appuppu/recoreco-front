@@ -756,6 +756,55 @@ struct PostCardView: View {
                         .cornerRadius(20)
                         .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
 
+                        // Profile icon and name (top-left)
+                        VStack {
+                            HStack(spacing: 8) {
+                                AsyncImage(url: URL(string: post.user.profileImageUrl ?? "")) { image in
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                } placeholder: {
+                                    Circle()
+                                        .fill(Color.white.opacity(0.3))
+                                        .overlay(
+                                            Image(systemName: "person.fill")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.white.opacity(0.6))
+                                        )
+                                }
+                                .frame(width: 36, height: 36)
+                                .clipShape(Circle())
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.8), lineWidth: 2)
+                                )
+                                .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 3)
+                                .contentShape(Circle())
+                                .onTapGesture {
+                                    showingUserProfile = true
+                                }
+
+                                Text(post.user.displayName)
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 6)
+                                    .background(
+                                        Capsule()
+                                            .fill(Color.black.opacity(0.5))
+                                    )
+                                    .lineLimit(1)
+                                    .onTapGesture {
+                                        showingUserProfile = true
+                                    }
+
+                                Spacer()
+                            }
+                            .padding(12)
+                            Spacer()
+                        }
+                        .frame(width: albumSize, height: albumSize)
+
                         // Three-dot menu button (top-right) - for all posts
                         VStack {
                             HStack {
@@ -873,50 +922,16 @@ struct PostCardView: View {
                     }
                     .padding(.bottom, 20)
 
-                    // User profile (below artwork)
-                    HStack(spacing: 12) {
-                        Circle()
-                            .fill(Color.white.opacity(0.3))
-                            .frame(width: 44, height: 44)
-                            .overlay(
-                                Circle()
-                                    .stroke(Color.white.opacity(0.6), lineWidth: 2)
-                            )
-                            .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 3)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(post.user.displayName)
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.white)
-                                .shadow(color: Color.black.opacity(0.3), radius: 3, x: 0, y: 1)
-
-                            Text("@\(post.user.username)")
-                                .font(.system(size: 13))
-                                .foregroundColor(.white.opacity(0.7))
-                                .shadow(color: Color.black.opacity(0.3), radius: 3, x: 0, y: 1)
-                        }
-
-                        Spacer()
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        showingUserProfile = true
-                    }
-                    .padding(.leading, albumLeftPadding)
-                    .padding(.trailing, 32)
-                    .padding(.bottom, 16)
-
                     // Comment section
                     if let comment = post.comment, !comment.isEmpty {
                         Text(comment)
-                            .font(.system(size: 15))
+                            .font(.system(size: 17))
                             .foregroundColor(.white)
-                            .multilineTextAlignment(.leading)
+                            .multilineTextAlignment(.center)
                             .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
                             .lineLimit(4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.leading, albumLeftPadding)
-                            .padding(.trailing, 32)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.horizontal, 32)
                             .padding(.bottom, 16)
                     }
 

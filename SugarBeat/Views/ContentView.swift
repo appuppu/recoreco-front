@@ -348,6 +348,7 @@ struct ProfileView: View {
     @State private var showDeleteConfirmation = false
     @State private var isDeleting = false
     @State private var showEditProfile = false
+    @State private var showBlockedUsers = false
     @State private var editedProfileImageUrl = ""
     @State private var editedDisplayName = ""
     @State private var isUpdating = false
@@ -430,6 +431,23 @@ struct ProfileView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding()
                                     .background(Color.blue.opacity(0.3))
+                                    .cornerRadius(12)
+                                }
+
+                                // Blocked users button
+                                Button(action: {
+                                    showBlockedUsers = true
+                                }) {
+                                    HStack {
+                                        Image(systemName: "nosign")
+                                            .font(.system(size: 18))
+                                        Text("ブロックリスト")
+                                            .font(.system(size: 16, weight: .semibold))
+                                    }
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.white.opacity(0.15))
                                     .cornerRadius(12)
                                 }
 
@@ -524,6 +542,9 @@ struct ProfileView: View {
                     }
                 )
                 .environmentObject(authManager)
+            }
+            .sheet(isPresented: $showBlockedUsers) {
+                BlockedUsersView()
             }
         }
     }

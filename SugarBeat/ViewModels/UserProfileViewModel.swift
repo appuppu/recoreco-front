@@ -39,4 +39,12 @@ class UserProfileViewModel: ObservableObject {
             errorMessage = "Failed to unfollow user: \(error.localizedDescription)"
         }
     }
+
+    func blockUser(userId: Int64) async {
+        do {
+            try await APIClient.shared.blockUser(userId: userId)
+        } catch {
+            errorMessage = "Failed to block user: \(error.localizedDescription)"
+        }
+    }
 }

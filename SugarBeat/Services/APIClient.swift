@@ -163,6 +163,11 @@ class APIClient {
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
 
+    func getBlockedUsers() async throws -> [User] {
+        let url = URL(string: "\(baseURL)/blocks")!
+        return try await performRequest(url: url, method: "GET")
+    }
+
     // MARK: - Comment Endpoints
 
     func createComment(request: CreateCommentRequest) async throws -> Comment {

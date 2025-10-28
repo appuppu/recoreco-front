@@ -205,10 +205,18 @@ struct FeedView: View {
                 await viewModel.refreshFeed()
             }
         }
-        .sheet(isPresented: $showingUserSearch) {
+        .sheet(isPresented: $showingUserSearch, onDismiss: {
+            Task {
+                await viewModel.refreshFeed()
+            }
+        }) {
             UserSearchView()
         }
-        .sheet(isPresented: $showingProfile) {
+        .sheet(isPresented: $showingProfile, onDismiss: {
+            Task {
+                await viewModel.refreshFeed()
+            }
+        }) {
             ProfileView()
         }
         .fullScreenCover(isPresented: $showingCreatePost, onDismiss: {

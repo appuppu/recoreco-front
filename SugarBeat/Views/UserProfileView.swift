@@ -6,6 +6,7 @@ struct UserProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
     private let musicPlayer = MusicKitManager.shared
+    @State private var showingActionSheet = false
 
     var body: some View {
         ZStack {
@@ -219,6 +220,29 @@ struct UserProfileView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let currentUserId = APIClient.shared.currentUserId, currentUserId != userId {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        showingActionSheet = true
+                    }) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white)
+                            .rotationEffect(.degrees(90))
+                    }
+                }
+            }
+        }
+        .confirmationDialog("", isPresented: $showingActionSheet, titleVisibility: .hidden) {
+            Button("ブロック", role: .destructive) {
+                Task {
+                    await viewModel.blockUser(userId: userId)
+                    dismiss()
+                }
+            }
+            Button("キャンセル", role: .cancel) { }
+        }
         .task {
             await viewModel.loadUser(userId: userId)
         }

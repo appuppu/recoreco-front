@@ -9,6 +9,14 @@ struct FeedView: View {
     @State private var showingProfile = false
     @State private var postCreated = false
     @State private var showingUserList = false
+    @State private var showingNotifications = false
+    @State private var unreadNotificationCount = 0
+    @State private var unreadPostCounts: [Int64: Int] = [:]
+    @State private var notificationPollingTask: Task<Void, Never>?
+
+    private var totalUnreadPostCount: Int {
+        unreadPostCounts.values.reduce(0, +)
+    }
 
     var body: some View {
         ZStack {
@@ -53,10 +61,10 @@ struct FeedView: View {
                 )
             }
 
-            // List button at top left
+            // List button and notification button at top left
             if !viewModel.allUserPosts.isEmpty {
                 VStack {
-                    HStack {
+                    HStack(spacing: 12) {
                         Button(action: {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 showingUserList.toggle()
@@ -72,12 +80,107 @@ struct FeedView: View {
                                     .fill(Color.white.opacity(0.2))
                                     .frame(width: 44, height: 44)
 
-                                Image(systemName: "list.bullet")
+                                Image(systemName: totalUnreadPostCount > 0 ? "list.bullet.badge" : "list.bullet")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(.white)
+
+                                // Badge for total unread post count
+                                if totalUnreadPostCount > 0 {
+                                    VStack {
+                                        HStack {
+                                            Spacer()
+                                            ZStack {
+                                                // Pulsing background
+                                                Circle()
+                                                    .fill(
+                                                        LinearGradient(
+                                                            gradient: Gradient(colors: [
+                                                                Color.purple.opacity(0.5),
+                                                                Color.blue.opacity(0.5)
+                                                            ]),
+                                                            startPoint: .topLeading,
+                                                            endPoint: .bottomTrailing
+                                                        )
+                                                    )
+                                                    .frame(width: 24, height: 24)
+                                                    .scaleEffect(1.2)
+                                                    .opacity(0.6)
+                                                    .modifier(PulseAnimation())
+
+                                                Text(totalUnreadPostCount > 99 ? "99+" : "\(totalUnreadPostCount)")
+                                                    .font(.system(size: 10, weight: .bold))
+                                                    .foregroundColor(.white)
+                                                    .padding(4)
+                                                    .background(
+                                                        LinearGradient(
+                                                            gradient: Gradient(colors: [
+                                                                Color.purple,
+                                                                Color.blue
+                                                            ]),
+                                                            startPoint: .topLeading,
+                                                            endPoint: .bottomTrailing
+                                                        )
+                                                    )
+                                                    .clipShape(Circle())
+                                            }
+                                            .offset(x: 8, y: -8)
+                                        }
+                                        Spacer()
+                                    }
+                                    .frame(width: 44, height: 44)
+                                }
                             }
                         }
                         .padding(.leading, 20)
+                        .padding(.top, 80)
+
+                        // Notification button
+                        Button(action: {
+                            showingNotifications = true
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.15))
+                                    .frame(width: 44, height: 44)
+                                    .blur(radius: 8)
+
+                                Circle()
+                                    .fill(Color.white.opacity(0.2))
+                                    .frame(width: 44, height: 44)
+
+                                Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.white)
+
+                                // Badge for unread count
+                                if unreadNotificationCount > 0 {
+                                    VStack {
+                                        HStack {
+                                            Spacer()
+                                            ZStack {
+                                                // Pulsing background
+                                                Circle()
+                                                    .fill(Color.red.opacity(0.5))
+                                                    .frame(width: 24, height: 24)
+                                                    .scaleEffect(1.2)
+                                                    .opacity(0.6)
+                                                    .modifier(PulseAnimation())
+
+                                                Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
+                                                    .font(.system(size: 10, weight: .bold))
+                                                    .foregroundColor(.white)
+                                                    .padding(4)
+                                                    .background(Color.red)
+                                                    .clipShape(Circle())
+                                            }
+                                            .offset(x: 8, y: -8)
+                                        }
+                                        Spacer()
+                                    }
+                                    .frame(width: 44, height: 44)
+                                }
+                            }
+                        }
                         .padding(.top, 80)
 
                         Spacer()
@@ -90,6 +193,7 @@ struct FeedView: View {
             if showingUserList {
                 UserPostsListView(
                     allUserPosts: viewModel.allUserPosts,
+                    unreadCounts: unreadPostCounts,
                     onUserTapped: { index in
                         // Close the list
                         withAnimation {
@@ -102,6 +206,20 @@ struct FeedView: View {
                             object: nil,
                             userInfo: ["index": index]
                         )
+
+                        // Mark posts as viewed for this user
+                        if index < viewModel.allUserPosts.count {
+                            let targetUserId = viewModel.allUserPosts[index].user.id
+                            Task {
+                                do {
+                                    try await APIClient.shared.markPostsAsViewed(targetUserId: targetUserId)
+                                    // Reload unread counts
+                                    await loadUnreadPostCounts()
+                                } catch {
+                                    print("Failed to mark posts as viewed: \(error)")
+                                }
+                            }
+                        }
                     },
                     onDismiss: {
                         withAnimation {
@@ -219,6 +337,13 @@ struct FeedView: View {
         }) {
             ProfileView()
         }
+        .sheet(isPresented: $showingNotifications, onDismiss: {
+            Task {
+                await loadUnreadCount()
+            }
+        }) {
+            NotificationsView()
+        }
         .fullScreenCover(isPresented: $showingCreatePost, onDismiss: {
             if postCreated {
                 refreshTrigger.toggle()
@@ -227,6 +352,93 @@ struct FeedView: View {
         }) {
             CreatePostView(postCreated: $postCreated)
         }
+        .task {
+            await loadUnreadCount()
+            await loadUnreadPostCounts()
+        }
+        .onAppear {
+            startNotificationPolling()
+        }
+        .onDisappear {
+            stopNotificationPolling()
+        }
+        .onChange(of: showingNotifications) { isShowing in
+            if isShowing {
+                // Stop polling when notification view is open
+                stopNotificationPolling()
+            } else {
+                // Resume polling when notification view is closed
+                startNotificationPolling()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Foundation.Notification.Name("RefreshNotificationBadge"))) { _ in
+            Task {
+                await loadUnreadCount()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Foundation.Notification.Name("ReloadUnreadCounts"))) { _ in
+            Task {
+                await loadUnreadPostCounts()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToPost"))) { notification in
+            if let userInfo = notification.userInfo,
+               let postId = userInfo["postId"] as? Int64,
+               let senderId = userInfo["senderId"] as? Int64 {
+                // Find the user index in allUserPosts
+                if let userIndex = viewModel.allUserPosts.firstIndex(where: { $0.user.id == senderId }) {
+                    // Navigate to that user's posts
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("ScrollToUser"),
+                        object: nil,
+                        userInfo: ["index": userIndex]
+                    )
+                }
+            }
+        }
+    }
+
+    private func loadUnreadCount() async {
+        do {
+            unreadNotificationCount = try await APIClient.shared.getUnreadNotificationCount()
+        } catch {
+            print("Failed to load unread notification count: \(error)")
+        }
+    }
+
+    private func loadUnreadPostCounts() async {
+        do {
+            let counts = try await APIClient.shared.getUnreadPostCounts()
+            // Convert String keys to Int64
+            unreadPostCounts = counts.reduce(into: [:]) { result, pair in
+                if let userId = Int64(pair.key) {
+                    result[userId] = pair.value
+                }
+            }
+        } catch {
+            print("Failed to load unread post counts: \(error)")
+        }
+    }
+
+    private func startNotificationPolling() {
+        // Cancel any existing polling task
+        notificationPollingTask?.cancel()
+
+        // Start new polling task
+        notificationPollingTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                if !Task.isCancelled {
+                    await loadUnreadCount()
+                    await loadUnreadPostCounts()
+                }
+            }
+        }
+    }
+
+    private func stopNotificationPolling() {
+        notificationPollingTask?.cancel()
+        notificationPollingTask = nil
     }
 }
 
@@ -1558,4 +1770,20 @@ struct CommentRowView: View {
 
 #Preview {
     FeedView(refreshTrigger: .constant(false))
+}
+
+// Pulse animation modifier for badges
+struct PulseAnimation: ViewModifier {
+    @State private var isAnimating = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isAnimating ? 1.3 : 1.0)
+            .opacity(isAnimating ? 0 : 0.6)
+            .onAppear {
+                withAnimation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: false)) {
+                    isAnimating = true
+                }
+            }
+    }
 }

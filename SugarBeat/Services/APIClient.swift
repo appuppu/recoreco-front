@@ -334,6 +334,41 @@ class APIClient {
             throw APIError.decodingFailed(error)
         }
     }
+
+    // MARK: - Notification endpoints
+
+    func getNotifications() async throws -> [Notification] {
+        let url = URL(string: "\(baseURL)/notifications")!
+        return try await performRequest(url: url, method: "GET")
+    }
+
+    func getUnreadNotificationCount() async throws -> Int {
+        let url = URL(string: "\(baseURL)/notifications/unread-count")!
+        let response: [String: Int] = try await performRequest(url: url, method: "GET")
+        return response["count"] ?? 0
+    }
+
+    func markNotificationAsRead(notificationId: Int64) async throws {
+        let url = URL(string: "\(baseURL)/notifications/\(notificationId)/read")!
+        let _: EmptyResponse = try await performRequest(url: url, method: "PUT")
+    }
+
+    func markAllNotificationsAsRead() async throws {
+        let url = URL(string: "\(baseURL)/notifications/read-all")!
+        let _: EmptyResponse = try await performRequest(url: url, method: "PUT")
+    }
+
+    // MARK: - Unread posts endpoints
+
+    func getUnreadPostCounts() async throws -> [String: Int] {
+        let url = URL(string: "\(baseURL)/posts/unread-counts")!
+        return try await performRequest(url: url, method: "GET")
+    }
+
+    func markPostsAsViewed(targetUserId: Int64) async throws {
+        let url = URL(string: "\(baseURL)/posts/mark-viewed/\(targetUserId)")!
+        let _: EmptyResponse = try await performRequest(url: url, method: "PUT")
+    }
 }
 
 // Empty response for endpoints that don't return data

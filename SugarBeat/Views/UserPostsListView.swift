@@ -2,6 +2,7 @@ import SwiftUI
 
 struct UserPostsListView: View {
     let allUserPosts: [UserPosts]
+    let unreadCounts: [Int64: Int]
     let onUserTapped: (Int) -> Void
     let onDismiss: () -> Void
 
@@ -37,7 +38,8 @@ struct UserPostsListView: View {
                             ForEach(Array(allUserPosts.enumerated()), id: \.element.id) { index, userPosts in
                                 UserPostListRow(
                                     userPosts: userPosts,
-                                    isCurrentUser: index == 0
+                                    isCurrentUser: index == 0,
+                                    unreadCount: unreadCounts[userPosts.user.id] ?? 0
                                 )
                                 .onTapGesture {
                                     onUserTapped(index)
@@ -73,6 +75,7 @@ struct UserPostsListView: View {
 struct UserPostListRow: View {
     let userPosts: UserPosts
     let isCurrentUser: Bool
+    let unreadCount: Int
 
     private var latestPost: Post? {
         userPosts.posts.first
@@ -128,6 +131,16 @@ struct UserPostListRow: View {
                             )
                             .cornerRadius(4)
                     }
+
+                    if unreadCount > 0 {
+                        Text("新着\(unreadCount)件")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.red.opacity(0.8))
+                            .cornerRadius(4)
+                    }
                 }
 
                 if let comment = latestPost?.comment, !comment.isEmpty {
@@ -171,6 +184,7 @@ struct UserPostListRow: View {
 #Preview {
     UserPostsListView(
         allUserPosts: [],
+        unreadCounts: [:],
         onUserTapped: { _ in },
         onDismiss: {}
     )

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
+    @ObservedObject private var unreadPostsManager = UnreadPostsManager.shared
     @Binding var refreshTrigger: Bool
     @State private var showingMenu = false
     @State private var showingUserSearch = false
@@ -81,15 +82,15 @@ struct FeedView: View {
                                 ZStack {
                                     Circle()
                                         .fill(Color.white.opacity(0.15))
-                                        .frame(width: 44, height: 44)
+                                        .frame(width: 54, height: 54)
                                         .blur(radius: 8)
 
                                     Circle()
                                         .fill(Color.white.opacity(0.2))
-                                        .frame(width: 44, height: 44)
+                                        .frame(width: 54, height: 54)
 
                                     Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
-                                        .font(.system(size: 18, weight: .semibold))
+                                        .font(.system(size: 22, weight: .semibold))
                                         .foregroundColor(.white)
 
                                     // Badge for unread count
@@ -113,15 +114,15 @@ struct FeedView: View {
                                                         .background(Color.red)
                                                         .clipShape(Circle())
                                                 }
-                                                .offset(x: 8, y: -8)
+                                                .offset(x: 10, y: -10)
                                             }
                                             Spacer()
                                         }
-                                        .frame(width: 44, height: 44)
+                                        .frame(width: 54, height: 54)
                                     }
                                 }
                             }
-                            .frame(width: 44, height: 44)
+                            .frame(width: 54, height: 54)
                         }
 
                         // Horizontal scrolling user radio buttons (custom implementation)
@@ -134,6 +135,7 @@ struct FeedView: View {
                                         userPosts: userPosts,
                                         currentPostIndex: userCurrentPostIndices[userPosts.user.id] ?? 0,
                                         unreadCount: unreadPostCounts[userPosts.user.id] ?? 0,
+                                        hasUnreadPosts: unreadPostsManager.hasUnreadPosts(in: userPosts.posts),
                                         onTap: {
                                             print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
 
@@ -281,10 +283,10 @@ struct FeedView: View {
                                     }
                             )
                         }
-                        .frame(height: 62)
+                        .frame(height: 72)
                         .clipped()
                     }
-                    .frame(height: 62)
+                    .frame(height: 72)
                     .padding(.horizontal, 20)
                     .padding(.top, 70)
                     Spacer()
@@ -419,9 +421,11 @@ struct FeedView: View {
         }
         .onAppear {
             startNotificationPolling()
+            viewModel.startPolling()
         }
         .onDisappear {
             stopNotificationPolling()
+            viewModel.stopPolling()
         }
         .onChange(of: showingNotifications) { isShowing in
             if isShowing {
@@ -502,7 +506,7 @@ struct FeedView: View {
         // Start new polling task
         notificationPollingTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                try? await Task.sleep(nanoseconds: 60_000_000_000) // 60 seconds
                 if !Task.isCancelled {
                     print("📊 Polling for notifications and unread posts...")
                     await loadUnreadCount()
@@ -1118,7 +1122,7 @@ struct PostCardView: View {
 
                 // Content
                 VStack(spacing: 0) {
-                    Spacer().frame(height: 140)
+                    Spacer().frame(height: 150)
 
                 // Track info (top, single line with marquee)
                 VStack(spacing: 0) {
@@ -1133,10 +1137,9 @@ struct PostCardView: View {
                         frameWidth: albumSize
                     )
                     .frame(height: 30)
-                    .shadow(color: Color.black.opacity(0.3), radius: 5, x: 0, y: 2)
                 }
                 .padding(.horizontal, albumLeftPadding)
-                .padding(.bottom, 12)
+                .padding(.bottom, 6)
 
                     // Album artwork with play button overlay (moved up)
                     ZStack {
@@ -1356,6 +1359,17 @@ struct PostCardView: View {
                 postId: post.id,
                 count: post.commentCount ?? 0
             )
+
+            // Mark as read when post becomes visible
+            if isCurrent {
+                UnreadPostsManager.shared.markAsRead(post.id)
+            }
+        }
+        .onChange(of: isCurrent) { newValue in
+            // Mark as read when post becomes current
+            if newValue {
+                UnreadPostsManager.shared.markAsRead(post.id)
+            }
         }
         // Removed onDisappear to prevent stopping playback during screen transitions
         // Playback is automatically stopped when a new song starts playing (in playPreviewFromURL)
@@ -2008,6 +2022,7 @@ struct UserRadioButton: View {
     let userPosts: UserPosts
     let currentPostIndex: Int
     let unreadCount: Int
+    let hasUnreadPosts: Bool
     let onTap: () -> Void
 
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
@@ -2032,28 +2047,12 @@ struct UserRadioButton: View {
         VStack(spacing: 4) {
             // User name
             Text(userPosts.user.displayName)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundColor(.white.opacity(0.8))
                 .lineLimit(1)
-                .frame(width: 50, height: 14, alignment: .center)
+                .frame(width: 60, height: 14, alignment: .center)
 
             ZStack {
-            // Outer glow
-            Circle()
-                .fill(
-                    RadialGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.3),
-                            Color.clear
-                        ]),
-                        center: .center,
-                        startRadius: 18,
-                        endRadius: 26
-                    )
-                )
-                .frame(width: 52, height: 52)
-                .blur(radius: 4)
-
             // Main circle with border
             ZStack {
                 // Jacket image
@@ -2067,7 +2066,7 @@ struct UserRadioButton: View {
                             image
                                 .resizable()
                                 .aspectRatio(contentMode: .fill)
-                                .frame(width: 44, height: 44)
+                                .frame(width: 54, height: 54)
                                 .clipShape(Circle())
                         case .failure:
                             placeholderView
@@ -2079,25 +2078,28 @@ struct UserRadioButton: View {
                     placeholderView
                 }
 
-                // Border with gradient
+                // Border with gradient - different color for unread posts
                 Circle()
                     .strokeBorder(
                         LinearGradient(
-                            gradient: Gradient(colors: [
+                            gradient: Gradient(colors: hasUnreadPosts ? [
+                                Color.blue.opacity(0.9),
+                                Color.cyan.opacity(0.9)
+                            ] : [
                                 Color.white.opacity(0.6),
                                 Color.white.opacity(0.2)
                             ]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 2
+                        lineWidth: hasUnreadPosts ? 3 : 2
                     )
-                    .frame(width: 44, height: 44)
+                    .frame(width: 54, height: 54)
 
                 // Waveform animation when playing (inside the circle)
                 if isPlaying {
                     MiniWaveformView()
-                        .frame(width: 30, height: 20)
+                        .frame(width: 36, height: 24)
                         .transition(.opacity)
                 }
 
@@ -2140,16 +2142,15 @@ struct UserRadioButton: View {
                                     )
                                     .clipShape(Circle())
                             }
-                            .offset(x: 6, y: -6)
+                            .offset(x: 8, y: -8)
                         }
                         Spacer()
                     }
-                    .frame(width: 44, height: 44)
+                    .frame(width: 54, height: 54)
                 }
             }
-            .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 3)
             }
-            .frame(width: 44, height: 44)
+            .frame(width: 54, height: 54)
             .contentShape(Circle())
             .highPriorityGesture(
                 TapGesture()
@@ -2164,10 +2165,10 @@ struct UserRadioButton: View {
     private var placeholderView: some View {
         Circle()
             .fill(Color.gray.opacity(0.3))
-            .frame(width: 44, height: 44)
+            .frame(width: 54, height: 54)
             .overlay(
                 Image(systemName: "music.note")
-                    .font(.system(size: 16))
+                    .font(.system(size: 20))
                     .foregroundColor(.white.opacity(0.6))
             )
     }

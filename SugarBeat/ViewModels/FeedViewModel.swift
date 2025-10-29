@@ -13,6 +13,9 @@ class FeedViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
+    private var latestPostDate: Date?
+    private var pollingTask: Task<Void, Never>?
+
     func loadFeed() async {
         isLoading = true
         errorMessage = nil
@@ -57,6 +60,9 @@ class FeedViewModel: ObservableObject {
                 allUserPosts.insert(currentUser, at: 0)
             }
 
+            // Update latest post date for polling
+            latestPostDate = allUserPosts.first?.posts.first?.createdAt
+
             print("📊 Total users in feed: \(allUserPosts.count)")
 
         } catch {
@@ -75,5 +81,96 @@ class FeedViewModel: ObservableObject {
 
     func refreshFeed() async {
         await loadFeed()
+    }
+
+    // Start polling for new posts every 60 seconds
+    func startPolling() {
+        stopPolling() // Stop any existing polling
+
+        pollingTask = Task {
+            while !Task.isCancelled {
+                // Wait 60 seconds before checking
+                try? await Task.sleep(nanoseconds: 60_000_000_000)
+
+                if Task.isCancelled { break }
+
+                await checkForNewPosts()
+            }
+        }
+
+        print("🔄 Started polling for new posts (60s interval)")
+    }
+
+    // Stop polling
+    func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
+        print("⏸️ Stopped polling for new posts")
+    }
+
+    // Check for new posts silently (without showing loading indicator)
+    private func checkForNewPosts() async {
+        guard let latestDate = latestPostDate else {
+            print("🔄 No latest post date, skipping poll")
+            return
+        }
+
+        do {
+            guard let currentUserId = APIClient.shared.currentUserId else {
+                return
+            }
+
+            // Load current user's posts
+            let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId)
+
+            // Get mutual follows feed
+            let mutualFollowsPosts = try await APIClient.shared.getMutualFollowsFeed()
+
+            // Combine posts
+            let allPosts = currentUserPostsList + mutualFollowsPosts
+
+            // Check if there are any new posts
+            let hasNewPosts = allPosts.contains { $0.createdAt > latestDate }
+
+            if hasNewPosts {
+                print("🆕 New posts detected, refreshing feed silently")
+
+                // Group posts by user
+                let grouped = Dictionary(grouping: allPosts) { $0.user.id }
+
+                // Create UserPosts for each user and sort by most recent post
+                allUserPosts = grouped.map { userId, userPostsList in
+                    UserPosts(
+                        id: userId,
+                        user: userPostsList.first!.user,
+                        posts: userPostsList.sorted { $0.createdAt > $1.createdAt }
+                    )
+                }.sorted {
+                    $0.posts.first?.createdAt ?? Date.distantPast >
+                    $1.posts.first?.createdAt ?? Date.distantPast
+                }
+
+                // Move current user to the front
+                if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
+                    let currentUser = allUserPosts.remove(at: currentUserIndex)
+                    allUserPosts.insert(currentUser, at: 0)
+                }
+
+                // Update latest post date
+                latestPostDate = allUserPosts.first?.posts.first?.createdAt
+
+                print("✅ Feed refreshed with new posts")
+            } else {
+                print("🔄 No new posts")
+            }
+
+        } catch {
+            // Silently ignore errors during polling
+            if let urlError = error as? URLError, urlError.code == .cancelled {
+                // Normal cancellation, ignore
+                return
+            }
+            print("⚠️ Polling error (ignored): \(error.localizedDescription)")
+        }
     }
 }

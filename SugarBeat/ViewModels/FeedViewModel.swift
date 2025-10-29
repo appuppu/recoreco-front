@@ -60,6 +60,12 @@ class FeedViewModel: ObservableObject {
             print("📊 Total users in feed: \(allUserPosts.count)")
 
         } catch {
+            // Ignore cancellation errors (happens when quickly switching between users)
+            if let urlError = error as? URLError, urlError.code == .cancelled {
+                print("⚠️ Feed load cancelled (normal when switching users quickly)")
+                return
+            }
+
             errorMessage = "フィードの読み込みに失敗しました: \(error.localizedDescription)"
             print("❌ Failed to load feed: \(error)")
         }

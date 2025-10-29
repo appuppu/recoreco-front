@@ -8,15 +8,17 @@ struct FeedView: View {
     @State private var showingCreatePost = false
     @State private var showingProfile = false
     @State private var postCreated = false
-    @State private var showingUserList = false
     @State private var showingNotifications = false
     @State private var unreadNotificationCount = 0
     @State private var unreadPostCounts: [Int64: Int] = [:]
     @State private var notificationPollingTask: Task<Void, Never>?
-
-    private var totalUnreadPostCount: Int {
-        unreadPostCounts.values.reduce(0, +)
-    }
+    @State private var radioButtonsBaseOffset: CGFloat = 0
+    @State private var radioButtonsDragOffset: CGFloat = 0
+    @State private var radioButtonsContentWidth: CGFloat = 0
+    @State private var isDraggingRadioButtons = false
+    @State private var userCurrentPostIndices: [Int64: Int] = [:] // userId -> currentPostIndex
+    @State private var skipNextAutoPlay = false
+    @State private var currentDisplayedUserIndex = 0
 
     var body: some View {
         ZStack {
@@ -53,6 +55,8 @@ struct FeedView: View {
                 // All user posts with horizontal and vertical navigation
                 AllUserPostsView(
                     allUserPosts: viewModel.allUserPosts,
+                    skipNextAutoPlay: $skipNextAutoPlay,
+                    currentDisplayedUserIndex: $currentDisplayedUserIndex,
                     onRefresh: {
                         Task {
                             await viewModel.refreshFeed()
@@ -61,173 +65,230 @@ struct FeedView: View {
                 )
             }
 
-            // List button and notification button at top left
+            // Notification button and horizontal user radio buttons at top
             if !viewModel.allUserPosts.isEmpty {
                 VStack {
-                    HStack(spacing: 12) {
-                        Button(action: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                showingUserList.toggle()
-                            }
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.white.opacity(0.15))
-                                    .frame(width: 44, height: 44)
-                                    .blur(radius: 8)
+                    HStack(alignment: .bottom, spacing: 12) {
+                        // Notification button (moved to left) with padding to align with radio button circles
+                        VStack(spacing: 4) {
+                            // Spacer to match radio button user name height
+                            Spacer()
+                                .frame(height: 14)
 
-                                Circle()
-                                    .fill(Color.white.opacity(0.2))
-                                    .frame(width: 44, height: 44)
+                            Button(action: {
+                                showingNotifications = true
+                            }) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color.white.opacity(0.15))
+                                        .frame(width: 44, height: 44)
+                                        .blur(radius: 8)
 
-                                Image(systemName: totalUnreadPostCount > 0 ? "list.bullet.badge" : "list.bullet")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
+                                    Circle()
+                                        .fill(Color.white.opacity(0.2))
+                                        .frame(width: 44, height: 44)
 
-                                // Badge for total unread post count
-                                if totalUnreadPostCount > 0 {
-                                    VStack {
-                                        HStack {
-                                            Spacer()
-                                            ZStack {
-                                                // Pulsing background
-                                                Circle()
-                                                    .fill(
-                                                        LinearGradient(
-                                                            gradient: Gradient(colors: [
-                                                                Color.purple.opacity(0.5),
-                                                                Color.blue.opacity(0.5)
-                                                            ]),
-                                                            startPoint: .topLeading,
-                                                            endPoint: .bottomTrailing
-                                                        )
-                                                    )
-                                                    .frame(width: 24, height: 24)
-                                                    .scaleEffect(1.2)
-                                                    .opacity(0.6)
-                                                    .modifier(PulseAnimation())
+                                    Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(.white)
 
-                                                Text(totalUnreadPostCount > 99 ? "99+" : "\(totalUnreadPostCount)")
-                                                    .font(.system(size: 10, weight: .bold))
-                                                    .foregroundColor(.white)
-                                                    .padding(4)
-                                                    .background(
-                                                        LinearGradient(
-                                                            gradient: Gradient(colors: [
-                                                                Color.purple,
-                                                                Color.blue
-                                                            ]),
-                                                            startPoint: .topLeading,
-                                                            endPoint: .bottomTrailing
-                                                        )
-                                                    )
-                                                    .clipShape(Circle())
+                                    // Badge for unread count
+                                    if unreadNotificationCount > 0 {
+                                        VStack {
+                                            HStack {
+                                                Spacer()
+                                                ZStack {
+                                                    // Pulsing background
+                                                    Circle()
+                                                        .fill(Color.red.opacity(0.5))
+                                                        .frame(width: 24, height: 24)
+                                                        .scaleEffect(1.2)
+                                                        .opacity(0.6)
+                                                        .modifier(PulseAnimation())
+
+                                                    Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
+                                                        .font(.system(size: 10, weight: .bold))
+                                                        .foregroundColor(.white)
+                                                        .padding(4)
+                                                        .background(Color.red)
+                                                        .clipShape(Circle())
+                                                }
+                                                .offset(x: 8, y: -8)
                                             }
-                                            .offset(x: 8, y: -8)
+                                            Spacer()
                                         }
-                                        Spacer()
+                                        .frame(width: 44, height: 44)
                                     }
-                                    .frame(width: 44, height: 44)
                                 }
                             }
+                            .frame(width: 44, height: 44)
                         }
-                        .padding(.leading, 20)
-                        .padding(.top, 80)
 
-                        // Notification button
-                        Button(action: {
-                            showingNotifications = true
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.white.opacity(0.15))
-                                    .frame(width: 44, height: 44)
-                                    .blur(radius: 8)
+                        // Horizontal scrolling user radio buttons (custom implementation)
+                        GeometryReader { radioGeometry in
+                            let containerWidth = radioGeometry.size.width
 
-                                Circle()
-                                    .fill(Color.white.opacity(0.2))
-                                    .frame(width: 44, height: 44)
+                            HStack(spacing: 12) {
+                                ForEach(Array(viewModel.allUserPosts.enumerated()), id: \.element.id) { index, userPosts in
+                                    UserRadioButton(
+                                        userPosts: userPosts,
+                                        currentPostIndex: userCurrentPostIndices[userPosts.user.id] ?? 0,
+                                        unreadCount: unreadPostCounts[userPosts.user.id] ?? 0,
+                                        onTap: {
+                                            print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
 
-                                Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.white)
+                                            // Set skip flag immediately before any action
+                                            skipNextAutoPlay = true
+                                            print("🎵 Set skipNextAutoPlay flag to true")
 
-                                // Badge for unread count
-                                if unreadNotificationCount > 0 {
-                                    VStack {
-                                        HStack {
-                                            Spacer()
-                                            ZStack {
-                                                // Pulsing background
-                                                Circle()
-                                                    .fill(Color.red.opacity(0.5))
-                                                    .frame(width: 24, height: 24)
-                                                    .scaleEffect(1.2)
-                                                    .opacity(0.6)
-                                                    .modifier(PulseAnimation())
+                                            // Play music first
+                                            if index < viewModel.allUserPosts.count {
+                                                let targetUserPosts = viewModel.allUserPosts[index]
+                                                let targetUserId = targetUserPosts.user.id
+                                                let postIndex = userCurrentPostIndices[targetUserId] ?? 0
 
-                                                Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
-                                                    .font(.system(size: 10, weight: .bold))
-                                                    .foregroundColor(.white)
-                                                    .padding(4)
-                                                    .background(Color.red)
-                                                    .clipShape(Circle())
+                                                if postIndex < targetUserPosts.posts.count,
+                                                   let previewUrl = targetUserPosts.posts[postIndex].previewUrl {
+                                                    let post = targetUserPosts.posts[postIndex]
+                                                    let postId = post.id
+                                                    print("🎵 Radio button: Target post: \(post.trackName ?? "unknown"), postId: \(postId)")
+
+                                                    // Check if this post is already playing
+                                                    if PlaybackStateManager.shared.currentlyPlayingPostId == postId {
+                                                        print("🎵 Radio button: Post \(postId) is already playing, skipping re-play")
+                                                    } else {
+                                                        print("🎵 Radio button: Starting playback for post: \(post.trackName ?? "unknown"), postId: \(postId)")
+
+                                                        Task {
+                                                            do {
+                                                                // Stop any currently playing post
+                                                                MusicKitManager.shared.stopPreview()
+                                                                print("🎵 Radio button: Stopped previous playback")
+
+                                                                // Small delay for smooth transition
+                                                                try? await Task.sleep(nanoseconds: 200_000_000)
+
+                                                                // Start playback
+                                                                try await MusicKitManager.shared.playPreviewFromURL(previewUrl, startTime: post.startTime)
+                                                                PlaybackStateManager.shared.startPlayback(for: postId)
+                                                                print("🎵 Radio button: Successfully started playback for postId: \(postId)")
+
+                                                                // Auto-stop after duration
+                                                                let duration = post.endTime - post.startTime
+                                                                print("🎵 Radio button: Auto-stop scheduled in \(duration) seconds for postId: \(postId)")
+                                                                Task {
+                                                                    try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+                                                                    if PlaybackStateManager.shared.currentlyPlayingPostId == postId {
+                                                                        MusicKitManager.shared.stopPreview()
+                                                                        PlaybackStateManager.shared.stopPlayback()
+                                                                        print("🎵 Radio button: Auto-stopped playback for postId: \(postId)")
+                                                                    } else {
+                                                                        print("🎵 Radio button: Skipped auto-stop for postId: \(postId) (different song playing)")
+                                                                    }
+                                                                }
+                                                            } catch {
+                                                                print("🎵 Radio button: Failed to play music: \(error)")
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Mark posts as viewed
+                                                Task {
+                                                    do {
+                                                        try await APIClient.shared.markPostsAsViewed(targetUserId: targetUserId)
+                                                        await loadUnreadPostCounts()
+                                                    } catch {
+                                                        print("Failed to mark posts as viewed: \(error)")
+                                                    }
+                                                }
                                             }
-                                            .offset(x: 8, y: -8)
+
+                                            // Navigate to user's posts only if needed
+                                            if currentDisplayedUserIndex != index {
+                                                print("🎵 Radio button: Need to switch from user index \(currentDisplayedUserIndex) to \(index)")
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                                                    print("🎵 Radio button: Sending ScrollToUser notification with skipAutoPlay=true")
+                                                    NotificationCenter.default.post(
+                                                        name: NSNotification.Name("ScrollToUser"),
+                                                        object: nil,
+                                                        userInfo: ["index": index, "skipAutoPlay": true]
+                                                    )
+                                                }
+                                            } else {
+                                                print("🎵 Radio button: Already displaying user index \(index), skipping screen transition")
+                                            }
+
+                                            // Reset flag after transition completes (longer delay)
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                                                skipNextAutoPlay = false
+                                                print("🎵 Radio button: Reset skipNextAutoPlay flag to false")
+                                            }
                                         }
-                                        Spacer()
-                                    }
-                                    .frame(width: 44, height: 44)
+                                    )
+                                    .allowsHitTesting(true)
+                                    .zIndex(1)
                                 }
                             }
-                        }
-                        .padding(.top, 80)
+                            .padding(.leading, 12)
+                            .background(
+                                GeometryReader { contentGeometry in
+                                    Color.clear
+                                        .preference(key: ContentWidthKey.self, value: contentGeometry.size.width)
+                                }
+                            )
+                            .onPreferenceChange(ContentWidthKey.self) { width in
+                                radioButtonsContentWidth = width
+                                print("📏 Radio buttons content width: \(width)")
+                            }
+                            .offset(x: radioButtonsBaseOffset + radioButtonsDragOffset)
+                            .simultaneousGesture(
+                                DragGesture(minimumDistance: 15)
+                                    .onChanged { value in
+                                        let horizontalAmount = abs(value.translation.width)
+                                        let verticalAmount = abs(value.translation.height)
 
-                        Spacer()
+                                        // Detect direction on first significant movement
+                                        if !isDraggingRadioButtons && (horizontalAmount > 10 || verticalAmount > 10) {
+                                            if horizontalAmount > verticalAmount {
+                                                isDraggingRadioButtons = true
+                                                print("➡️ Horizontal drag detected")
+                                            } else {
+                                                print("⬇️ Vertical drag detected - will ignore")
+                                            }
+                                        }
+
+                                        // Apply horizontal offset if horizontal drag
+                                        if isDraggingRadioButtons {
+                                            let maxOffset: CGFloat = 0
+                                            let minOffset = min(0, containerWidth - radioButtonsContentWidth)
+
+                                            let newTotalOffset = radioButtonsBaseOffset + value.translation.width
+                                            let clampedOffset = max(min(newTotalOffset, maxOffset), minOffset)
+                                            radioButtonsDragOffset = clampedOffset - radioButtonsBaseOffset
+                                            print("📊 H-scroll: \(radioButtonsBaseOffset + radioButtonsDragOffset)")
+                                        }
+                                    }
+                                    .onEnded { value in
+                                        if isDraggingRadioButtons {
+                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                                radioButtonsBaseOffset += radioButtonsDragOffset
+                                                radioButtonsDragOffset = 0
+                                            }
+                                            print("✅ H-scroll committed: \(radioButtonsBaseOffset)")
+                                        }
+                                        isDraggingRadioButtons = false
+                                    }
+                            )
+                        }
+                        .frame(height: 62)
+                        .clipped()
                     }
+                    .frame(height: 62)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 70)
                     Spacer()
                 }
-            }
-
-            // User list overlay
-            if showingUserList {
-                UserPostsListView(
-                    allUserPosts: viewModel.allUserPosts,
-                    unreadCounts: unreadPostCounts,
-                    onUserTapped: { index in
-                        // Close the list
-                        withAnimation {
-                            showingUserList = false
-                        }
-
-                        // Navigate to user's posts
-                        NotificationCenter.default.post(
-                            name: NSNotification.Name("ScrollToUser"),
-                            object: nil,
-                            userInfo: ["index": index]
-                        )
-
-                        // Mark posts as viewed for this user
-                        if index < viewModel.allUserPosts.count {
-                            let targetUserId = viewModel.allUserPosts[index].user.id
-                            Task {
-                                do {
-                                    try await APIClient.shared.markPostsAsViewed(targetUserId: targetUserId)
-                                    // Reload unread counts
-                                    await loadUnreadPostCounts()
-                                } catch {
-                                    print("Failed to mark posts as viewed: \(error)")
-                                }
-                            }
-                        }
-                    },
-                    onDismiss: {
-                        withAnimation {
-                            showingUserList = false
-                        }
-                    }
-                )
-                .transition(.move(edge: .leading))
             }
 
             // Dark overlay when menu is shown
@@ -396,6 +457,20 @@ struct FeedView: View {
                 }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UpdateCurrentPostIndex"))) { notification in
+            if let userInfo = notification.userInfo,
+               let userId = userInfo["userId"] as? Int64,
+               let postIndex = userInfo["postIndex"] as? Int {
+                let oldIndex = userCurrentPostIndices[userId] ?? 0
+                userCurrentPostIndices[userId] = postIndex
+                print("📻 FeedView: Updated radio button post index for user \(userId): \(oldIndex) → \(postIndex)")
+
+                // Find user display name for better logging
+                if let userPosts = viewModel.allUserPosts.first(where: { $0.user.id == userId }) {
+                    print("📻 FeedView: Radio button for \(userPosts.user.displayName) now shows post \(postIndex)")
+                }
+            }
+        }
     }
 
     private func loadUnreadCount() async {
@@ -478,10 +553,13 @@ struct FloatingMenuButton: View {
 // Horizontal view for navigating between all users' posts
 struct AllUserPostsView: View {
     let allUserPosts: [UserPosts]
+    @Binding var skipNextAutoPlay: Bool
+    @Binding var currentDisplayedUserIndex: Int
     let onRefresh: () -> Void
     @State private var currentUserIndex = 0
     @State private var horizontalDragOffset: CGFloat = 0
     @State private var isAnimating = false
+    @State private var skipAutoPlay = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -500,7 +578,7 @@ struct AllUserPostsView: View {
 
                         // Previous user - always rendered (on the left)
                         if previousIndex < allUserPosts.count {
-                            UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, onRefresh: onRefresh)
+                            UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, onRefresh: onRefresh)
                                 .frame(width: screenWidth, height: screenHeight)
                                 .offset(x: -screenWidth + horizontalDragOffset)
                                 .zIndex(horizontalDragOffset > 0 ? 1 : 0)
@@ -508,7 +586,7 @@ struct AllUserPostsView: View {
                         }
 
                         // Current user - always rendered
-                        UserPostsScrollView(userPosts: allUserPosts[currentUserIndex], isCurrent: true, onRefresh: onRefresh)
+                        UserPostsScrollView(userPosts: allUserPosts[currentUserIndex], isCurrent: true, skipAutoPlay: $skipAutoPlay, onRefresh: onRefresh)
                             .frame(width: screenWidth, height: screenHeight)
                             .offset(x: horizontalDragOffset)
                             .zIndex(2)
@@ -516,7 +594,7 @@ struct AllUserPostsView: View {
 
                         // Next user - always rendered (on the right)
                         if nextIndex < allUserPosts.count {
-                            UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, onRefresh: onRefresh)
+                            UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, onRefresh: onRefresh)
                                 .frame(width: screenWidth, height: screenHeight)
                                 .offset(x: screenWidth + horizontalDragOffset)
                                 .zIndex(horizontalDragOffset < 0 ? 1 : 0)
@@ -610,10 +688,37 @@ struct AllUserPostsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ScrollToUser"))) { notification in
             if let index = notification.userInfo?["index"] as? Int {
+                print("📻 ScrollToUser notification received - target index: \(index), current index: \(currentUserIndex), skipNextAutoPlay: \(skipNextAutoPlay)")
+
+                // Check if skipAutoPlay flag is set (from notification or binding)
+                if skipNextAutoPlay || (notification.userInfo?["skipAutoPlay"] as? Bool ?? false) {
+                    skipAutoPlay = true
+                    print("📻 skipAutoPlay flag set to true")
+                } else {
+                    skipAutoPlay = false
+                }
+
                 withAnimation(.easeInOut(duration: 0.3)) {
                     currentUserIndex = index
                 }
+                print("📻 Updated currentUserIndex to: \(currentUserIndex)")
+
+                // Reset skipAutoPlay flag after animation and music starts
+                if skipAutoPlay {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                        skipAutoPlay = false
+                        print("📻 AllUserPostsView: skipAutoPlay flag reset to false")
+                    }
+                }
             }
+        }
+        .onChange(of: currentUserIndex) { newIndex in
+            currentDisplayedUserIndex = newIndex
+            print("📻 AllUserPostsView: Updated currentDisplayedUserIndex to \(newIndex)")
+        }
+        .onAppear {
+            currentDisplayedUserIndex = currentUserIndex
+            print("📻 AllUserPostsView: Initialized currentDisplayedUserIndex to \(currentUserIndex)")
         }
     }
 }
@@ -622,6 +727,7 @@ struct AllUserPostsView: View {
 struct UserPostsScrollView: View {
     let userPosts: UserPosts
     let isCurrent: Bool
+    @Binding var skipAutoPlay: Bool
     let onRefresh: () -> Void
     @State private var currentPostIndex = 0
     @State private var dragOffset: CGFloat = 0
@@ -741,6 +847,8 @@ struct UserPostsScrollView: View {
                                         isAnimating = false
                                     }
 
+                                    // Note: UpdateCurrentPostIndex notification will be sent by onChange(of: currentPostIndex)
+
                                     // Auto-play the new current post
                                     Task { @MainActor in
                                         await startPlaybackForCurrentPost()
@@ -765,6 +873,8 @@ struct UserPostsScrollView: View {
                                         isAnimating = false
                                     }
 
+                                    // Note: UpdateCurrentPostIndex notification will be sent by onChange(of: currentPostIndex)
+
                                     // Auto-play the new current post
                                     Task { @MainActor in
                                         await startPlaybackForCurrentPost()
@@ -786,51 +896,112 @@ struct UserPostsScrollView: View {
             isAnimating = false
         }
         .onChange(of: isCurrent) { newValue in
+            print("📻 UserPostsScrollView isCurrent changed to: \(newValue) for user: \(userPosts.user.displayName), postIndex: \(currentPostIndex), skipAutoPlay: \(skipAutoPlay)")
+
             if newValue {
-                // Auto-play music when this user becomes current
-                Task {
-                    await startPlaybackForCurrentPost()
+                // Update radio button when this user becomes current
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("UpdateCurrentPostIndex"),
+                    object: nil,
+                    userInfo: ["userId": userPosts.user.id, "postIndex": currentPostIndex]
+                )
+                print("📻 Sent UpdateCurrentPostIndex notification on isCurrent change: userId=\(userPosts.user.id), postIndex=\(currentPostIndex)")
+
+                if !skipAutoPlay {
+                    // Auto-play music when this user becomes current
+                    print("📻 Starting playback for user: \(userPosts.user.displayName), post index: \(currentPostIndex)")
+                    Task {
+                        await startPlaybackForCurrentPost()
+                    }
+                } else {
+                    print("📻 Skipping auto-play due to skipAutoPlay flag")
                 }
             }
         }
-        .onAppear {
+        .onChange(of: currentPostIndex) { newIndex in
+            // Update radio button when post index changes
             if isCurrent {
+                print("📻 currentPostIndex changed to: \(newIndex) for user: \(userPosts.user.displayName)")
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("UpdateCurrentPostIndex"),
+                    object: nil,
+                    userInfo: ["userId": userPosts.user.id, "postIndex": newIndex]
+                )
+                print("📻 Sent UpdateCurrentPostIndex notification on postIndex change: userId=\(userPosts.user.id), postIndex=\(newIndex)")
+            }
+        }
+        .onAppear {
+            print("📻 UserPostsScrollView onAppear - isCurrent: \(isCurrent) for user: \(userPosts.user.displayName), postIndex: \(currentPostIndex), skipAutoPlay: \(skipAutoPlay)")
+
+            // Always update radio button on appear
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UpdateCurrentPostIndex"),
+                object: nil,
+                userInfo: ["userId": userPosts.user.id, "postIndex": currentPostIndex]
+            )
+            print("📻 Sent UpdateCurrentPostIndex notification on appear: userId=\(userPosts.user.id), postIndex=\(currentPostIndex)")
+
+            if isCurrent && !skipAutoPlay {
                 // Auto-play music when first displayed
+                print("📻 Auto-playing on appear for user: \(userPosts.user.displayName)")
                 Task {
                     await startPlaybackForCurrentPost()
                 }
+            } else if isCurrent && skipAutoPlay {
+                print("📻 Skipping auto-play on appear due to skipAutoPlay flag")
             }
         }
     }
 
     private func startPlaybackForCurrentPost() async {
-        guard !userPosts.posts.isEmpty else { return }
+        guard !userPosts.posts.isEmpty else {
+            print("📻 No posts to play")
+            return
+        }
 
         let post = userPosts.posts[currentPostIndex]
-        guard let previewUrl = post.previewUrl else { return }
+        let postId = post.id
+        print("📻 startPlaybackForCurrentPost - user: \(userPosts.user.displayName), post: \(post.trackName ?? "unknown"), postId: \(postId)")
+
+        // Check if this post is already playing
+        if playbackStateManager.currentlyPlayingPostId == postId {
+            print("📻 Post \(postId) is already playing, skipping")
+            return
+        }
+
+        guard let previewUrl = post.previewUrl else {
+            print("📻 No preview URL for post")
+            return
+        }
 
         do {
             // Stop any currently playing post
             musicPlayer.stopPreview()
+            print("📻 Stopped previous playback")
 
             // Small delay to ensure smooth transition
             try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
 
             // Start playback for this post
             try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
-            playbackStateManager.startPlayback(for: post.id)
+            playbackStateManager.startPlayback(for: postId)
+            print("📻 Started playback for post: \(postId)")
 
             // Auto-stop after duration
             let duration = post.endTime - post.startTime
+            print("📻 Auto-stop scheduled in \(duration) seconds for postId: \(postId)")
             Task {
                 try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                if playbackStateManager.currentlyPlayingPostId == post.id {
+                if playbackStateManager.currentlyPlayingPostId == postId {
                     musicPlayer.stopPreview()
                     playbackStateManager.stopPlayback()
+                    print("📻 Auto-stopped playback for post: \(postId)")
+                } else {
+                    print("📻 Skipped auto-stop for post: \(postId) (different song playing)")
                 }
             }
         } catch {
-            // Silently fail
+            print("📻 Failed to start playback: \(error)")
         }
     }
 }
@@ -1186,13 +1357,8 @@ struct PostCardView: View {
                 count: post.commentCount ?? 0
             )
         }
-        .onDisappear {
-            // Stop playback when post disappears
-            if isPlaying {
-                musicPlayer.stopPreview()
-                playbackStateManager.stopPlayback()
-            }
-        }
+        // Removed onDisappear to prevent stopping playback during screen transitions
+        // Playback is automatically stopped when a new song starts playing (in playPreviewFromURL)
         .sheet(isPresented: $showingReportCommentSheet) {
             if let comment = commentToReport {
                 ReportCommentView(comment: comment)
@@ -1826,5 +1992,205 @@ struct PulseAnimation: ViewModifier {
                     isAnimating = true
                 }
             }
+    }
+}
+
+// Preference key for content width
+struct ContentWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+// User radio button for horizontal scrolling
+struct UserRadioButton: View {
+    let userPosts: UserPosts
+    let currentPostIndex: Int
+    let unreadCount: Int
+    let onTap: () -> Void
+
+    @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
+
+    private var currentPost: Post? {
+        guard currentPostIndex < userPosts.posts.count else {
+            print("⚠️ Radio button for \(userPosts.user.displayName): currentPostIndex \(currentPostIndex) out of range (total: \(userPosts.posts.count)), using first post")
+            return userPosts.posts.first
+        }
+        return userPosts.posts[currentPostIndex]
+    }
+
+    private var isPlaying: Bool {
+        // Check if any of this user's posts is currently playing
+        guard let currentlyPlayingId = playbackStateManager.currentlyPlayingPostId else {
+            return false
+        }
+        return userPosts.posts.contains { $0.id == currentlyPlayingId }
+    }
+
+    var body: some View {
+        VStack(spacing: 4) {
+            // User name
+            Text(userPosts.user.displayName)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.white.opacity(0.8))
+                .lineLimit(1)
+                .frame(width: 50, height: 14, alignment: .center)
+
+            ZStack {
+            // Outer glow
+            Circle()
+                .fill(
+                    RadialGradient(
+                        gradient: Gradient(colors: [
+                            Color.white.opacity(0.3),
+                            Color.clear
+                        ]),
+                        center: .center,
+                        startRadius: 18,
+                        endRadius: 26
+                    )
+                )
+                .frame(width: 52, height: 52)
+                .blur(radius: 4)
+
+            // Main circle with border
+            ZStack {
+                // Jacket image
+                if let artworkUrl = currentPost?.artworkUrl,
+                   let url = URL(string: artworkUrl) {
+                    AsyncImage(url: url) { phase in
+                        switch phase {
+                        case .empty:
+                            placeholderView
+                        case .success(let image):
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 44, height: 44)
+                                .clipShape(Circle())
+                        case .failure:
+                            placeholderView
+                        @unknown default:
+                            placeholderView
+                        }
+                    }
+                } else {
+                    placeholderView
+                }
+
+                // Border with gradient
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.6),
+                                Color.white.opacity(0.2)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 2
+                    )
+                    .frame(width: 44, height: 44)
+
+                // Waveform animation when playing (inside the circle)
+                if isPlaying {
+                    MiniWaveformView()
+                        .frame(width: 30, height: 20)
+                        .transition(.opacity)
+                }
+
+                // Unread badge
+                if unreadCount > 0 {
+                    VStack {
+                        HStack {
+                            Spacer()
+                            ZStack {
+                                // Pulsing background
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color.purple.opacity(0.5),
+                                                Color.blue.opacity(0.5)
+                                            ]),
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .frame(width: 18, height: 18)
+                                    .scaleEffect(1.2)
+                                    .opacity(0.6)
+                                    .modifier(PulseAnimation())
+
+                                Text(unreadCount > 9 ? "9+" : "\(unreadCount)")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(3)
+                                    .background(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color.purple,
+                                                Color.blue
+                                            ]),
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .clipShape(Circle())
+                            }
+                            .offset(x: 6, y: -6)
+                        }
+                        Spacer()
+                    }
+                    .frame(width: 44, height: 44)
+                }
+            }
+            .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 3)
+            }
+            .frame(width: 44, height: 44)
+            .contentShape(Circle())
+            .highPriorityGesture(
+                TapGesture()
+                    .onEnded { _ in
+                        print("🎯 Tapped on radio button")
+                        onTap()
+                    }
+            )
+        }
+    }
+
+    private var placeholderView: some View {
+        Circle()
+            .fill(Color.gray.opacity(0.3))
+            .frame(width: 44, height: 44)
+            .overlay(
+                Image(systemName: "music.note")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white.opacity(0.6))
+            )
+    }
+}
+
+// Mini waveform for radio button
+struct MiniWaveformView: View {
+    @State private var animationValues: [CGFloat] = Array(repeating: 0.3, count: 3)
+    let timer = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(Color.white.opacity(0.9))
+                    .frame(width: 3, height: animationValues[index] * 20)
+                    .animation(.easeInOut(duration: 0.3), value: animationValues[index])
+            }
+        }
+        .onReceive(timer) { _ in
+            for index in 0..<3 {
+                animationValues[index] = CGFloat.random(in: 0.3...1.0)
+            }
+        }
     }
 }

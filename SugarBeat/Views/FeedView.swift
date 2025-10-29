@@ -427,8 +427,9 @@ struct FeedView: View {
         // Start new polling task
         notificationPollingTask = Task {
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 10_000_000_000) // 10 seconds
+                try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
                 if !Task.isCancelled {
+                    print("📊 Polling for notifications and unread posts...")
                     await loadUnreadCount()
                     await loadUnreadPostCounts()
                 }

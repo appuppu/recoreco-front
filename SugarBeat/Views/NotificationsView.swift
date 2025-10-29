@@ -41,9 +41,9 @@ struct NotificationsView: View {
                             LazyVStack(spacing: 0) {
                                 ForEach(viewModel.notifications) { notification in
                                     NotificationRow(notification: notification) {
-                                        // Mark as read
+                                        // Delete notification
                                         Task {
-                                            await viewModel.markAsRead(notificationId: notification.id)
+                                            await viewModel.deleteNotification(notificationId: notification.id)
                                         }
 
                                         // Handle different notification types
@@ -90,9 +90,9 @@ struct NotificationsView: View {
 
                 if !viewModel.notifications.isEmpty {
                     ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("すべて既読") {
+                        Button("すべて削除") {
                             Task {
-                                await viewModel.markAllAsRead()
+                                await viewModel.deleteAllNotifications()
                             }
                         }
                         .foregroundColor(.white)
@@ -141,7 +141,9 @@ struct NotificationRow: View {
                     Text(notificationText)
                         .font(.system(size: 15))
                         .foregroundColor(.white)
+                        .multilineTextAlignment(.leading)
                         .lineLimit(2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     // Time
                     Text(timeAgoString(from: notification.createdAt))
@@ -231,43 +233,31 @@ class NotificationsViewModel: ObservableObject {
         isLoading = false
     }
 
-    func markAsRead(notificationId: Int64) async {
+    func deleteNotification(notificationId: Int64) async {
         do {
-            try await APIClient.shared.markNotificationAsRead(notificationId: notificationId)
+            try await APIClient.shared.deleteNotification(notificationId: notificationId)
 
-            // Update local state
-            if let index = notifications.firstIndex(where: { $0.id == notificationId }) {
-                notifications[index] = Notification(
-                    id: notifications[index].id,
-                    sender: notifications[index].sender,
-                    type: notifications[index].type,
-                    postId: notifications[index].postId,
-                    isRead: true,
-                    createdAt: notifications[index].createdAt
-                )
-            }
+            // Remove from local state
+            notifications.removeAll { $0.id == notificationId }
+
+            // Notify to refresh badge
+            NotificationCenter.default.post(name: NSNotification.Name("RefreshNotificationBadge"), object: nil)
         } catch {
-            errorMessage = "Failed to mark notification as read: \(error.localizedDescription)"
+            errorMessage = "Failed to delete notification: \(error.localizedDescription)"
         }
     }
 
-    func markAllAsRead() async {
+    func deleteAllNotifications() async {
         do {
-            try await APIClient.shared.markAllNotificationsAsRead()
+            try await APIClient.shared.deleteAllNotifications()
 
-            // Update local state
-            notifications = notifications.map { notification in
-                Notification(
-                    id: notification.id,
-                    sender: notification.sender,
-                    type: notification.type,
-                    postId: notification.postId,
-                    isRead: true,
-                    createdAt: notification.createdAt
-                )
-            }
+            // Clear local state
+            notifications.removeAll()
+
+            // Notify to refresh badge
+            NotificationCenter.default.post(name: NSNotification.Name("RefreshNotificationBadge"), object: nil)
         } catch {
-            errorMessage = "Failed to mark all notifications as read: \(error.localizedDescription)"
+            errorMessage = "Failed to delete all notifications: \(error.localizedDescription)"
         }
     }
 }

@@ -348,14 +348,14 @@ class APIClient {
         return response["count"] ?? 0
     }
 
-    func markNotificationAsRead(notificationId: Int64) async throws {
-        let url = URL(string: "\(baseURL)/notifications/\(notificationId)/read")!
-        let _: EmptyResponse = try await performRequest(url: url, method: "PUT")
+    func deleteNotification(notificationId: Int64) async throws {
+        let url = URL(string: "\(baseURL)/notifications/\(notificationId)")!
+        let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
 
-    func markAllNotificationsAsRead() async throws {
-        let url = URL(string: "\(baseURL)/notifications/read-all")!
-        let _: EmptyResponse = try await performRequest(url: url, method: "PUT")
+    func deleteAllNotifications() async throws {
+        let url = URL(string: "\(baseURL)/notifications")!
+        let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
 
     // MARK: - Unread posts endpoints

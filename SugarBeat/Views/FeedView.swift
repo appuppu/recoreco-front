@@ -852,6 +852,8 @@ struct PostCardView: View {
     @State private var showingReportPostSheet = false
     @State private var showingPostActions = false
     @State private var showingUserProfile = false
+    @State private var backgroundScale: CGFloat = 1.0
+    @State private var backgroundRotation: Double = 0
 
     init(post: Post, isCurrent: Bool, currentPostIndex: Binding<Int>, expectedIndex: Int, onDelete: (() -> Void)? = nil) {
         self.post = post
@@ -890,13 +892,15 @@ struct PostCardView: View {
                     .frame(width: screenWidth, height: screenHeight)
                     .zIndex(0)
 
-                // Background artwork with blur
+                // Background artwork with blur and animation
                 AsyncImage(url: URL(string: post.artworkUrl ?? "")) { image in
                     image
                         .resizable()
                         .scaledToFill()
                         .frame(width: screenWidth, height: screenHeight)
                         .blur(radius: 50)
+                        .scaleEffect(backgroundScale)
+                        .rotationEffect(.degrees(backgroundRotation))
                         .clipped()
                 } placeholder: {
                     Rectangle()
@@ -911,9 +915,18 @@ struct PostCardView: View {
                             )
                         )
                         .frame(width: screenWidth, height: screenHeight)
+                        .scaleEffect(backgroundScale)
+                        .rotationEffect(.degrees(backgroundRotation))
                 }
                 .allowsHitTesting(false)
                 .zIndex(1)
+                .onChange(of: isPlaying) { playing in
+                    if playing {
+                        startBackgroundAnimation()
+                    } else {
+                        stopBackgroundAnimation()
+                    }
+                }
 
                 // Dark overlay
                 Rectangle()
@@ -1310,6 +1323,33 @@ struct PostCardView: View {
             }
         } catch {
             print("❌ Failed to delete post: \(error)")
+        }
+    }
+
+    private func startBackgroundAnimation() {
+        // Breathing scale effect
+        withAnimation(
+            Animation
+                .easeInOut(duration: 3.0)
+                .repeatForever(autoreverses: true)
+        ) {
+            backgroundScale = 1.08
+        }
+
+        // Slow rotation
+        withAnimation(
+            Animation
+                .linear(duration: 20.0)
+                .repeatForever(autoreverses: false)
+        ) {
+            backgroundRotation = 360
+        }
+    }
+
+    private func stopBackgroundAnimation() {
+        withAnimation(.easeOut(duration: 0.5)) {
+            backgroundScale = 1.0
+            backgroundRotation = 0
         }
     }
 }

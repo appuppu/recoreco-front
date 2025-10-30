@@ -13,10 +13,6 @@ struct FeedView: View {
     @State private var unreadNotificationCount = 0
     @State private var unreadPostCounts: [Int64: Int] = [:]
     @State private var notificationPollingTask: Task<Void, Never>?
-    @State private var radioButtonsBaseOffset: CGFloat = 0
-    @State private var radioButtonsDragOffset: CGFloat = 0
-    @State private var radioButtonsContentWidth: CGFloat = 0
-    @State private var isDraggingRadioButtons = false
     @State private var userCurrentPostIndices: [Int64: Int] = [:] // userId -> currentPostIndex
     @State private var skipNextAutoPlay = false
     @State private var currentDisplayedUserIndex = 0
@@ -66,85 +62,22 @@ struct FeedView: View {
                 )
             }
 
-            // Notification button and horizontal user radio buttons at top
+            // Horizontal user radio buttons at top (fixed position, not affected by vertical scroll)
             if !viewModel.allUserPosts.isEmpty {
-                VStack {
-                    HStack(alignment: .bottom, spacing: 12) {
-                        // Notification button (moved to left) with padding to align with radio button circles
-                        VStack(spacing: 4) {
-                            // Spacer to match radio button user name height
-                            Spacer()
-                                .frame(height: 14)
-
-                            Button(action: {
-                                showingNotifications = true
-                            }) {
-                                ZStack {
-                                    Circle()
-                                        .fill(Color.white.opacity(0.15))
-                                        .frame(width: 54, height: 54)
-                                        .blur(radius: 8)
-
-                                    Circle()
-                                        .fill(Color.white.opacity(0.2))
-                                        .frame(width: 54, height: 54)
-
-                                    Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
-                                        .font(.system(size: 22, weight: .semibold))
-                                        .foregroundColor(.white)
-
-                                    // Badge for unread count
-                                    if unreadNotificationCount > 0 {
-                                        VStack {
-                                            HStack {
-                                                Spacer()
-                                                ZStack {
-                                                    // Pulsing background
-                                                    Circle()
-                                                        .fill(Color.red.opacity(0.5))
-                                                        .frame(width: 24, height: 24)
-                                                        .scaleEffect(1.2)
-                                                        .opacity(0.6)
-                                                        .modifier(PulseAnimation())
-
-                                                    Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
-                                                        .font(.system(size: 10, weight: .bold))
-                                                        .foregroundColor(.white)
-                                                        .padding(4)
-                                                        .background(Color.red)
-                                                        .clipShape(Circle())
-                                                }
-                                                .offset(x: 10, y: -10)
-                                            }
-                                            Spacer()
-                                        }
-                                        .frame(width: 54, height: 54)
-                                    }
-                                }
-                            }
-                            .frame(width: 54, height: 54)
-                        }
-
-                        // Horizontal scrolling user radio buttons (custom implementation)
-                        GeometryReader { radioGeometry in
-                            let containerWidth = radioGeometry.size.width
-                            // Calculate content width: (buttonWidth + spacing) * count - lastSpacing + leadingPadding
-                            let calculatedContentWidth = CGFloat(viewModel.allUserPosts.count) * 72.0 + 12.0
-
-                            HStack(spacing: 12) {
-                                ForEach(Array(viewModel.allUserPosts.enumerated()), id: \.element.id) { index, userPosts in
-                                    UserRadioButton(
-                                        userPosts: userPosts,
-                                        currentPostIndex: userCurrentPostIndices[userPosts.user.id] ?? 0,
-                                        unreadCount: unreadPostCounts[userPosts.user.id] ?? 0,
-                                        hasUnreadPosts: unreadPostsManager.hasUnreadPosts(in: userPosts.posts)
-                                    )
-                                    .frame(width: 60, height: 72)
-                                    .id("\(userPosts.user.id)-\(index)")
-                                    .simultaneousGesture(
-                                        TapGesture()
-                                            .onEnded { _ in
-                                            print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
+                VStack(spacing: 0) {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Array(viewModel.allUserPosts.enumerated()), id: \.element.id) { index, userPosts in
+                                UserRadioButton(
+                                    userPosts: userPosts,
+                                    currentPostIndex: userCurrentPostIndices[userPosts.user.id] ?? 0,
+                                    unreadCount: unreadPostCounts[userPosts.user.id] ?? 0,
+                                    hasUnreadPosts: unreadPostsManager.hasUnreadPosts(in: userPosts.posts)
+                                )
+                                .frame(width: 60, height: 72)
+                                .id("\(userPosts.user.id)-\(index)")
+                                .onTapGesture {
+                                    print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
 
                                             // Set skip flag immediately before any action
                                             skipNextAutoPlay = true
@@ -234,64 +167,17 @@ struct FeedView: View {
                                                 print("🎵 Radio button: Reset skipNextAutoPlay flag to false")
                                             }
                                         }
-                                    )
-                                }
                             }
-                            .padding(.leading, 12)
-                            .offset(x: radioButtonsBaseOffset + radioButtonsDragOffset)
-                            .gesture(
-                                DragGesture(minimumDistance: 0)
-                                    .onChanged { value in
-                                        let horizontalAmount = abs(value.translation.width)
-                                        let verticalAmount = abs(value.translation.height)
-
-                                        // Detect direction on first significant movement
-                                        if !isDraggingRadioButtons && (horizontalAmount > 5 || verticalAmount > 5) {
-                                            if horizontalAmount > verticalAmount {
-                                                isDraggingRadioButtons = true
-                                                print("➡️ Horizontal drag detected - containerWidth: \(containerWidth), contentWidth: \(calculatedContentWidth)")
-                                            } else {
-                                                print("⬇️ Vertical drag detected - will ignore")
-                                            }
-                                        }
-
-                                        // Apply horizontal offset if horizontal drag
-                                        if isDraggingRadioButtons {
-                                            // Only scroll if content is wider than container
-                                            guard calculatedContentWidth > containerWidth else {
-                                                print("⚠️ Content not wide enough to scroll - contentWidth: \(calculatedContentWidth), containerWidth: \(containerWidth)")
-                                                return
-                                            }
-
-                                            let maxOffset: CGFloat = 0
-                                            let minOffset = containerWidth - calculatedContentWidth
-
-                                            let newTotalOffset = radioButtonsBaseOffset + value.translation.width
-                                            let clampedOffset = max(min(newTotalOffset, maxOffset), minOffset)
-                                            radioButtonsDragOffset = clampedOffset - radioButtonsBaseOffset
-                                            print("📊 H-scroll: translation=\(value.translation.width), base=\(radioButtonsBaseOffset), drag=\(radioButtonsDragOffset), total=\(radioButtonsBaseOffset + radioButtonsDragOffset)")
-                                        }
-                                    }
-                                    .onEnded { value in
-                                        if isDraggingRadioButtons {
-                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                                radioButtonsBaseOffset += radioButtonsDragOffset
-                                                radioButtonsDragOffset = 0
-                                            }
-                                            print("✅ H-scroll committed: \(radioButtonsBaseOffset)")
-                                        }
-                                        isDraggingRadioButtons = false
-                                    }
-                            )
                         }
-                        .frame(height: 72)
-                        .clipped()
+                        .padding(.horizontal, 20)
                     }
                     .frame(height: 72)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 70)
-                    Spacer()
+                    .disabled(false)
                 }
+                .frame(height: 72)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 70)
+                .allowsHitTesting(true)
             }
 
             // Dark overlay when menu is shown
@@ -306,10 +192,11 @@ struct FeedView: View {
                     .transition(.opacity)
             }
 
-            // Floating action button (always visible, bottom left)
+            // Floating action buttons (bottom left and right)
             VStack {
                 Spacer()
                 HStack(alignment: .bottom, spacing: 0) {
+                    // Left side: Menu button
                     ZStack(alignment: .bottomLeading) {
                         // Expanded menu buttons (positioned absolutely above main button)
                         if showingMenu {
@@ -336,7 +223,7 @@ struct FeedView: View {
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
 
-                        // Main button (fixed position)
+                        // Main menu button (fixed position)
                         Button(action: {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                                 showingMenu.toggle()
@@ -364,6 +251,57 @@ struct FeedView: View {
                     .padding(.bottom, 100)
 
                     Spacer()
+
+                    // Right side: Notification button
+                    Button(action: {
+                        showingNotifications = true
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.15))
+                                .frame(width: 56, height: 56)
+                                .blur(radius: 10)
+
+                            Circle()
+                                .fill(Color.white.opacity(0.2))
+                                .frame(width: 56, height: 56)
+
+                            Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
+                                .font(.system(size: 22, weight: .semibold))
+                                .foregroundColor(.white)
+
+                            // Badge for unread count
+                            if unreadNotificationCount > 0 {
+                                VStack {
+                                    HStack {
+                                        Spacer()
+                                        ZStack {
+                                            // Pulsing background
+                                            Circle()
+                                                .fill(Color.red.opacity(0.5))
+                                                .frame(width: 24, height: 24)
+                                                .scaleEffect(1.2)
+                                                .opacity(0.6)
+                                                .modifier(PulseAnimation())
+
+                                            Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
+                                                .font(.system(size: 10, weight: .bold))
+                                                .foregroundColor(.white)
+                                                .padding(4)
+                                                .background(Color.red)
+                                                .clipShape(Circle())
+                                        }
+                                        .offset(x: 10, y: -10)
+                                    }
+                                    Spacer()
+                                }
+                                .frame(width: 56, height: 56)
+                            }
+                        }
+                    }
+                    .frame(width: 56, height: 56)
+                    .padding(.trailing, 20)
+                    .padding(.bottom, 100)
                 }
             }
         }
@@ -2058,14 +1996,6 @@ struct PulseAnimation: ViewModifier {
                     isAnimating = true
                 }
             }
-    }
-}
-
-// Preference key for content width
-struct ContentWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
     }
 }
 

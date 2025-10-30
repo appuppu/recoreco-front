@@ -16,6 +16,11 @@ class CommentStateManager: ObservableObject {
         }
     }
 
+    func updateFromServer(postId: Int64, count: Int) {
+        // Force update from server data (for polling updates)
+        commentCounts[postId] = count
+    }
+
     func incrementCount(postId: Int64) {
         commentCounts[postId] = (commentCounts[postId] ?? 0) + 1
     }

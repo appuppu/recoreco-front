@@ -128,6 +128,8 @@ struct FeedView: View {
                         // Horizontal scrolling user radio buttons (custom implementation)
                         GeometryReader { radioGeometry in
                             let containerWidth = radioGeometry.size.width
+                            // Calculate content width: (buttonWidth + spacing) * count - lastSpacing + leadingPadding
+                            let calculatedContentWidth = CGFloat(viewModel.allUserPosts.count) * 72.0 + 12.0
 
                             HStack(spacing: 12) {
                                 ForEach(Array(viewModel.allUserPosts.enumerated()), id: \.element.id) { index, userPosts in
@@ -135,8 +137,13 @@ struct FeedView: View {
                                         userPosts: userPosts,
                                         currentPostIndex: userCurrentPostIndices[userPosts.user.id] ?? 0,
                                         unreadCount: unreadPostCounts[userPosts.user.id] ?? 0,
-                                        hasUnreadPosts: unreadPostsManager.hasUnreadPosts(in: userPosts.posts),
-                                        onTap: {
+                                        hasUnreadPosts: unreadPostsManager.hasUnreadPosts(in: userPosts.posts)
+                                    )
+                                    .frame(width: 60, height: 72)
+                                    .id("\(userPosts.user.id)-\(index)")
+                                    .simultaneousGesture(
+                                        TapGesture()
+                                            .onEnded { _ in
                                             print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
 
                                             // Set skip flag immediately before any action
@@ -228,33 +235,21 @@ struct FeedView: View {
                                             }
                                         }
                                     )
-                                    .allowsHitTesting(true)
-                                    .zIndex(1)
                                 }
                             }
                             .padding(.leading, 12)
-                            .background(
-                                GeometryReader { contentGeometry in
-                                    Color.clear
-                                        .preference(key: ContentWidthKey.self, value: contentGeometry.size.width)
-                                }
-                            )
-                            .onPreferenceChange(ContentWidthKey.self) { width in
-                                radioButtonsContentWidth = width
-                                print("📏 Radio buttons content width: \(width)")
-                            }
                             .offset(x: radioButtonsBaseOffset + radioButtonsDragOffset)
-                            .simultaneousGesture(
-                                DragGesture(minimumDistance: 15)
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
                                     .onChanged { value in
                                         let horizontalAmount = abs(value.translation.width)
                                         let verticalAmount = abs(value.translation.height)
 
                                         // Detect direction on first significant movement
-                                        if !isDraggingRadioButtons && (horizontalAmount > 10 || verticalAmount > 10) {
+                                        if !isDraggingRadioButtons && (horizontalAmount > 5 || verticalAmount > 5) {
                                             if horizontalAmount > verticalAmount {
                                                 isDraggingRadioButtons = true
-                                                print("➡️ Horizontal drag detected")
+                                                print("➡️ Horizontal drag detected - containerWidth: \(containerWidth), contentWidth: \(calculatedContentWidth)")
                                             } else {
                                                 print("⬇️ Vertical drag detected - will ignore")
                                             }
@@ -262,13 +257,19 @@ struct FeedView: View {
 
                                         // Apply horizontal offset if horizontal drag
                                         if isDraggingRadioButtons {
+                                            // Only scroll if content is wider than container
+                                            guard calculatedContentWidth > containerWidth else {
+                                                print("⚠️ Content not wide enough to scroll - contentWidth: \(calculatedContentWidth), containerWidth: \(containerWidth)")
+                                                return
+                                            }
+
                                             let maxOffset: CGFloat = 0
-                                            let minOffset = min(0, containerWidth - radioButtonsContentWidth)
+                                            let minOffset = containerWidth - calculatedContentWidth
 
                                             let newTotalOffset = radioButtonsBaseOffset + value.translation.width
                                             let clampedOffset = max(min(newTotalOffset, maxOffset), minOffset)
                                             radioButtonsDragOffset = clampedOffset - radioButtonsBaseOffset
-                                            print("📊 H-scroll: \(radioButtonsBaseOffset + radioButtonsDragOffset)")
+                                            print("📊 H-scroll: translation=\(value.translation.width), base=\(radioButtonsBaseOffset), drag=\(radioButtonsDragOffset), total=\(radioButtonsBaseOffset + radioButtonsDragOffset)")
                                         }
                                     }
                                     .onEnded { value in
@@ -452,12 +453,23 @@ struct FeedView: View {
                let senderId = userInfo["senderId"] as? Int64 {
                 // Find the user index in allUserPosts
                 if let userIndex = viewModel.allUserPosts.firstIndex(where: { $0.user.id == senderId }) {
-                    // Navigate to that user's posts
-                    NotificationCenter.default.post(
-                        name: NSNotification.Name("ScrollToUser"),
-                        object: nil,
-                        userInfo: ["index": userIndex]
-                    )
+                    let userPosts = viewModel.allUserPosts[userIndex]
+
+                    // Find the post index within this user's posts
+                    if let postIndex = userPosts.posts.firstIndex(where: { $0.id == postId }) {
+                        print("📬 Navigate to user \(userIndex), post \(postIndex) (postId: \(postId))")
+
+                        // Navigate to that user's posts with specific post index
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("ScrollToUser"),
+                            object: nil,
+                            userInfo: ["index": userIndex, "postIndex": postIndex]
+                        )
+                    } else {
+                        print("⚠️ Post \(postId) not found in user's posts")
+                    }
+                } else {
+                    print("⚠️ User \(senderId) not found in allUserPosts")
                 }
             }
         }
@@ -707,6 +719,18 @@ struct AllUserPostsView: View {
                 }
                 print("📻 Updated currentUserIndex to: \(currentUserIndex)")
 
+                // If postIndex is specified, send ScrollToPost notification after user transition
+                if let postIndex = notification.userInfo?["postIndex"] as? Int {
+                    print("📻 Will scroll to post index: \(postIndex)")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        NotificationCenter.default.post(
+                            name: NSNotification.Name("ScrollToPost"),
+                            object: nil,
+                            userInfo: ["postIndex": postIndex, "userId": allUserPosts[index].user.id]
+                        )
+                    }
+                }
+
                 // Reset skipAutoPlay flag after animation and music starts
                 if skipAutoPlay {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
@@ -953,6 +977,25 @@ struct UserPostsScrollView: View {
                 }
             } else if isCurrent && skipAutoPlay {
                 print("📻 Skipping auto-play on appear due to skipAutoPlay flag")
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ScrollToPost"))) { notification in
+            if let userInfo = notification.userInfo,
+               let targetPostIndex = userInfo["postIndex"] as? Int,
+               let targetUserId = userInfo["userId"] as? Int64,
+               targetUserId == userPosts.user.id {
+                print("📬 ScrollToPost notification received for user \(userPosts.user.id), target post index: \(targetPostIndex)")
+
+                // Scroll to the target post
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    currentPostIndex = targetPostIndex
+                }
+
+                // Auto-play the target post
+                Task {
+                    try? await Task.sleep(nanoseconds: 400_000_000) // Wait for animation
+                    await startPlaybackForCurrentPost()
+                }
             }
         }
     }
@@ -1471,11 +1514,20 @@ struct PostCardView: View {
         likeStateManager.toggleLike(postId: post.id)
 
         do {
+            let response: APIClient.LikeResponse
             if isLiked {
-                try await APIClient.shared.likePost(postId: post.id)
+                response = try await APIClient.shared.likePost(postId: post.id)
             } else {
-                try await APIClient.shared.unlikePost(postId: post.id)
+                response = try await APIClient.shared.unlikePost(postId: post.id)
             }
+
+            // Update with server response to ensure accuracy
+            likeStateManager.updateFromServer(
+                postId: post.id,
+                isLiked: response.isLiked,
+                count: response.likeCount
+            )
+            print("✅ Like toggled successfully: likeCount=\(response.likeCount), isLiked=\(response.isLiked)")
         } catch {
             // Revert on error
             if wasLiked != isLiked {
@@ -2023,9 +2075,10 @@ struct UserRadioButton: View {
     let currentPostIndex: Int
     let unreadCount: Int
     let hasUnreadPosts: Bool
-    let onTap: () -> Void
 
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
+    @State private var showingAlbumArt = true
+    @State private var switchTimer: Task<Void, Never>?
 
     private var currentPost: Post? {
         guard currentPostIndex < userPosts.posts.count else {
@@ -2055,27 +2108,53 @@ struct UserRadioButton: View {
             ZStack {
             // Main circle with border
             ZStack {
-                // Jacket image
-                if let artworkUrl = currentPost?.artworkUrl,
-                   let url = URL(string: artworkUrl) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .empty:
-                            placeholderView
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 54, height: 54)
-                                .clipShape(Circle())
-                        case .failure:
-                            placeholderView
-                        @unknown default:
-                            placeholderView
+                // Alternating between album art and profile image
+                if showingAlbumArt {
+                    // Album artwork
+                    if let artworkUrl = currentPost?.artworkUrl,
+                       let url = URL(string: artworkUrl) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                placeholderView(isAlbumArt: true)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 54, height: 54)
+                                    .clipShape(Circle())
+                            case .failure:
+                                placeholderView(isAlbumArt: true)
+                            @unknown default:
+                                placeholderView(isAlbumArt: true)
+                            }
                         }
+                    } else {
+                        placeholderView(isAlbumArt: true)
                     }
                 } else {
-                    placeholderView
+                    // Profile image
+                    if let profileImageUrl = userPosts.user.profileImageUrl,
+                       let url = URL(string: profileImageUrl) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .empty:
+                                placeholderView(isAlbumArt: false)
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 54, height: 54)
+                                    .clipShape(Circle())
+                            case .failure:
+                                placeholderView(isAlbumArt: false)
+                            @unknown default:
+                                placeholderView(isAlbumArt: false)
+                            }
+                        }
+                    } else {
+                        placeholderView(isAlbumArt: false)
+                    }
                 }
 
                 // Border with gradient - different color for unread posts
@@ -2152,25 +2231,42 @@ struct UserRadioButton: View {
             }
             .frame(width: 54, height: 54)
             .contentShape(Circle())
-            .highPriorityGesture(
-                TapGesture()
-                    .onEnded { _ in
-                        print("🎯 Tapped on radio button")
-                        onTap()
-                    }
-            )
+        }
+        .onAppear {
+            startSwitchTimer()
+        }
+        .onDisappear {
+            stopSwitchTimer()
         }
     }
 
-    private var placeholderView: some View {
+    private func placeholderView(isAlbumArt: Bool) -> some View {
         Circle()
             .fill(Color.gray.opacity(0.3))
             .frame(width: 54, height: 54)
             .overlay(
-                Image(systemName: "music.note")
+                Image(systemName: isAlbumArt ? "music.note" : "person.fill")
                     .font(.system(size: 20))
                     .foregroundColor(.white.opacity(0.6))
             )
+    }
+
+    private func startSwitchTimer() {
+        switchTimer = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                if !Task.isCancelled {
+                    withAnimation(.easeInOut(duration: 0.8)) {
+                        showingAlbumArt.toggle()
+                    }
+                }
+            }
+        }
+    }
+
+    private func stopSwitchTimer() {
+        switchTimer?.cancel()
+        switchTimer = nil
     }
 }
 

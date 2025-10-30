@@ -20,6 +20,16 @@ class LikeStateManager: ObservableObject {
         }
     }
 
+    func updateFromServer(postId: Int64, isLiked: Bool, count: Int) {
+        // Force update from server data (for polling updates)
+        if isLiked {
+            likedPostIds.insert(postId)
+        } else {
+            likedPostIds.remove(postId)
+        }
+        likeCounts[postId] = count
+    }
+
     func toggleLike(postId: Int64) {
         if likedPostIds.contains(postId) {
             likedPostIds.remove(postId)

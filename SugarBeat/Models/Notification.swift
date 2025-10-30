@@ -5,6 +5,8 @@ struct Notification: Codable, Identifiable {
     let sender: NotificationUser
     let type: String
     let postId: Int64?
+    let postOwnerId: Int64?
+    let artworkUrl: String?
     let isRead: Bool
     let createdAt: Date
 }

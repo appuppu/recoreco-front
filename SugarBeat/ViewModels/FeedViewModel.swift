@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftUI
 
 struct UserPosts: Identifiable {
     let id: Int64 // user ID
@@ -54,7 +55,7 @@ class FeedViewModel: ObservableObject {
                 $1.posts.first?.createdAt ?? Date.distantPast
             }
 
-            // Move current user to the front
+            // Move current user to the front (always first)
             if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
                 let currentUser = allUserPosts.remove(at: currentUserIndex)
                 allUserPosts.insert(currentUser, at: 0)
@@ -62,6 +63,21 @@ class FeedViewModel: ObservableObject {
 
             // Update latest post date for polling
             latestPostDate = allUserPosts.first?.posts.first?.createdAt
+
+            // Update LikeStateManager and CommentStateManager with server data
+            for userPosts in allUserPosts {
+                for post in userPosts.posts {
+                    LikeStateManager.shared.updateFromServer(
+                        postId: post.id,
+                        isLiked: post.isLiked ?? false,
+                        count: post.likeCount ?? 0
+                    )
+                    CommentStateManager.shared.updateFromServer(
+                        postId: post.id,
+                        count: post.commentCount ?? 0
+                    )
+                }
+            }
 
             print("📊 Total users in feed: \(allUserPosts.count)")
 
@@ -150,7 +166,7 @@ class FeedViewModel: ObservableObject {
                     $1.posts.first?.createdAt ?? Date.distantPast
                 }
 
-                // Move current user to the front
+                // Move current user to the front (always first)
                 if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
                     let currentUser = allUserPosts.remove(at: currentUserIndex)
                     allUserPosts.insert(currentUser, at: 0)
@@ -158,6 +174,21 @@ class FeedViewModel: ObservableObject {
 
                 // Update latest post date
                 latestPostDate = allUserPosts.first?.posts.first?.createdAt
+
+                // Update LikeStateManager and CommentStateManager with server data
+                for userPosts in allUserPosts {
+                    for post in userPosts.posts {
+                        LikeStateManager.shared.updateFromServer(
+                            postId: post.id,
+                            isLiked: post.isLiked ?? false,
+                            count: post.likeCount ?? 0
+                        )
+                        CommentStateManager.shared.updateFromServer(
+                            postId: post.id,
+                            count: post.commentCount ?? 0
+                        )
+                    }
+                }
 
                 print("✅ Feed refreshed with new posts")
             } else {

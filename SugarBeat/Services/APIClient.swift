@@ -11,7 +11,7 @@ enum APIError: Error {
 class APIClient {
     static let shared = APIClient()
 
-    private let baseURL = "http://192.168.0.4:8080/api"
+    private let baseURL = "http://192.168.0.2:8080/api"
     private var authToken: String?
     private(set) var currentUserId: Int64?
 
@@ -64,6 +64,11 @@ class APIClient {
         self.currentUserId = userId
     }
 
+    func clearAuthToken() {
+        self.authToken = nil
+        self.currentUserId = nil
+    }
+
     // MARK: - Auth Endpoints
 
     func signUp(request: SignUpRequest) async throws -> AuthResponse {
@@ -93,16 +98,58 @@ class APIClient {
         return try await performRequest(url: url, method: "GET")
     }
 
-    func updateProfile(displayName: String?, profileImageUrl: String?, bio: String?) async throws -> User {
-        struct UpdateProfileRequest: Codable {
-            let displayName: String?
-            let profileImageUrl: String?
-            let bio: String?
+    struct UpdateProfileRequest: Codable {
+        let displayName: String
+        let profileImageUrl: String?
+        let bio: String?
+    }
+
+    func updateProfile(request: UpdateProfileRequest) async throws -> User {
+        let url = URL(string: "\(baseURL)/users/me")!
+        return try await performRequest(url: url, method: "PUT", body: request)
+    }
+
+    func uploadImage(imageData: Data) async throws -> String {
+        let url = URL(string: "\(baseURL)/images/upload")!
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        if let token = authToken {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        let url = URL(string: "\(baseURL)/users/me")!
-        let request = UpdateProfileRequest(displayName: displayName, profileImageUrl: profileImageUrl, bio: bio)
-        return try await performRequest(url: url, method: "PUT", body: request)
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+
+        // Add image data
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"image.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(imageData)
+        body.append("\r\n".data(using: .utf8)!)
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+
+        request.httpBody = body
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.invalidResponse(statusCode: -1, data: nil)
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.invalidResponse(statusCode: httpResponse.statusCode, data: data)
+        }
+
+        struct UploadResponse: Codable {
+            let imageUrl: String
+        }
+
+        let uploadResponse = try decoder.decode(UploadResponse.self, from: data)
+        return uploadResponse.imageUrl
     }
 
     // MARK: - Post Endpoints
@@ -141,14 +188,19 @@ class APIClient {
 
     // MARK: - Like Endpoints
 
-    func likePost(postId: Int64) async throws {
-        let url = URL(string: "\(baseURL)/posts/\(postId)/likes")!
-        let _: EmptyResponse = try await performRequest(url: url, method: "POST")
+    struct LikeResponse: Codable {
+        let likeCount: Int
+        let isLiked: Bool
     }
 
-    func unlikePost(postId: Int64) async throws {
+    func likePost(postId: Int64) async throws -> LikeResponse {
         let url = URL(string: "\(baseURL)/posts/\(postId)/likes")!
-        let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
+        return try await performRequest(url: url, method: "POST")
+    }
+
+    func unlikePost(postId: Int64) async throws -> LikeResponse {
+        let url = URL(string: "\(baseURL)/posts/\(postId)/likes")!
+        return try await performRequest(url: url, method: "DELETE")
     }
 
     // MARK: - Block Endpoints

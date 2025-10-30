@@ -49,7 +49,8 @@ struct NotificationsView: View {
                                         // Handle different notification types
                                         if notification.type == "LIKE" || notification.type == "COMMENT" {
                                             // For LIKE and COMMENT, navigate to post
-                                            if let postId = notification.postId {
+                                            if let postId = notification.postId,
+                                               let postOwnerId = notification.postOwnerId {
                                                 // Close notifications view
                                                 dismiss()
 
@@ -58,7 +59,7 @@ struct NotificationsView: View {
                                                     NotificationCenter.default.post(
                                                         name: NSNotification.Name("NavigateToPost"),
                                                         object: nil,
-                                                        userInfo: ["postId": postId, "senderId": notification.sender.id]
+                                                        userInfo: ["postId": postId, "senderId": postOwnerId]
                                                     )
                                                 }
                                             }
@@ -120,21 +121,21 @@ struct NotificationRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                // Profile image
-                AsyncImage(url: URL(string: notification.sender.profileImageUrl ?? "")) { image in
+                // Image - artwork for LIKE/COMMENT, profile for FOLLOW
+                AsyncImage(url: URL(string: imageUrl)) { image in
                     image
                         .resizable()
                         .scaledToFill()
                 } placeholder: {
-                    Circle()
+                    RoundedRectangle(cornerRadius: isPostNotification ? 8 : 25)
                         .fill(Color.white.opacity(0.3))
                         .overlay(
-                            Image(systemName: "person.fill")
+                            Image(systemName: isPostNotification ? "music.note" : "person.fill")
                                 .foregroundColor(.white.opacity(0.6))
                         )
                 }
                 .frame(width: 50, height: 50)
-                .clipShape(Circle())
+                .clipShape(RoundedRectangle(cornerRadius: isPostNotification ? 8 : 25))
 
                 VStack(alignment: .leading, spacing: 4) {
                     // Notification text
@@ -169,6 +170,17 @@ struct NotificationRow: View {
             .padding(.vertical, 12)
             .background(notification.isRead ? Color.clear : Color.white.opacity(0.05))
         }
+    }
+
+    private var isPostNotification: Bool {
+        notification.type == "LIKE" || notification.type == "COMMENT"
+    }
+
+    private var imageUrl: String {
+        if isPostNotification, let artworkUrl = notification.artworkUrl {
+            return artworkUrl
+        }
+        return notification.sender.profileImageUrl ?? ""
     }
 
     private var notificationText: String {

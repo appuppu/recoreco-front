@@ -99,7 +99,7 @@ struct BlockedUserRow: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
 
-                Text("@\(user.username)")
+                Text(user.username)
                     .font(.system(size: 14))
                     .foregroundColor(.white.opacity(0.6))
             }

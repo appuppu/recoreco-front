@@ -61,7 +61,7 @@ struct ProfileView: View {
                                 .foregroundColor(.white)
 
                             // Username
-                            Text("@\(user.username)")
+                            Text(user.username)
                                 .font(.system(size: 16))
                                 .foregroundColor(.white.opacity(0.6))
 

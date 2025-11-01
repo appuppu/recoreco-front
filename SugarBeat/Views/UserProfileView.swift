@@ -7,6 +7,9 @@ struct UserProfileView: View {
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
     private let musicPlayer = MusicKitManager.shared
     @State private var showingActionSheet = false
+    @State private var selectedPost: Post?
+    @State private var showingPostActionSheet = false
+    @State private var showingReportView = false
 
     var body: some View {
         ZStack {
@@ -53,31 +56,13 @@ struct UserProfileView: View {
                                 .foregroundColor(.white)
 
                             // Username
-                            Text("@\(user.username)")
+                            Text(user.username)
                                 .font(.system(size: 16))
                                 .foregroundColor(.white.opacity(0.7))
 
                             // Follow counts
-                            HStack(spacing: 20) {
-                                VStack(spacing: 4) {
-                                    Text("\(user.followingCount ?? 0)")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.white)
-                                    Text("フォロー")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.white.opacity(0.7))
-                                }
-
-                                VStack(spacing: 4) {
-                                    Text("\(user.followerCount ?? 0)")
-                                        .font(.system(size: 18, weight: .bold))
-                                        .foregroundColor(.white)
-                                    Text("フォロワー")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.white.opacity(0.7))
-                                }
-                            }
-                            .padding(.top, 8)
+                            FollowCountsView(user: user)
+                                .padding(.top, 8)
 
                             // Bio
                             if let bio = user.bio, !bio.isEmpty {
@@ -129,8 +114,11 @@ struct UserProfileView: View {
                         .padding()
                         .padding(.top, 20)
 
-                        // 3x3 Grid of posts
-                        if !viewModel.posts.isEmpty {
+                        // 3x3 Grid of posts (only visible for mutual follows or own profile)
+                        let canViewPosts = (user.isMutual ?? false) ||
+                                          (APIClient.shared.currentUserId == user.id)
+
+                        if canViewPosts && !viewModel.posts.isEmpty {
                             LazyVGrid(columns: [
                                 GridItem(.flexible(), spacing: 2),
                                 GridItem(.flexible(), spacing: 2),
@@ -191,9 +179,23 @@ struct UserProfileView: View {
                                             await togglePlayback(for: post)
                                         }
                                     }
+                                    .onLongPressGesture {
+                                        selectedPost = post
+                                        showingPostActionSheet = true
+                                    }
                                 }
                             }
                             .padding(.top, 10)
+                        } else if !canViewPosts {
+                            VStack(spacing: 12) {
+                                Image(systemName: "lock.fill")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.white.opacity(0.4))
+                                Text("相互フォローで投稿を見ることができます")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                            .padding(.top, 40)
                         } else {
                             VStack(spacing: 12) {
                                 Image(systemName: "music.note")
@@ -243,6 +245,29 @@ struct UserProfileView: View {
             }
             Button("キャンセル", role: .cancel) { }
         }
+        .confirmationDialog("", isPresented: $showingPostActionSheet, titleVisibility: .hidden) {
+            if let post = selectedPost {
+                if let currentUserId = APIClient.shared.currentUserId, post.user.id == currentUserId {
+                    Button("削除", role: .destructive) {
+                        Task {
+                            await viewModel.deletePost(postId: post.id)
+                        }
+                    }
+                } else {
+                    Button("報告", role: .destructive) {
+                        showingReportView = true
+                    }
+                }
+                Button("キャンセル", role: .cancel) {
+                    selectedPost = nil
+                }
+            }
+        }
+        .sheet(isPresented: $showingReportView) {
+            if let post = selectedPost {
+                ReportPostView(post: post)
+            }
+        }
         .task {
             await viewModel.loadUser(userId: userId)
         }
@@ -281,6 +306,59 @@ struct UserProfileView: View {
             }
         } catch {
             // Silently fail
+        }
+    }
+}
+
+// Helper view for follow counts
+struct FollowCountsView: View {
+    let user: User
+
+    var body: some View {
+        HStack(spacing: 20) {
+            followingCountView
+            followerCountView
+        }
+    }
+
+    @ViewBuilder
+    private var followingCountView: some View {
+        let count = user.followingCount ?? 0
+        let isMutual = user.isMutual ?? false
+        let isOwnProfile = APIClient.shared.currentUserId == user.id
+
+        if isMutual || isOwnProfile {
+            NavigationLink(destination: FollowListView(userId: user.id, listType: .following)) {
+                countLabel(count: count, label: "フォロー")
+            }
+        } else {
+            countLabel(count: count, label: "フォロー")
+        }
+    }
+
+    @ViewBuilder
+    private var followerCountView: some View {
+        let count = user.followerCount ?? 0
+        let isMutual = user.isMutual ?? false
+        let isOwnProfile = APIClient.shared.currentUserId == user.id
+
+        if isMutual || isOwnProfile {
+            NavigationLink(destination: FollowListView(userId: user.id, listType: .followers)) {
+                countLabel(count: count, label: "フォロワー")
+            }
+        } else {
+            countLabel(count: count, label: "フォロワー")
+        }
+    }
+
+    private func countLabel(count: Int, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text("\(count)")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.white)
+            Text(label)
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.7))
         }
     }
 }

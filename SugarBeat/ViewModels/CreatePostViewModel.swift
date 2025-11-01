@@ -226,7 +226,7 @@ class CreatePostViewModel: ObservableObject {
                 endTime: endTime
             )
 
-            let createdPost = try await APIClient.shared.createPost(request: request)
+            _ = try await APIClient.shared.createPost(request: request)
 
             // Clear state and mark as created
             stopPreview()

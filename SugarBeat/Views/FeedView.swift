@@ -96,13 +96,13 @@ struct FeedView: View {
                                                    let previewUrl = targetUserPosts.posts[postIndex].previewUrl {
                                                     let post = targetUserPosts.posts[postIndex]
                                                     let postId = post.id
-                                                    print("🎵 Radio button: Target post: \(post.trackName ?? "unknown"), postId: \(postId)")
+                                                    print("🎵 Radio button: Target post: \(post.trackName), postId: \(postId)")
 
                                                     // Check if this post is already playing
                                                     if PlaybackStateManager.shared.currentlyPlayingPostId == postId {
                                                         print("🎵 Radio button: Post \(postId) is already playing, skipping re-play")
                                                     } else {
-                                                        print("🎵 Radio button: Starting playback for post: \(post.trackName ?? "unknown"), postId: \(postId)")
+                                                        print("🎵 Radio button: Starting playback for post: \(post.trackName), postId: \(postId)")
 
                                                         Task {
                                                             do {
@@ -949,7 +949,7 @@ struct UserPostsScrollView: View {
 
         let post = userPosts.posts[currentPostIndex]
         let postId = post.id
-        print("📻 startPlaybackForCurrentPost - user: \(userPosts.user.displayName), post: \(post.trackName ?? "unknown"), postId: \(postId)")
+        print("📻 startPlaybackForCurrentPost - user: \(userPosts.user.displayName), post: \(post.trackName), postId: \(postId)")
 
         // Check if this post is already playing
         if playbackStateManager.currentlyPlayingPostId == postId {
@@ -1282,9 +1282,13 @@ struct PostCardView: View {
                                             Image(systemName: isLiked ? "heart.fill" : "heart")
                                                 .font(.system(size: 20))
                                                 .foregroundColor(isLiked ? .red : .white)
-                                            Text("\(likeCount)")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundColor(.white)
+                                            // Show like count only for own posts
+                                            if let currentUserId = APIClient.shared.currentUserId,
+                                               post.user.id == currentUserId {
+                                                Text("\(likeCount)")
+                                                    .font(.system(size: 14, weight: .semibold))
+                                                    .foregroundColor(.white)
+                                            }
                                         }
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
@@ -1933,7 +1937,7 @@ struct CommentRowView: View {
                 HStack {
                     Text(comment.user.displayName)
                         .font(.system(size: 14, weight: .semibold))
-                    Text("@\(comment.user.username)")
+                    Text(comment.user.username)
                         .font(.system(size: 12))
                         .foregroundColor(.gray)
                     Spacer()

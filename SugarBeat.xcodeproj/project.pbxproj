@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		633936646265366433306666343332316135303036366130 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356338626661613665323833343765613963313637643138 /* FollowListView.swift */; };
+
 		008D9DA98E3D92AA0CF1F742 /* WaveformRangeSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0520DF8701555C7D9FDE6B1 /* WaveformRangeSelectorView.swift */; };
 		04E3E4F391AE053F2589DFE8 /* ReportPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D7D8C7F199F76C143A79CF /* ReportPostView.swift */; };
 		0862D93BCC4CDE338D028FDE /* BlockedUsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5701DF1321EE3E818035EE7 /* BlockedUsersView.swift */; };
@@ -49,6 +51,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		356338626661613665323833343765613963313637643138 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
+
 		13C3331FD9F72180FDA3F984 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
 		183B04A2417F147ACECAFADA /* Post.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Post.swift; sourceTree = "<group>"; };
 		2200803D3C80571A5A7547AB /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
@@ -168,6 +172,7 @@
 				9F1C82CDB2FF0F1088058E82 /* UserProfileView.swift */,
 				E91A2AE203D5FDC534ACD2AE /* UserSearchView.swift */,
 				E0520DF8701555C7D9FDE6B1 /* WaveformRangeSelectorView.swift */,
+							356338626661613665323833343765613963313637643138 /* FollowListView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -282,6 +287,7 @@
 				491ADCE154E136D5E192C046 /* EditableImagePicker.swift in Sources */,
 				28037D9B9E9E38F3A16864F0 /* FeedView.swift in Sources */,
 				834B1D11FBBC34645F022B66 /* FeedViewModel.swift in Sources */,
+				633936646265366433306666343332316135303036366130 /* FollowListView.swift in Sources */,
 				1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */,
 				7E0D0D7D401DA7C39DFBDF64 /* LoginView.swift in Sources */,
 				4698B03E006E9296A0426AAD /* MusicKitManager.swift in Sources */,

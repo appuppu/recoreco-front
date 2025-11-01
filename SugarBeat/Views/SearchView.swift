@@ -54,7 +54,7 @@ struct UserRow: View {
             VStack(alignment: .leading) {
                 Text(user.displayName)
                     .font(.headline)
-                Text("@\(user.username)")
+                Text(user.username)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

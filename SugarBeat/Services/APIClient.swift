@@ -186,6 +186,16 @@ class APIClient {
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
 
+    func getFollowing(userId: Int64) async throws -> [User] {
+        let url = URL(string: "\(baseURL)/follows/\(userId)/following")!
+        return try await performRequest(url: url, method: "GET")
+    }
+
+    func getFollowers(userId: Int64) async throws -> [User] {
+        let url = URL(string: "\(baseURL)/follows/\(userId)/followers")!
+        return try await performRequest(url: url, method: "GET")
+    }
+
     // MARK: - Like Endpoints
 
     struct LikeResponse: Codable {

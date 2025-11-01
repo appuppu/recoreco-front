@@ -14,7 +14,7 @@ class UserProfileViewModel: ObservableObject {
 
         do {
             user = try await APIClient.shared.getUser(id: userId)
-            posts = try await APIClient.shared.getUserPosts(userId: userId, sort: "asc")
+            posts = try await APIClient.shared.getUserPosts(userId: userId, sort: "desc")
         } catch {
             errorMessage = "Failed to load user: \(error.localizedDescription)"
         }
@@ -45,6 +45,16 @@ class UserProfileViewModel: ObservableObject {
             try await APIClient.shared.blockUser(userId: userId)
         } catch {
             errorMessage = "Failed to block user: \(error.localizedDescription)"
+        }
+    }
+
+    func deletePost(postId: Int64) async {
+        do {
+            try await APIClient.shared.deletePost(postId: postId)
+            // Remove the deleted post from the local list
+            posts.removeAll { $0.id == postId }
+        } catch {
+            errorMessage = "Failed to delete post: \(error.localizedDescription)"
         }
     }
 }

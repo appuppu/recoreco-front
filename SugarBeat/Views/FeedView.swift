@@ -1153,7 +1153,7 @@ struct PostCardView: View {
                         // Profile icon and name (top-left)
                         VStack {
                             HStack(spacing: 8) {
-                                AsyncImage(url: URL(string: post.user.profileImageUrl ?? "")) { image in
+                                AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(post.user.profileImageUrl) ?? "")) { image in
                                     image
                                         .resizable()
                                         .scaledToFill()
@@ -1372,6 +1372,13 @@ struct PostCardView: View {
             ReportPostView(post: post)
         }
         .confirmationDialog("", isPresented: $showingPostActions) {
+            // Apple Music link (always show)
+            if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
+                Button("Apple Musicで開く") {
+                    UIApplication.shared.open(url)
+                }
+            }
+
             if let currentUserId = APIClient.shared.currentUserId, currentUserId == post.user.id {
                 Button("削除", role: .destructive) {
                     showingDeleteConfirmation = true
@@ -1628,6 +1635,7 @@ struct CommentsOverlayView: View {
     @State private var commentToDelete: Comment?
     @State private var keyboardHeight: CGFloat = 0
     @State private var dragOffset: CGFloat = 0
+    @State private var commentErrorMessage: String?
 
     var body: some View {
         GeometryReader { geometry in
@@ -1766,8 +1774,17 @@ struct CommentsOverlayView: View {
                 .ignoresSafeArea()
 
                 // Comment input (separate layer, above keyboard)
-                VStack {
+                VStack(spacing: 4) {
                     Spacer()
+
+                    // Error message
+                    if let errorMessage = commentErrorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.horizontal)
+                            .padding(.top, 4)
+                    }
 
                     TextField("コメントを入力...", text: $newCommentText)
                         .textFieldStyle(.roundedBorder)
@@ -1775,6 +1792,12 @@ struct CommentsOverlayView: View {
                         .onSubmit {
                             Task {
                                 await postComment()
+                            }
+                        }
+                        .onChange(of: newCommentText) { _ in
+                            // Clear error when user starts typing
+                            if commentErrorMessage != nil {
+                                commentErrorMessage = nil
                             }
                         }
                         .padding()
@@ -1862,8 +1885,15 @@ struct CommentsOverlayView: View {
     private func postComment() async {
         guard !newCommentText.isEmpty else { return }
 
+        // Validate comment length
+        if newCommentText.count > 20 {
+            commentErrorMessage = "コメントは20文字以内で入力してください"
+            return
+        }
+
         let content = newCommentText
         newCommentText = ""
+        commentErrorMessage = nil
 
         do {
             let request = CreateCommentRequest(postId: post.id, content: content)
@@ -1871,9 +1901,8 @@ struct CommentsOverlayView: View {
             // Add new comment at the end (newest at bottom)
             comments.append(newComment)
             commentStateManager.incrementCount(postId: post.id)
-            print("✅ Comment posted successfully")
         } catch {
-            print("❌ Failed to post comment: \(error)")
+            commentErrorMessage = "コメントの投稿に失敗しました"
             newCommentText = content // Restore text on error
         }
     }
@@ -2074,7 +2103,7 @@ struct UserRadioButton: View {
                 } else {
                     // Profile image
                     if let profileImageUrl = userPosts.user.profileImageUrl,
-                       let url = URL(string: profileImageUrl) {
+                       let url = URL(string: APIClient.shared.getFullImageURL(profileImageUrl) ?? "") {
                         AsyncImage(url: url) { phase in
                             switch phase {
                             case .empty:

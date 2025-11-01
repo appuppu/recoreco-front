@@ -70,9 +70,16 @@ struct SignUpView: View {
                         // Sign Up Form
                         VStack(spacing: 20) {
                             VStack(spacing: 16) {
-                                TextField("", text: $username, prompt: Text("ユーザー名（英語）").foregroundColor(.white.opacity(0.5)))
+                                TextField("", text: $username, prompt: Text("ユーザー名（英数字10文字以内）").foregroundColor(.white.opacity(0.5)))
                                     .textFieldStyle(GlassTextFieldStyle())
                                     .autocapitalization(.none)
+                                    .onChange(of: username) { newValue in
+                                        // Allow only alphanumeric characters
+                                        let filtered = newValue.filter { $0.isLetter || $0.isNumber }
+                                        if filtered != newValue {
+                                            username = filtered
+                                        }
+                                    }
 
                                 TextField("", text: $email, prompt: Text("メールアドレス").foregroundColor(.white.opacity(0.5)))
                                     .textFieldStyle(GlassTextFieldStyle())
@@ -80,7 +87,7 @@ struct SignUpView: View {
                                     .autocapitalization(.none)
                                     .keyboardType(.emailAddress)
 
-                                SecureField("", text: $password, prompt: Text("パスワード（6文字以上）").foregroundColor(.white.opacity(0.5)))
+                                SecureField("", text: $password, prompt: Text("パスワード（8文字以上）").foregroundColor(.white.opacity(0.5)))
                                     .textFieldStyle(GlassTextFieldStyle())
                                     .textContentType(.newPassword)
                             }
@@ -145,10 +152,34 @@ struct SignUpView: View {
     }
 
     private var isFormValid: Bool {
-        !username.isEmpty && !email.isEmpty && !password.isEmpty && password.count >= 6
+        !username.isEmpty && !email.isEmpty && !password.isEmpty && password.count >= 8 && username.count <= 10
     }
 
     private func signUp() {
+        // Validate before submitting
+        if username.count > 10 {
+            errorMessage = "ユーザー名は10文字以内で入力してください"
+            return
+        }
+
+        // Check if username contains only alphanumeric characters
+        let alphanumericSet = CharacterSet.alphanumerics
+        if username.unicodeScalars.contains(where: { !alphanumericSet.contains($0) }) {
+            errorMessage = "ユーザー名は英数字のみで入力してください"
+            return
+        }
+
+        if password.count < 8 {
+            errorMessage = "パスワードは8文字以上で入力してください"
+            return
+        }
+
+        // Validate email format
+        if !isValidEmail(email) {
+            errorMessage = "有効なメールアドレスを入力してください"
+            return
+        }
+
         isLoading = true
         errorMessage = nil
 
@@ -161,10 +192,31 @@ struct SignUpView: View {
                 )
                 dismiss()
             } catch {
-                errorMessage = "登録に失敗しました"
+                // Parse error message from backend if available
+                if let apiError = error as? APIError {
+                    switch apiError {
+                    case .invalidResponse(_, let data):
+                        if let data = data, let errorString = String(data: data, encoding: .utf8) {
+                            errorMessage = errorString
+                        } else {
+                            errorMessage = "登録に失敗しました"
+                        }
+                    default:
+                        errorMessage = "登録に失敗しました"
+                    }
+                } else {
+                    errorMessage = error.localizedDescription
+                }
             }
             isLoading = false
         }
+    }
+
+    private func isValidEmail(_ email: String) -> Bool {
+        // Email validation regex
+        let emailRegex = "^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+        let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
+        return emailPredicate.evaluate(with: email)
     }
 }
 

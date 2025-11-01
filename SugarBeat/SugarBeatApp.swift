@@ -3,12 +3,18 @@ import SwiftUI
 @main
 struct SugarBeatApp: App {
     @StateObject private var authManager = AuthManager()
+    @ObservedObject private var musicKitManager = MusicKitManager.shared
 
     var body: some Scene {
         WindowGroup {
             if authManager.isAuthenticated {
-                ContentView()
-                    .environmentObject(authManager)
+                if musicKitManager.isAuthorized {
+                    ContentView()
+                        .environmentObject(authManager)
+                } else {
+                    MusicPermissionView()
+                        .environmentObject(authManager)
+                }
             } else {
                 LoginView()
                     .environmentObject(authManager)

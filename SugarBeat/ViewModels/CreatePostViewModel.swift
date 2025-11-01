@@ -206,6 +206,13 @@ class CreatePostViewModel: ObservableObject {
                 return
             }
 
+            // Validate comment length
+            if comment.count > 50 {
+                errorMessage = "投稿文は50文字以内で入力してください"
+                isPosting = false
+                return
+            }
+
             // Get artwork URL
             let artworkUrl = song.artwork?.url(width: 600, height: 600)?.absoluteString
 

@@ -34,7 +34,7 @@ struct UserProfileView: View {
                         // Profile Header
                         VStack(spacing: 12) {
                             // Profile Image
-                            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
+                            AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(user.profileImageUrl) ?? "")) { image in
                                 image
                                     .resizable()
                                     .scaledToFill()
@@ -247,6 +247,13 @@ struct UserProfileView: View {
         }
         .confirmationDialog("", isPresented: $showingPostActionSheet, titleVisibility: .hidden) {
             if let post = selectedPost {
+                // Apple Music link (always show)
+                if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
+                    Button("Apple Musicで開く") {
+                        UIApplication.shared.open(url)
+                    }
+                }
+
                 if let currentUserId = APIClient.shared.currentUserId, post.user.id == currentUserId {
                     Button("削除", role: .destructive) {
                         Task {

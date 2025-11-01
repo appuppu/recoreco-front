@@ -29,7 +29,7 @@ struct ProfileView: View {
                         VStack(spacing: 24) {
                             // Profile Image
                             if let imageUrl = user.profileImageUrl {
-                                AsyncImage(url: URL(string: imageUrl)) { image in
+                                AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(imageUrl) ?? "")) { image in
                                     image
                                         .resizable()
                                         .scaledToFill()

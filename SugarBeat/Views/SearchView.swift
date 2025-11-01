@@ -40,7 +40,7 @@ struct UserRow: View {
 
     var body: some View {
         HStack {
-            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
+            AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(user.profileImageUrl) ?? "")) { image in
                 image
                     .resizable()
                     .scaledToFill()

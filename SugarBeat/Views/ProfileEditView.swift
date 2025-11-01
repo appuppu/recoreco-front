@@ -47,7 +47,7 @@ struct ProfileEditView: View {
                                             .frame(width: 120, height: 120)
                                             .clipShape(Circle())
                                     } else if !viewModel.shouldDeleteImage, let imageUrl = currentUser.profileImageUrl {
-                                        AsyncImage(url: URL(string: imageUrl)) { image in
+                                        AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(imageUrl) ?? "")) { image in
                                             image
                                                 .resizable()
                                                 .scaledToFill()
@@ -211,6 +211,17 @@ class ProfileEditViewModel: ObservableObject {
     @Published var errorMessage: String?
 
     func saveProfile(displayName: String, bio: String, pendingImage: UIImage?, currentImageUrl: String?) async {
+        // Validate before submitting
+        if displayName.count > 10 {
+            errorMessage = "ユーザー名は10文字以内で入力してください"
+            return
+        }
+
+        if bio.count > 20 {
+            errorMessage = "プロフィール一言は20文字以内で入力してください"
+            return
+        }
+
         isLoading = true
         errorMessage = nil
 

@@ -11,7 +11,8 @@ enum APIError: Error {
 class APIClient {
     static let shared = APIClient()
 
-    private let baseURL = "http://192.168.0.2:8080/api"
+    private let baseURL = "http://192.168.0.4:8080/api"
+    private let serverBaseURL = "http://192.168.0.4:8080/api"
     private var authToken: String?
     private(set) var currentUserId: Int64?
 
@@ -67,6 +68,19 @@ class APIClient {
     func clearAuthToken() {
         self.authToken = nil
         self.currentUserId = nil
+    }
+
+    // Convert relative image paths to full URLs
+    func getFullImageURL(_ imageURL: String?) -> String? {
+        guard let imageURL = imageURL, !imageURL.isEmpty else { return nil }
+
+        // If already a full URL, return as is (for backward compatibility)
+        if imageURL.starts(with: "http://") || imageURL.starts(with: "https://") {
+            return imageURL
+        }
+
+        // If relative path, prepend server base URL
+        return serverBaseURL + imageURL
     }
 
     // MARK: - Auth Endpoints

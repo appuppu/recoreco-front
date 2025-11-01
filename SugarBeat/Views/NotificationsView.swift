@@ -180,7 +180,7 @@ struct NotificationRow: View {
         if isPostNotification, let artworkUrl = notification.artworkUrl {
             return artworkUrl
         }
-        return notification.sender.profileImageUrl ?? ""
+        return APIClient.shared.getFullImageURL(notification.sender.profileImageUrl) ?? ""
     }
 
     private var notificationText: String {

@@ -65,6 +65,9 @@ struct FeedView: View {
             // Horizontal user radio buttons at top (fixed position, not affected by vertical scroll)
             if !viewModel.allUserPosts.isEmpty {
                 VStack(spacing: 0) {
+                    Spacer()
+                        .frame(height: 70)
+
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(Array(viewModel.allUserPosts.enumerated()), id: \.element.id) { index, userPosts in
@@ -173,10 +176,10 @@ struct FeedView: View {
                     }
                     .frame(height: 72)
                     .disabled(false)
+
+                    Spacer()
                 }
-                .frame(height: 72)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 70)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .allowsHitTesting(true)
             }
 
@@ -1132,7 +1135,9 @@ struct PostCardView: View {
                             case .success(let image):
                                 image
                                     .resizable()
-                                    .scaledToFit()
+                                    .scaledToFill()
+                                    .frame(width: albumSize, height: albumSize)
+                                    .clipped()
                             case .failure:
                                 Rectangle()
                                     .fill(Color.gray.opacity(0.3))

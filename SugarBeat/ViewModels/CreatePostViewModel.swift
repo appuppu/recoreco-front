@@ -82,30 +82,58 @@ class CreatePostViewModel: ObservableObject {
         isFetchingPreview = true
         errorMessage = nil
 
+        // First try to get preview from MusicKit Song object directly
+        if #available(iOS 16.0, *), let previewAsset = song.previewAssets?.first {
+            previewURL = previewAsset.url?.absoluteString
+            isFetchingPreview = false
+            if previewURL == nil {
+                errorMessage = "この曲には30秒プレビューがありません"
+            }
+            return
+        }
+
+        // Fallback: Try to fetch from backend API
         do {
             let songDetails = try await APIClient.shared.getSongDetails(songId: song.id.rawValue)
+            print("📀 Song details response: \(songDetails)")
 
             // Parse preview URL from Apple Music API response
             if let data = songDetails["data"] as? [[String: Any]],
                let firstSong = data.first,
-               let attributes = firstSong["attributes"] as? [String: Any],
-               let previews = attributes["previews"] as? [[String: Any]],
-               let firstPreview = previews.first,
-               let url = firstPreview["url"] as? String {
-                previewURL = url
-                isFetchingPreview = false
-            } else {
-                // No preview available in response - retry up to 2 times
-                if retryCount < 2 {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
-                    await fetchPreviewURL(for: song, retryCount: retryCount + 1)
-                } else {
-                    previewURL = nil
+               let attributes = firstSong["attributes"] as? [String: Any] {
+
+                // Try previews array first
+                if let previews = attributes["previews"] as? [[String: Any]],
+                   let firstPreview = previews.first,
+                   let url = firstPreview["url"] as? String {
+                    previewURL = url
                     isFetchingPreview = false
-                    errorMessage = "この曲には30秒プレビューがありません"
+                    print("📀 Found preview URL from previews: \(url)")
+                    return
                 }
+
+                // Try previewURL field directly
+                if let url = attributes["previewURL"] as? String {
+                    previewURL = url
+                    isFetchingPreview = false
+                    print("📀 Found preview URL from previewURL: \(url)")
+                    return
+                }
+
+                print("📀 No preview found in attributes: \(attributes.keys)")
+            }
+
+            // No preview available in response - retry up to 2 times
+            if retryCount < 2 {
+                try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
+                await fetchPreviewURL(for: song, retryCount: retryCount + 1)
+            } else {
+                previewURL = nil
+                isFetchingPreview = false
+                errorMessage = "この曲には30秒プレビューがありません"
             }
         } catch {
+            print("📀 Error fetching song details: \(error)")
             // Network error - retry up to 2 times
             if retryCount < 2 {
                 try? await Task.sleep(nanoseconds: 1_000_000_000) // Wait 1 second
@@ -113,7 +141,7 @@ class CreatePostViewModel: ObservableObject {
             } else {
                 previewURL = nil
                 isFetchingPreview = false
-                errorMessage = "プレビューの取得に失敗しました"
+                errorMessage = "プレビューの取得に失敗しました: \(error.localizedDescription)"
             }
         }
     }

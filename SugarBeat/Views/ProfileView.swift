@@ -4,6 +4,7 @@ struct ProfileView: View {
     @StateObject private var viewModel = ProfileViewModel()
     @State private var showingEditProfile = false
     @State private var showingBlockedUsers = false
+    @State private var showingOnboarding = false
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authManager: AuthManager
 
@@ -107,6 +108,24 @@ struct ProfileView: View {
                             }
                             .padding(.horizontal, 32)
 
+                            // Tutorial Button
+                            Button(action: {
+                                showingOnboarding = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "questionmark.circle.fill")
+                                        .font(.system(size: 16))
+                                    Text("使い方を見る")
+                                        .font(.system(size: 16, weight: .medium))
+                                }
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(10)
+                            }
+                            .padding(.horizontal, 32)
+
                             // Logout Button
                             Button(action: {
                                 authManager.logout()
@@ -131,14 +150,14 @@ struct ProfileView: View {
             }
             .navigationTitle("プロフィール")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+            .toolbar(content: {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("閉じる") {
                         dismiss()
                     }
                     .foregroundColor(.white)
                 }
-            }
+            })
         }
         .sheet(isPresented: $showingEditProfile, onDismiss: {
             Task {
@@ -151,6 +170,9 @@ struct ProfileView: View {
         }
         .sheet(isPresented: $showingBlockedUsers) {
             BlockedUsersView()
+        }
+        .fullScreenCover(isPresented: $showingOnboarding) {
+            OnboardingView(isPresented: $showingOnboarding)
         }
         .task {
             await viewModel.loadCurrentUser()

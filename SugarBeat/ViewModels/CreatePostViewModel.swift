@@ -1,6 +1,5 @@
 import Foundation
 import MusicKit
-import Combine
 
 @MainActor
 class CreatePostViewModel: ObservableObject {
@@ -17,56 +16,80 @@ class CreatePostViewModel: ObservableObject {
 
     private let musicKitManager = MusicKitManager.shared
     private var previewURL: String?
-    private var searchCancellable: AnyCancellable?
     private var searchTask: Task<Void, Never>?
 
     init() {
-        // Debounce search query changes
-        searchCancellable = $searchQuery
-            .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
-            .removeDuplicates()
-            .sink { [weak self] query in
-                guard let self = self else { return }
-                if !query.isEmpty {
-                    self.searchTask?.cancel()
-                    self.searchTask = Task {
-                        await self.searchMusic()
-                    }
-                } else {
-                    self.searchResults = []
-                }
-            }
+        // No automatic search - user must press search button
     }
 
     func requestMusicAuthorization() async {
         await musicKitManager.requestAuthorization()
     }
 
-    func searchMusic() async {
-        guard !searchQuery.isEmpty else { return }
+    // Warmup search to initialize MusicKit and API connections
+    func warmupSearch() async {
+        await musicKitManager.warmupSearch()
+    }
 
+    // Public method to be called when search button is pressed
+    func performSearch() async {
+        // Cancel any ongoing search
+        searchTask?.cancel()
+
+        // Start new search task and wait for it to complete
+        searchTask = Task {
+            await searchMusic()
+        }
+
+        // Wait for the search task to complete
+        await searchTask?.value
+    }
+
+    private func searchMusic() async {
+        guard !searchQuery.isEmpty else {
+            print("🔍🔍 SearchMusic: searchQuery is empty, returning")
+            return
+        }
+
+        print("🔍🔍 SearchMusic: Starting search for query: '\(searchQuery)'")
         isSearching = true
         errorMessage = nil
 
         do {
             // Use MusicKit directly for better Japanese music search
-            searchResults = try await musicKitManager.searchMusic(query: searchQuery, limit: 25)
+            print("🔍🔍 SearchMusic: Calling musicKitManager.searchMusic...")
+            let results = try await musicKitManager.searchMusic(query: searchQuery, limit: 25)
+            print("🔍🔍 SearchMusic: MusicKit returned \(results.count) results")
+
+            // Log first few results for debugging
+            if !results.isEmpty {
+                for (index, song) in results.prefix(3).enumerated() {
+                    print("🔍🔍 SearchMusic: Result[\(index)]: \(song.title) by \(song.artistName)")
+                }
+            }
+
+            searchResults = results
+            print("🔍🔍 SearchMusic: Assigned results to searchResults. searchResults.count = \(searchResults.count)")
 
             if searchResults.isEmpty {
+                print("🔍🔍 SearchMusic: Results are empty, setting error message")
                 errorMessage = "検索結果が見つかりませんでした"
             }
         } catch is CancellationError {
             // Search was cancelled, don't show error
+            print("🔍🔍 SearchMusic: Search was cancelled")
             searchResults = []
             errorMessage = nil
         } catch {
             // Only show error for actual failures, not cancellations
+            print("🔍🔍 SearchMusic: Search failed with error: \(error)")
             if !Task.isCancelled {
                 errorMessage = "音楽検索に失敗しました"
             }
         }
 
         isSearching = false
+        print("🔍🔍 SearchMusic: Finished. Final searchResults.count = \(searchResults.count)")
     }
 
     func selectSong(_ song: Song) async {

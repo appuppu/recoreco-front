@@ -194,16 +194,7 @@ struct SignUpView: View {
             } catch {
                 // Parse error message from backend if available
                 if let apiError = error as? APIError {
-                    switch apiError {
-                    case .invalidResponse(_, let data):
-                        if let data = data, let errorString = String(data: data, encoding: .utf8) {
-                            errorMessage = errorString
-                        } else {
-                            errorMessage = "登録に失敗しました"
-                        }
-                    default:
-                        errorMessage = "登録に失敗しました"
-                    }
+                    errorMessage = apiError.localizedDescription
                 } else {
                     errorMessage = error.localizedDescription
                 }

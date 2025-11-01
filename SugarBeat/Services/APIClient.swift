@@ -6,6 +6,30 @@ enum APIError: Error {
     case invalidResponse(statusCode: Int, data: Data?)
     case decodingFailed(Error)
     case unauthorized
+    case serverError(message: String, statusCode: Int)
+
+    var localizedDescription: String {
+        switch self {
+        case .invalidURL:
+            return "無効なURLです"
+        case .requestFailed(let error):
+            return "リクエストに失敗しました: \(error.localizedDescription)"
+        case .invalidResponse(let statusCode, _):
+            return "サーバーエラー (ステータスコード: \(statusCode))"
+        case .decodingFailed(let error):
+            return "データの解析に失敗しました: \(error.localizedDescription)"
+        case .unauthorized:
+            return "認証が必要です"
+        case .serverError(let message, _):
+            return message
+        }
+    }
+}
+
+struct ErrorResponse: Codable {
+    let message: String
+    let status: Int
+    let timestamp: String?
 }
 
 class APIClient {
@@ -391,6 +415,12 @@ class APIClient {
 
         guard (200...299).contains(httpResponse.statusCode) else {
             print("❌ API Error - Status: \(httpResponse.statusCode), URL: \(url), Response: \(String(data: data, encoding: .utf8) ?? "No data")")
+
+            // Try to parse error response
+            if let errorResponse = try? decoder.decode(ErrorResponse.self, from: data) {
+                throw APIError.serverError(message: errorResponse.message, statusCode: httpResponse.statusCode)
+            }
+
             throw APIError.invalidResponse(statusCode: httpResponse.statusCode, data: data)
         }
 

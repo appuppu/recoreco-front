@@ -69,7 +69,7 @@ struct LoginView: View {
                                 )
                             )
 
-                        Text("あなたの音楽を記録しよう")
+                        Text("好きな音楽を紹介しよう！")
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.7))
                     }

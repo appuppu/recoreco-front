@@ -13,7 +13,10 @@ struct CreatePostView: View {
     @Environment(\.dismiss) var dismiss
     @StateObject private var viewModel = CreatePostViewModel()
     @FocusState private var isCommentFocused: Bool
+    @FocusState private var isSearchFocused: Bool
     @Binding var postCreated: Bool
+    @Binding var tutorialStep: TutorialStep
+    @Binding var showingInteractiveTutorial: Bool
 
     var body: some View {
         NavigationStack {
@@ -52,23 +55,79 @@ struct CreatePostView: View {
                     .padding(.top)
 
                     // Search bar - Fixed position
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.white.opacity(0.6))
-                        TextField("曲名、アーティスト名で検索", text: $viewModel.searchQuery)
-                            .foregroundColor(.white)
-                            .autocorrectionDisabled()
-                            .submitLabel(.search)
-                        if !viewModel.searchQuery.isEmpty {
-                            Button(action: { viewModel.searchQuery = "" }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.white.opacity(0.6))
+                    HStack(spacing: 8) {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.white.opacity(0.6))
+                            TextField("曲名、アーティスト名で検索", text: $viewModel.searchQuery)
+                                .foregroundColor(.white)
+                                .autocorrectionDisabled()
+                                .submitLabel(.search)
+                                .focused($isSearchFocused)
+                                .onSubmit {
+                                    Task {
+                                        await viewModel.performSearch()
+                                        // チュートリアルステップを進める
+                                        if tutorialStep == .searchSong && !viewModel.searchResults.isEmpty {
+                                            tutorialStep = .selectSong
+                                        }
+                                    }
+                                }
+                                .onChange(of: isSearchFocused) { focused in
+                                    print("⌨️ Search focus changed: \(focused), tutorialStep: \(tutorialStep)")
+                                    // キーボードが表示されたらチュートリアルモーダルを消す
+                                    if focused && tutorialStep == .searchSong {
+                                        showingInteractiveTutorial = false
+                                        print("⌨️ Hiding tutorial modal because keyboard is shown")
+                                    }
+                                }
+                            if !viewModel.searchQuery.isEmpty {
+                                Button(action: { viewModel.searchQuery = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
                             }
                         }
+                        .padding()
+                        .background(Color.white.opacity(0.15))
+                        .cornerRadius(12)
+
+                        // 検索ボタン
+                        Button(action: {
+                            print("🔍🔍🔍 SEARCH BUTTON TAPPED - query: '\(viewModel.searchQuery)', tutorialStep: \(tutorialStep)")
+                            // キーボードを閉じる
+                            isSearchFocused = false
+
+                            Task {
+                                print("🔍 Starting search...")
+                                await viewModel.performSearch()
+                                print("🔍 Search finished - results count: \(viewModel.searchResults.count)")
+                                // チュートリアルステップを進める
+                                if tutorialStep == .searchSong && !viewModel.searchResults.isEmpty {
+                                    tutorialStep = .selectSong
+                                    showingInteractiveTutorial = true
+                                    print("🔍 Search completed - moving to selectSong step, showing tutorial: \(showingInteractiveTutorial)")
+                                } else {
+                                    print("🔍 Not moving to next step - tutorialStep: \(tutorialStep), results: \(viewModel.searchResults.count)")
+                                }
+                            }
+                        }) {
+                            Text("検索")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                        }
+                        .disabled(viewModel.searchQuery.isEmpty || viewModel.isSearching)
                     }
-                    .padding()
-                    .background(Color.white.opacity(0.15))
-                    .cornerRadius(12)
                     .padding(.horizontal)
                 }
                 .background(Color.clear)
@@ -88,6 +147,12 @@ struct CreatePostView: View {
                                 Button(action: {
                                     Task {
                                         await viewModel.selectSong(song)
+                                        // チュートリアルステップを進める
+                                        if tutorialStep == .selectSong {
+                                            tutorialStep = .tapPostButton
+                                            showingInteractiveTutorial = true
+                                            print("🎵 Song selected - moving to tapPostButton step, showing tutorial: \(showingInteractiveTutorial)")
+                                        }
                                     }
                                 }) {
                                     MusicKitSearchRow(song: song)
@@ -217,10 +282,18 @@ struct CreatePostView: View {
 
                         // Post button
                         Button(action: {
+                            print("📝 Post button tapped - current tutorialStep: \(tutorialStep)")
+                            let wasTutorial = tutorialStep == .tapPostButton
+                            print("📝 wasTutorial: \(wasTutorial)")
+
                             Task {
                                 await viewModel.createPost()
                                 if viewModel.postCreated {
                                     postCreated = true
+                                    print("📝 Post created successfully, dismissing CreatePostView")
+
+                                    // チュートリアル中でも通常でも、すぐに閉じる
+                                    // 完了モーダルはFeedViewで表示される
                                     dismiss()
                                 }
                             }
@@ -275,8 +348,27 @@ struct CreatePostView: View {
                         .padding(.horizontal)
                 }
             }
+
+            // Interactive Tutorial Overlay (completedステップはFeedViewで表示される)
+            if showingInteractiveTutorial && (tutorialStep == .searchSong || tutorialStep == .selectSong || tutorialStep == .tapPostButton) {
+                InteractiveTutorialView(
+                    isPresented: $showingInteractiveTutorial,
+                    currentStep: $tutorialStep,
+                    targetFrame: nil,
+                    onNext: {
+                        // このビューでは.completedステップは表示しない
+                    }
+                )
+            }
         }
         .navigationBarHidden(true)
+        }
+        .onAppear {
+            print("🎨 CreatePostView appeared - tutorialStep: \(tutorialStep), showingInteractiveTutorial: \(showingInteractiveTutorial)")
+            // Warmup search to initialize MusicKit and API connections
+            Task {
+                await viewModel.warmupSearch()
+            }
         }
     }
 

@@ -27,22 +27,53 @@ class MusicKitManager: ObservableObject {
         isAuthorized = status == .authorized
     }
 
+    // Warmup search to initialize MusicKit and API connections
+    func warmupSearch() async {
+        do {
+            _ = try await searchMusic(query: "a", limit: 1)
+            print("🔥 Warmup search completed successfully")
+        } catch {
+            // Silently ignore warmup errors
+            print("🔥 Warmup search completed (error ignored): \(error.localizedDescription)")
+        }
+    }
+
     func searchMusic(query: String, limit: Int = 10) async throws -> [Song] {
+        print("🎵🎵 MusicKitManager.searchMusic: Called with query='\(query)', limit=\(limit)")
+
         // Request authorization if not already authorized
         if authorizationStatus != .authorized {
+            print("🎵🎵 MusicKitManager.searchMusic: Not authorized, requesting authorization...")
             await requestAuthorization()
         }
 
         guard authorizationStatus == .authorized else {
+            print("🎵🎵 MusicKitManager.searchMusic: Authorization failed, throwing notAuthorized error")
             throw MusicKitError.notAuthorized
         }
+
+        print("🎵🎵 MusicKitManager.searchMusic: Authorized. Creating search request...")
 
         // Use MusicKit's native search
         var searchRequest = MusicCatalogSearchRequest(term: query, types: [Song.self])
         searchRequest.limit = limit
 
+        print("🎵🎵 MusicKitManager.searchMusic: Sending request to MusicKit API...")
         let searchResponse = try await searchRequest.response()
-        return Array(searchResponse.songs)
+
+        let songsArray = Array(searchResponse.songs)
+        print("🎵🎵 MusicKitManager.searchMusic: Received response with \(songsArray.count) songs")
+
+        // Log first few songs
+        if !songsArray.isEmpty {
+            for (index, song) in songsArray.prefix(3).enumerated() {
+                print("🎵🎵 MusicKitManager.searchMusic: Song[\(index)]: \(song.title) by \(song.artistName)")
+            }
+        } else {
+            print("🎵🎵 MusicKitManager.searchMusic: No songs found in response")
+        }
+
+        return songsArray
     }
 
     func playPreviewFromURL(_ urlString: String, startTime: TimeInterval = 0) async throws {

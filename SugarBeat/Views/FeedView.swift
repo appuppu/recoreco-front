@@ -16,6 +16,11 @@ struct FeedView: View {
     @State private var userCurrentPostIndices: [Int64: Int] = [:] // userId -> currentPostIndex
     @State private var skipNextAutoPlay = false
     @State private var currentDisplayedUserIndex = 0
+    @State private var showingOnboarding = false
+    @State private var showingInteractiveTutorial = false
+    @State private var tutorialStep: TutorialStep = .welcome
+    @State private var createButtonFrame: CGRect = .zero
+    @State private var wasTutorialPost = false // チュートリアル中の投稿かどうかを記録
 
     var body: some View {
         ZStack {
@@ -212,9 +217,17 @@ struct FeedView: View {
 
                                 // Post button
                                 FloatingMenuButton(icon: "plus", label: "紹介") {
+                                    print("➕ Plus button tapped - current tutorialStep: \(tutorialStep)")
+                                    if tutorialStep == .tapCreateButton {
+                                        tutorialStep = .searchSong
+                                        showingInteractiveTutorial = true
+                                        wasTutorialPost = true // チュートリアル中の投稿であることを記録
+                                        print("➕ Moved to searchSong step, marked as tutorial post")
+                                    }
                                     showingCreatePost = true
                                     showingMenu = false
                                 }
+                                .captureFrame(in: $createButtonFrame)
 
                                 // Search button
                                 FloatingMenuButton(icon: "magnifyingglass", label: "ユーザー検索") {
@@ -307,6 +320,31 @@ struct FeedView: View {
                     .padding(.bottom, 100)
                 }
             }
+
+            // Interactive Tutorial Overlay
+            if showingInteractiveTutorial && tutorialStep != .searchSong {
+                InteractiveTutorialView(
+                    isPresented: $showingInteractiveTutorial,
+                    currentStep: $tutorialStep,
+                    targetFrame: tutorialStep == .tapCreateButton ? createButtonFrame : nil,
+                    onNext: {
+                        if tutorialStep == .welcome {
+                            tutorialStep = .tapCreateButton
+                            // メニューを自動で開く
+                            withAnimation {
+                                showingMenu = true
+                            }
+                            // Warmup search in background for faster first search
+                            Task {
+                                await MusicKitManager.shared.warmupSearch()
+                            }
+                        } else if tutorialStep == .completed {
+                            showingInteractiveTutorial = false
+                            UserDefaults.standard.set(true, forKey: "hasCompletedTutorial")
+                        }
+                    }
+                )
+            }
         }
         .ignoresSafeArea()
         .refreshable {
@@ -351,11 +389,37 @@ struct FeedView: View {
         }
         .fullScreenCover(isPresented: $showingCreatePost, onDismiss: {
             if postCreated {
+                print("🎉 Post created, refreshing feed...")
                 refreshTrigger.toggle()
+
+                // チュートリアル中の投稿だった場合、フィード更新後に完了モーダルを表示
+                if wasTutorialPost {
+                    print("🎉 Tutorial post detected, will show completion modal after feed refresh")
+                    // フィードの更新を待つ
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        print("🎉 Showing tutorial completion modal")
+                        tutorialStep = .completed
+                        showingInteractiveTutorial = true
+                        wasTutorialPost = false // リセット
+                        // UserDefaultsの設定は完了ボタンを押した時に行う
+                    }
+                }
+
                 postCreated = false
             }
         }) {
-            CreatePostView(postCreated: $postCreated)
+            CreatePostView(postCreated: $postCreated, tutorialStep: $tutorialStep, showingInteractiveTutorial: $showingInteractiveTutorial)
+        }
+        .fullScreenCover(isPresented: $showingOnboarding, onDismiss: {
+            // After onboarding is dismissed, check if we should show interactive tutorial
+            if !UserDefaults.standard.bool(forKey: "hasCompletedTutorial") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    showingInteractiveTutorial = true
+                    tutorialStep = .welcome
+                }
+            }
+        }) {
+            OnboardingView(isPresented: $showingOnboarding)
         }
         .task {
             await loadUnreadCount()
@@ -364,6 +428,22 @@ struct FeedView: View {
         .onAppear {
             startNotificationPolling()
             viewModel.startPolling()
+
+            // Check if user has seen onboarding
+            if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
+                // Small delay to let the view load first
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    showingOnboarding = true
+                }
+            }
+            // Check if user has completed interactive tutorial
+            else if !UserDefaults.standard.bool(forKey: "hasCompletedTutorial") {
+                // Start interactive tutorial after onboarding
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    showingInteractiveTutorial = true
+                    tutorialStep = .welcome
+                }
+            }
         }
         .onDisappear {
             stopNotificationPolling()
@@ -528,7 +608,7 @@ struct AllUserPostsView: View {
                     .ignoresSafeArea()
 
                 // Main content with horizontal slide (same as vertical)
-                if !allUserPosts.isEmpty && currentUserIndex < allUserPosts.count {
+                if !allUserPosts.isEmpty {
                     ZStack {
                         let previousIndex = (currentUserIndex - 1 + allUserPosts.count) % allUserPosts.count
                         let nextIndex = (currentUserIndex + 1) % allUserPosts.count
@@ -599,6 +679,10 @@ struct AllUserPostsView: View {
 
                                         // Update state immediately to prepare new views
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                                            guard !allUserPosts.isEmpty else {
+                                                isAnimating = false
+                                                return
+                                            }
                                             var transaction = Transaction()
                                             transaction.disablesAnimations = true
                                             withTransaction(transaction) {
@@ -618,6 +702,10 @@ struct AllUserPostsView: View {
 
                                         // Update state immediately to prepare new views
                                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.02) {
+                                            guard !allUserPosts.isEmpty else {
+                                                isAnimating = false
+                                                return
+                                            }
                                             var transaction = Transaction()
                                             transaction.disablesAnimations = true
                                             withTransaction(transaction) {
@@ -647,6 +735,12 @@ struct AllUserPostsView: View {
             if let index = notification.userInfo?["index"] as? Int {
                 print("📻 ScrollToUser notification received - target index: \(index), current index: \(currentUserIndex), skipNextAutoPlay: \(skipNextAutoPlay)")
 
+                // Validate index is within bounds
+                guard index >= 0 && index < allUserPosts.count else {
+                    print("⚠️ ScrollToUser: Invalid index \(index) for allUserPosts count \(allUserPosts.count)")
+                    return
+                }
+
                 // Check if skipAutoPlay flag is set (from notification or binding)
                 if skipNextAutoPlay || (notification.userInfo?["skipAutoPlay"] as? Bool ?? false) {
                     skipAutoPlay = true
@@ -661,9 +755,15 @@ struct AllUserPostsView: View {
                 print("📻 Updated currentUserIndex to: \(currentUserIndex)")
 
                 // If postIndex is specified, send ScrollToPost notification after user transition
-                if let postIndex = notification.userInfo?["postIndex"] as? Int {
+                if let postIndex = notification.userInfo?["postIndex"] as? Int,
+                   index < allUserPosts.count {
                     print("📻 Will scroll to post index: \(postIndex)")
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        // Double-check array bounds before accessing
+                        guard index < allUserPosts.count else {
+                            print("⚠️ Index \(index) out of bounds for allUserPosts (count: \(allUserPosts.count))")
+                            return
+                        }
                         NotificationCenter.default.post(
                             name: NSNotification.Name("ScrollToPost"),
                             object: nil,
@@ -681,13 +781,28 @@ struct AllUserPostsView: View {
                 }
             }
         }
+        .onChange(of: allUserPosts.count) { newCount in
+            print("⚠️ AllUserPostsView: allUserPosts count changed to \(newCount), currentUserIndex: \(currentUserIndex)")
+            // Reset currentUserIndex if it's out of bounds
+            if newCount == 0 {
+                currentUserIndex = 0
+                print("⚠️ AllUserPostsView: Reset currentUserIndex to 0 (empty array)")
+            } else if currentUserIndex >= newCount {
+                currentUserIndex = 0
+                print("⚠️ AllUserPostsView: Reset currentUserIndex to 0 (was out of bounds: \(currentUserIndex) >= \(newCount))")
+            }
+        }
         .onChange(of: currentUserIndex) { newIndex in
             currentDisplayedUserIndex = newIndex
             print("📻 AllUserPostsView: Updated currentDisplayedUserIndex to \(newIndex)")
         }
         .onAppear {
-            currentDisplayedUserIndex = currentUserIndex
-            print("📻 AllUserPostsView: Initialized currentDisplayedUserIndex to \(currentUserIndex)")
+            if !allUserPosts.isEmpty {
+                currentDisplayedUserIndex = currentUserIndex
+                print("📻 AllUserPostsView: Initialized currentDisplayedUserIndex to \(currentUserIndex)")
+            } else {
+                print("⚠️ AllUserPostsView: allUserPosts is empty, not setting currentDisplayedUserIndex")
+            }
         }
     }
 }

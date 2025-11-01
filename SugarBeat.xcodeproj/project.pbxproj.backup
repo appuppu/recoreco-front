@@ -8,8 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		48aa942ea134882436a0ff87 /* MusicPermissionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0280860465fc676bd70c7d35 /* MusicPermissionView.swift */; };
-		7F5B57C3B662E7311207CB9E /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13DD3F9848C5A9F165D64E50 /* OnboardingView.swift */; };
-		9876543210FEDCBA98765432 /* InteractiveTutorialView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6789012345678 /* InteractiveTutorialView.swift */; };
 		633936646265366433306666343332316135303036366130 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 356338626661613665323833343765613963313637643138 /* FollowListView.swift */; };
 
 		008D9DA98E3D92AA0CF1F742 /* WaveformRangeSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0520DF8701555C7D9FDE6B1 /* WaveformRangeSelectorView.swift */; };
@@ -55,8 +53,6 @@
 
 /* Begin PBXFileReference section */
 		0280860465fc676bd70c7d35 /* MusicPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicPermissionView.swift; sourceTree = "<group>"; };
-		13DD3F9848C5A9F165D64E50 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F6789012345678 /* InteractiveTutorialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractiveTutorialView.swift; sourceTree = "<group>"; };
 		356338626661613665323833343765613963313637643138 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
 
 		13C3331FD9F72180FDA3F984 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
@@ -162,8 +158,6 @@
 			isa = PBXGroup;
 			children = (
 				0280860465fc676bd70c7d35 /* MusicPermissionView.swift */,
-				13DD3F9848C5A9F165D64E50 /* OnboardingView.swift */,
-				A1B2C3D4E5F6789012345678 /* InteractiveTutorialView.swift */,
 				F5701DF1321EE3E818035EE7 /* BlockedUsersView.swift */,
 				DD72D37F34C087EDA9BBCBDF /* ContentView.swift */,
 				350488B629EE3F78ECB253A4 /* FeedView.swift */,
@@ -284,8 +278,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				48aa942ea134882436a0ff87 /* MusicPermissionView.swift in Sources */,
-				7F5B57C3B662E7311207CB9E /* OnboardingView.swift in Sources */,
-				9876543210FEDCBA98765432 /* InteractiveTutorialView.swift in Sources */,
 				F1F8A637CF27E3AF82C4B7C5 /* APIClient.swift in Sources */,
 				4DFA5E2032F7D459A2F331C0 /* AuthManager.swift in Sources */,
 				423A8DAC58D7DCD6A6EB95C5 /* AuthModels.swift in Sources */,

@@ -189,9 +189,9 @@ struct NotificationRow: View {
         case "FOLLOW":
             return "\(displayName)さんにフォローされました"
         case "LIKE":
-            return "\(displayName)さんがあなたの投稿にいいねしました"
+            return "\(displayName)さんがあなたの紹介にいいねしました"
         case "COMMENT":
-            return "\(displayName)さんがあなたの投稿にコメントしました"
+            return "\(displayName)さんがあなたの紹介にコメントしました"
         default:
             return "\(displayName)さんから通知があります"
         }

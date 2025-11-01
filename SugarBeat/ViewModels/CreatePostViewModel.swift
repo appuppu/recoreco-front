@@ -208,7 +208,7 @@ class CreatePostViewModel: ObservableObject {
 
             // Validate comment length
             if comment.count > 50 {
-                errorMessage = "投稿文は50文字以内で入力してください"
+                errorMessage = "紹介文は50文字以内で入力してください"
                 isPosting = false
                 return
             }
@@ -252,7 +252,7 @@ class CreatePostViewModel: ObservableObject {
             errorMessage = "サーバーエラー"
             postCreated = false
         } catch APIError.decodingFailed {
-            errorMessage = "投稿は成功しましたが、表示に問題があります"
+            errorMessage = "紹介は成功しましたが、表示に問題があります"
             // Still mark as created since post was likely successful
             postCreated = true
 
@@ -263,7 +263,7 @@ class CreatePostViewModel: ObservableObject {
             searchQuery = ""
             searchResults = []
         } catch {
-            errorMessage = "投稿に失敗しました"
+            errorMessage = "紹介に失敗しました"
             postCreated = false
         }
 

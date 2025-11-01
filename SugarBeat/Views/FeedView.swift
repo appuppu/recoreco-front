@@ -40,10 +40,10 @@ struct FeedView: View {
                     Image(systemName: "music.note")
                         .font(.system(size: 60))
                         .foregroundColor(.white.opacity(0.4))
-                    Text("投稿がありません")
+                    Text("紹介がありません")
                         .font(.title2)
                         .foregroundColor(.white.opacity(0.7))
-                    Text("投稿を作成するか、ユーザーをフォローして音楽を共有しましょう")
+                    Text("紹介を作成するか、ユーザーをフォローして音楽を共有しましょう")
                         .font(.caption)
                         .foregroundColor(.white.opacity(0.5))
                         .multilineTextAlignment(.center)
@@ -211,13 +211,13 @@ struct FeedView: View {
                                 }
 
                                 // Post button
-                                FloatingMenuButton(icon: "plus", label: "投稿") {
+                                FloatingMenuButton(icon: "plus", label: "紹介") {
                                     showingCreatePost = true
                                     showingMenu = false
                                 }
 
                                 // Search button
-                                FloatingMenuButton(icon: "magnifyingglass", label: "検索") {
+                                FloatingMenuButton(icon: "magnifyingglass", label: "ユーザー検索") {
                                     showingUserSearch = true
                                     showingMenu = false
                                 }
@@ -717,7 +717,7 @@ struct UserPostsScrollView: View {
                             Image(systemName: "music.note")
                                 .font(.system(size: 60))
                                 .foregroundColor(.secondary)
-                            Text("投稿がありません")
+                            Text("紹介がありません")
                                 .font(.title2)
                                 .foregroundColor(.secondary)
                         }
@@ -1390,7 +1390,7 @@ struct PostCardView: View {
             }
             Button("キャンセル", role: .cancel) { }
         }
-        .alert("投稿を削除", isPresented: $showingDeleteConfirmation) {
+        .alert("紹介を削除", isPresented: $showingDeleteConfirmation) {
             Button("キャンセル", role: .cancel) { }
             Button("削除", role: .destructive) {
                 Task {
@@ -1398,7 +1398,7 @@ struct PostCardView: View {
                 }
             }
         } message: {
-            Text("この投稿を削除してもよろしいですか？")
+            Text("この紹介を削除してもよろしいですか？")
         }
         .overlay(
             Group {

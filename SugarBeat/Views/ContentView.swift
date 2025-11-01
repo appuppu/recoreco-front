@@ -40,7 +40,7 @@ struct CreatePostView: View {
                                 .foregroundColor(.white.opacity(0.8))
                         }
                         Spacer()
-                        Text("新規投稿")
+                        Text("新規音楽紹介")
                             .font(.title3)
                             .fontWeight(.bold)
                             .foregroundColor(.white)
@@ -230,7 +230,7 @@ struct CreatePostView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding()
                             } else {
-                                Text("投稿")
+                                Text("紹介")
                                     .font(.headline)
                                     .foregroundColor(.white)
                                     .frame(maxWidth: .infinity)
@@ -257,7 +257,7 @@ struct CreatePostView: View {
                         Image(systemName: "music.note.list")
                             .font(.system(size: 60))
                             .foregroundColor(.white.opacity(0.5))
-                        Text("曲を検索して投稿を作成")
+                        Text("曲を検索して紹介")
                             .font(.headline)
                             .foregroundColor(.white.opacity(0.7))
                     }

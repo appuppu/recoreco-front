@@ -56,7 +56,7 @@ struct ReportPostView: View {
                     .disabled(isSubmitting)
                 }
             }
-            .navigationTitle("投稿を報告")
+            .navigationTitle("紹介を報告")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -72,7 +72,7 @@ struct ReportPostView: View {
                 dismiss()
             }
         } message: {
-            Text("投稿を報告しました")
+            Text("紹介を報告しました")
         }
         .alert("エラー", isPresented: $showingErrorAlert) {
             Button("OK") { }

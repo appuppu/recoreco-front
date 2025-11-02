@@ -244,6 +244,9 @@ class UserSearchViewModel: ObservableObject {
                     followerCount: updatedUser.followerCount
                 )
             }
+
+            // Notify FeedView to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("FollowStatusChanged"), object: nil)
         } catch {
             errorMessage = "フォローに失敗しました: \(error.localizedDescription)"
         }
@@ -271,6 +274,9 @@ class UserSearchViewModel: ObservableObject {
                     followerCount: updatedUser.followerCount
                 )
             }
+
+            // Notify FeedView to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("FollowStatusChanged"), object: nil)
         } catch {
             errorMessage = "アンフォローに失敗しました: \(error.localizedDescription)"
         }

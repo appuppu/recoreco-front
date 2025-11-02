@@ -13,8 +13,11 @@ class FeedViewModel: ObservableObject {
     @Published var allUserPosts: [UserPosts] = [] // All users including self, sorted by latest post
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var hasUnreadDiscoveryPosts = false
+    @Published var usersWithUnreadPosts: Set<Int64> = [] // Track users with new posts
 
     private var latestPostDate: Date?
+    private var latestDiscoveryPostDate: Date?
     private var pollingTask: Task<Void, Never>?
 
     func loadFeed() async {
@@ -28,12 +31,12 @@ class FeedViewModel: ObservableObject {
                 return
             }
 
-            // Load discovery feed
-            let discoveryPosts = try await APIClient.shared.getDiscoveryFeed()
+            // Load discovery feed (limit to 20 posts for performance)
+            let discoveryPosts = try await APIClient.shared.getDiscoveryFeed(page: 0, size: 20)
             print("📥 Loaded \(discoveryPosts.count) posts from discovery feed")
 
-            // Load current user's posts
-            let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId)
+            // Load current user's posts (limit to 20 posts for performance)
+            let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId, page: 0, size: 20)
             print("📥 Loaded \(currentUserPostsList.count) posts for current user \(currentUserId)")
 
             // Get mutual follows feed
@@ -59,14 +62,14 @@ class FeedViewModel: ObservableObject {
                 $1.posts.first?.createdAt ?? Date.distantPast
             }
 
+            // Update latest post date for polling (BEFORE moving current user to front)
+            latestPostDate = allUserPosts.first?.posts.first?.createdAt
+
             // Move current user to the front (always first)
             if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
                 let currentUser = allUserPosts.remove(at: currentUserIndex)
                 allUserPosts.insert(currentUser, at: 0)
             }
-
-            // Update latest post date for polling (before adding discovery tab)
-            latestPostDate = allUserPosts.first?.posts.first?.createdAt
 
             // Add discovery feed at the beginning (leftmost) with special ID -1
             // Always add discovery tab even if there are no posts
@@ -91,6 +94,9 @@ class FeedViewModel: ObservableObject {
                 posts: discoveryPosts.sorted { $0.createdAt > $1.createdAt }
             )
             allUserPosts.insert(discoveryUserPosts, at: 0)
+
+            // Update latest discovery post date
+            latestDiscoveryPostDate = discoveryUserPosts.posts.first?.createdAt
 
             // Update LikeStateManager and CommentStateManager with server data
             for userPosts in allUserPosts {
@@ -127,14 +133,14 @@ class FeedViewModel: ObservableObject {
         await loadFeed()
     }
 
-    // Start polling for new posts every 60 seconds
+    // Start polling for new posts every 30 seconds
     func startPolling() {
         stopPolling() // Stop any existing polling
 
         pollingTask = Task {
             while !Task.isCancelled {
-                // Wait 60 seconds before checking
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
+                // Wait 30 seconds before checking
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
 
                 if Task.isCancelled { break }
 
@@ -142,7 +148,7 @@ class FeedViewModel: ObservableObject {
             }
         }
 
-        print("🔄 Started polling for new posts (60s interval)")
+        print("🔄 Started polling for new posts (30s interval)")
     }
 
     // Stop polling
@@ -164,11 +170,11 @@ class FeedViewModel: ObservableObject {
                 return
             }
 
-            // Load discovery feed
-            let discoveryPosts = try await APIClient.shared.getDiscoveryFeed()
+            // Load discovery feed (only check recent 10 posts for efficiency during polling)
+            let discoveryPosts = try await APIClient.shared.getDiscoveryFeed(page: 0, size: 10)
 
-            // Load current user's posts
-            let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId)
+            // Load current user's posts (only check recent 10 posts for efficiency during polling)
+            let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId, page: 0, size: 10)
 
             // Get mutual follows feed
             let mutualFollowsPosts = try await APIClient.shared.getMutualFollowsFeed()
@@ -176,11 +182,34 @@ class FeedViewModel: ObservableObject {
             // Combine posts
             let allPosts = currentUserPostsList + mutualFollowsPosts
 
-            // Check if there are any new posts
-            let hasNewPosts = allPosts.contains { $0.createdAt > latestDate }
+            // Check if there are any new posts in follows or discovery
+            let hasNewFollowPosts = allPosts.contains { $0.createdAt > latestDate }
 
-            if hasNewPosts {
-                print("🆕 New posts detected, refreshing feed silently")
+            let hasNewDiscoveryPosts: Bool
+            if let latestDiscoveryDate = latestDiscoveryPostDate {
+                hasNewDiscoveryPosts = discoveryPosts.contains { $0.createdAt > latestDiscoveryDate }
+            } else {
+                hasNewDiscoveryPosts = !discoveryPosts.isEmpty
+            }
+
+            if hasNewFollowPosts || hasNewDiscoveryPosts {
+                print("🆕 New posts detected (follow: \(hasNewFollowPosts), discovery: \(hasNewDiscoveryPosts)), refreshing feed silently")
+
+                // Set unread flag for discovery if new posts detected
+                if hasNewDiscoveryPosts {
+                    self.hasUnreadDiscoveryPosts = true
+                }
+
+                // Track which users have new posts
+                if hasNewFollowPosts {
+                    var usersWithNewPosts: Set<Int64> = []
+                    for post in allPosts {
+                        if post.createdAt > latestDate {
+                            usersWithNewPosts.insert(post.user.id)
+                        }
+                    }
+                    self.usersWithUnreadPosts.formUnion(usersWithNewPosts)
+                }
 
                 // Group posts by user
                 let grouped = Dictionary(grouping: allPosts) { $0.user.id }
@@ -197,14 +226,14 @@ class FeedViewModel: ObservableObject {
                     $1.posts.first?.createdAt ?? Date.distantPast
                 }
 
+                // Update latest post date (BEFORE moving current user to front)
+                latestPostDate = allUserPosts.first?.posts.first?.createdAt
+
                 // Move current user to the front (always first)
                 if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
                     let currentUser = allUserPosts.remove(at: currentUserIndex)
                     allUserPosts.insert(currentUser, at: 0)
                 }
-
-                // Update latest post date (before adding discovery tab)
-                latestPostDate = allUserPosts.first?.posts.first?.createdAt
 
                 // Add discovery feed at the beginning (leftmost) with special ID -1
                 // Always add discovery tab even if there are no posts
@@ -229,6 +258,9 @@ class FeedViewModel: ObservableObject {
                     posts: discoveryPosts.sorted { $0.createdAt > $1.createdAt }
                 )
                 allUserPosts.insert(discoveryUserPosts, at: 0)
+
+                // Update latest discovery post date
+                latestDiscoveryPostDate = discoveryUserPosts.posts.first?.createdAt
 
                 // Update LikeStateManager and CommentStateManager with server data
                 for userPosts in allUserPosts {

@@ -130,7 +130,7 @@ struct SignUpView: View {
                             HStack(spacing: 20) {
                                 Button(action: {
                                     urlTitle = "利用規約"
-                                    urlToOpen = URL(string: "https://fukushimatakumi.github.io/sugarbeat/terms.html")
+                                    urlToOpen = URL(string: "https://appuppu.github.io/docs/terms.html")
                                     showingUrlConfirmation = true
                                 }) {
                                     Text("利用規約")
@@ -144,7 +144,7 @@ struct SignUpView: View {
 
                                 Button(action: {
                                     urlTitle = "プライバシーポリシー"
-                                    urlToOpen = URL(string: "https://fukushimatakumi.github.io/sugarbeat/privacy.html")
+                                    urlToOpen = URL(string: "https://appuppu.github.io/docs/privacy.html")
                                     showingUrlConfirmation = true
                                 }) {
                                     Text("プライバシーポリシー")

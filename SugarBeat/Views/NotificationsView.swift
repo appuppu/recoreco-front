@@ -155,11 +155,26 @@ struct NotificationRow: View {
 
                 Spacer()
 
-                // Unread indicator
+                // Unread indicator - show "NEW" text
                 if !notification.isRead {
-                    Circle()
-                        .fill(Color.blue)
-                        .frame(width: 10, height: 10)
+                    Text("NEW")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.orange,
+                                    Color.red
+                                ]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule()
+                                .fill(Color.black.opacity(0.6))
+                        )
                 }
 
                 // Icon based on type

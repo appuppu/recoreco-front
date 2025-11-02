@@ -8,7 +8,7 @@ struct CreatePostRequest: Codable {
     let artworkUrl: String?
     let previewUrl: String?
     let appleMusicUrl: String?
-    let comment: String?
+    let comment: String
     let startTime: Double
     let endTime: Double
 }

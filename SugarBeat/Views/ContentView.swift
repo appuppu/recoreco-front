@@ -318,7 +318,8 @@ struct CreatePostView: View {
                                     .cornerRadius(12)
                             }
                         }
-                        .disabled(viewModel.isPosting || viewModel.isFetchingPreview)
+                        .disabled(viewModel.isPosting || viewModel.isFetchingPreview || viewModel.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .opacity((viewModel.isPosting || viewModel.isFetchingPreview || viewModel.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1.0)
                         .padding(.horizontal)
                         .padding(.bottom, 20)
                     }

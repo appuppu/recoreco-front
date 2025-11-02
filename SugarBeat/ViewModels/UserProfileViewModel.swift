@@ -26,6 +26,9 @@ class UserProfileViewModel: ObservableObject {
         do {
             try await APIClient.shared.followUser(userId: userId)
             await loadUser(userId: userId) // Refresh user data
+
+            // Notify FeedView to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("FollowStatusChanged"), object: nil)
         } catch {
             errorMessage = "Failed to follow user: \(error.localizedDescription)"
         }
@@ -35,6 +38,9 @@ class UserProfileViewModel: ObservableObject {
         do {
             try await APIClient.shared.unfollowUser(userId: userId)
             await loadUser(userId: userId) // Refresh user data
+
+            // Notify FeedView to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("FollowStatusChanged"), object: nil)
         } catch {
             errorMessage = "Failed to unfollow user: \(error.localizedDescription)"
         }

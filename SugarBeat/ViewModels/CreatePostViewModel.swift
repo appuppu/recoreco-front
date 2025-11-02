@@ -229,8 +229,16 @@ class CreatePostViewModel: ObservableObject {
                 return
             }
 
+            // Validate comment is not empty
+            let trimmedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedComment.isEmpty {
+                errorMessage = "紹介文を入力してください"
+                isPosting = false
+                return
+            }
+
             // Validate comment length
-            if comment.count > 50 {
+            if trimmedComment.count > 50 {
                 errorMessage = "紹介文は50文字以内で入力してください"
                 isPosting = false
                 return
@@ -251,7 +259,7 @@ class CreatePostViewModel: ObservableObject {
                 artworkUrl: artworkUrl,
                 previewUrl: previewURL,
                 appleMusicUrl: song.url?.absoluteString,
-                comment: comment.isEmpty ? nil : comment,
+                comment: trimmedComment,
                 startTime: startTime,
                 endTime: endTime
             )

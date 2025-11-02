@@ -92,8 +92,11 @@ struct ProfileView: View {
 
                             // Public/Private Toggle
                             HStack {
+                                Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white)
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("公開アカウント")
+                                    Text("\(user.isPublic == true ? "公開アカウント" : "非公開アカウント")（現在）")
                                         .font(.system(size: 16, weight: .medium))
                                         .foregroundColor(.white)
                                     Text(user.isPublic == true ? "すべてのユーザーがあなたの投稿を閲覧できます" : "相互フォローのユーザーのみ閲覧できます")
@@ -184,7 +187,7 @@ struct ProfileView: View {
                             HStack(spacing: 20) {
                                 Button(action: {
                                     urlTitle = "利用規約"
-                                    urlToOpen = URL(string: "https://fukushimatakumi.github.io/sugarbeat/terms.html")
+                                    urlToOpen = URL(string: "https://appuppu.github.io/docs/terms.html")
                                     showingUrlConfirmation = true
                                 }) {
                                     Text("利用規約")
@@ -198,7 +201,7 @@ struct ProfileView: View {
 
                                 Button(action: {
                                     urlTitle = "プライバシーポリシー"
-                                    urlToOpen = URL(string: "https://fukushimatakumi.github.io/sugarbeat/privacy.html")
+                                    urlToOpen = URL(string: "https://appuppu.github.io/docs/privacy.html")
                                     showingUrlConfirmation = true
                                 }) {
                                     Text("プライバシーポリシー")
@@ -310,7 +313,9 @@ class ProfileViewModel: ObservableObject {
                 isPublic: isPublic
             )
             currentUser = try await APIClient.shared.updateProfile(request: request)
-            print("✅ Updated public status to: \(isPublic)")
+
+            // Notify FeedView to refresh after public status change
+            NotificationCenter.default.post(name: NSNotification.Name("PublicStatusChanged"), object: nil)
         } catch {
             print("❌ Failed to update public status: \(error)")
             // Reload to revert the toggle

@@ -123,7 +123,9 @@ struct FeedView: View {
                                         userPosts: userPosts,
                                         currentPostIndex: userCurrentPostIndices[userPosts.user.id] ?? 0,
                                         unreadCount: unreadPostCounts[userPosts.user.id] ?? 0,
-                                        hasUnreadPosts: unreadPostsManager.hasUnreadPosts(in: userPosts.posts)
+                                        hasUnreadPosts: userPosts.user.id == -1
+                                            ? viewModel.hasUnreadDiscoveryPosts
+                                            : (viewModel.usersWithUnreadPosts.contains(userPosts.user.id) || unreadPostsManager.hasUnreadPosts(in: userPosts.posts))
                                     )
                                     .frame(width: 60, height: 72)
                                     .id("\(userPosts.user.id)-\(index)")
@@ -188,8 +190,22 @@ struct FeedView: View {
                                                     }
                                                 }
 
-                                                // Mark posts as viewed
+                                                // Mark posts as viewed and read
                                                 Task {
+                                                    // Mark all posts in this tab as read locally (for Discovery)
+                                                    for post in targetUserPosts.posts {
+                                                        unreadPostsManager.markAsRead(post.id)
+                                                    }
+
+                                                    // Clear Discovery unread flag if this is the Discovery tab
+                                                    if targetUserId == -1 {
+                                                        viewModel.hasUnreadDiscoveryPosts = false
+                                                    } else {
+                                                        // Clear unread flag for this user
+                                                        viewModel.usersWithUnreadPosts.remove(targetUserId)
+                                                    }
+
+                                                    // Mark as viewed on server (for mutual follows)
                                                     do {
                                                         try await APIClient.shared.markPostsAsViewed(targetUserId: targetUserId)
                                                         await loadUnreadPostCounts()
@@ -449,6 +465,9 @@ struct FeedView: View {
             if postCreated {
                 print("🎉 Post created, refreshing feed...")
 
+                // Reset swipe hint timer after post creation
+                resetSwipeHintTimer()
+
                 // 投稿後、自分のタブを表示するため、現在のユーザーIDを保存
                 let currentUserId = APIClient.shared.currentUserId
                 print("🔍 Current user ID: \(currentUserId ?? -999)")
@@ -590,6 +609,18 @@ struct FeedView: View {
                 // Find user display name for better logging
                 if let userPosts = viewModel.allUserPosts.first(where: { $0.user.id == userId }) {
                 }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("FollowStatusChanged"))) { _ in
+            // Refresh feed when follow status changes
+            Task {
+                refreshTrigger.toggle()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PublicStatusChanged"))) { _ in
+            // Refresh feed when public status changes
+            Task {
+                refreshTrigger.toggle()
             }
         }
     }
@@ -1455,9 +1486,14 @@ struct PostCardView: View {
                                     )
                                     .lineLimit(1)
 
-                                    Text(timeAgoString(from: post.createdAt))
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.white.opacity(0.6))
+                                    HStack(spacing: 4) {
+                                        Text(timeAgoString(from: post.createdAt))
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.white.opacity(0.6))
+                                        Image(systemName: post.user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.white.opacity(0.6))
+                                    }
                                 }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
@@ -2389,29 +2425,31 @@ struct UserRadioButton: View {
     var body: some View {
         VStack(spacing: 4) {
             // User name
-            Text(APIClient.shared.currentUserId == userPosts.user.id ? "あなた" : userPosts.user.displayName)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(
-                    APIClient.shared.currentUserId == userPosts.user.id ?
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.orange,
-                            Color.red
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    ) :
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.white.opacity(0.8),
-                            Color.white.opacity(0.8)
-                        ]),
-                        startPoint: .leading,
-                        endPoint: .trailing
+            HStack(spacing: 2) {
+                Text(APIClient.shared.currentUserId == userPosts.user.id ? "あなた" : userPosts.user.displayName)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(
+                        APIClient.shared.currentUserId == userPosts.user.id ?
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.orange,
+                                Color.red
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ) :
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.white.opacity(0.8),
+                                Color.white.opacity(0.8)
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
                     )
-                )
-                .lineLimit(1)
-                .frame(width: 60, height: 14, alignment: .center)
+                    .lineLimit(1)
+            }
+            .frame(width: 60, height: 14, alignment: .center)
 
             ZStack {
             // Main circle with border
@@ -2497,7 +2535,7 @@ struct UserRadioButton: View {
                     }
                 }
 
-                // Border with gradient - orange when playing
+                // Border with gradient - orange when playing, white otherwise
                 Circle()
                     .strokeBorder(
                         LinearGradient(
@@ -2522,46 +2560,31 @@ struct UserRadioButton: View {
                         .transition(.opacity)
                 }
 
-                // Unread badge
-                if unreadCount > 0 {
+                // Unread badge - show "NEW" text
+                if unreadCount > 0 || (hasUnreadPosts && unreadCount == 0) {
                     VStack {
                         HStack {
                             Spacer()
-                            ZStack {
-                                // Pulsing background
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color.purple.opacity(0.5),
-                                                Color.blue.opacity(0.5)
-                                            ]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
+                            Text("NEW")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color.orange,
+                                            Color.red
+                                        ]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
                                     )
-                                    .frame(width: 18, height: 18)
-                                    .scaleEffect(1.2)
-                                    .opacity(0.6)
-                                    .modifier(PulseAnimation())
-
-                                Text(unreadCount > 9 ? "9+" : "\(unreadCount)")
-                                    .font(.system(size: 8, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .padding(3)
-                                    .background(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color.purple,
-                                                Color.blue
-                                            ]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .clipShape(Circle())
-                            }
-                            .offset(x: 8, y: -8)
+                                )
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.black.opacity(0.6))
+                                )
+                                .modifier(PulseAnimation())
+                                .offset(x: 8, y: -8)
                         }
                         Spacer()
                     }

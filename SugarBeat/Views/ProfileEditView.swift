@@ -151,7 +151,8 @@ struct ProfileEditView: View {
                                         displayName: displayName,
                                         bio: bio,
                                         pendingImage: pendingImage,
-                                        currentImageUrl: currentUser.profileImageUrl
+                                        currentImageUrl: currentUser.profileImageUrl,
+                                        isPublic: currentUser.isPublic
                                     )
                                     if viewModel.errorMessage == nil {
                                         dismiss()
@@ -210,7 +211,7 @@ class ProfileEditViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    func saveProfile(displayName: String, bio: String, pendingImage: UIImage?, currentImageUrl: String?) async {
+    func saveProfile(displayName: String, bio: String, pendingImage: UIImage?, currentImageUrl: String?, isPublic: Bool?) async {
         // Validate before submitting
         if displayName.count > 10 {
             errorMessage = "ユーザー名は10文字以内で入力してください"
@@ -244,7 +245,8 @@ class ProfileEditViewModel: ObservableObject {
             let request = APIClient.UpdateProfileRequest(
                 displayName: displayName,
                 profileImageUrl: profileImageUrl,
-                bio: bio.isEmpty ? nil : bio
+                bio: bio.isEmpty ? nil : bio,
+                isPublic: isPublic
             )
 
             let _ = try await APIClient.shared.updateProfile(request: request)

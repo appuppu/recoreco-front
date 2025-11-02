@@ -114,9 +114,14 @@ struct UserProfileView: View {
                         .padding()
                         .padding(.top, 20)
 
-                        // 3x3 Grid of posts (only visible for mutual follows or own profile)
-                        let canViewPosts = (user.isMutual ?? false) ||
-                                          (APIClient.shared.currentUserId == user.id)
+                        // 3x3 Grid of posts
+                        // Can view posts if:
+                        // 1. It's your own profile
+                        // 2. User is public (anyone can view)
+                        // 3. User is private and you have mutual follow
+                        let canViewPosts = (APIClient.shared.currentUserId == user.id) ||
+                                          (user.isPublic == true) ||
+                                          (user.isPublic != true && (user.isMutual ?? false))
 
                         if canViewPosts && !viewModel.posts.isEmpty {
                             LazyVGrid(columns: [
@@ -191,7 +196,7 @@ struct UserProfileView: View {
                                 Image(systemName: "lock.fill")
                                     .font(.system(size: 50))
                                     .foregroundColor(.white.opacity(0.4))
-                                Text("相互フォローで紹介を見ることができます")
+                                Text(user.isPublic == true ? "フォローして紹介を見る" : "相互フォローで紹介を見ることができます")
                                     .font(.system(size: 16))
                                     .foregroundColor(.white.opacity(0.7))
                             }

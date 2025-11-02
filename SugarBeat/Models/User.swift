@@ -7,6 +7,7 @@ struct User: Codable, Identifiable {
     let displayName: String
     let profileImageUrl: String?
     let bio: String?
+    let isPublic: Bool?
     let createdAt: Date?
     let isFollowing: Bool?
     let isFollower: Bool?

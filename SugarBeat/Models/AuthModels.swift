@@ -18,4 +18,5 @@ struct AuthResponse: Codable {
     let email: String
     let displayName: String
     let profileImageUrl: String?
+    let isPublic: Bool?
 }

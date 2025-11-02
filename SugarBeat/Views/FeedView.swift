@@ -1,5 +1,38 @@
 import SwiftUI
 
+// Shared timer coordinator for all radio buttons
+class RadioButtonTimerCoordinator: ObservableObject {
+    static let shared = RadioButtonTimerCoordinator()
+
+    @Published var showingAlbumArt = true
+    private var timer: Task<Void, Never>?
+
+    private init() {
+        startTimer()
+    }
+
+    func startTimer() {
+        timer?.cancel()
+        timer = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+                if !Task.isCancelled {
+                    await MainActor.run {
+                        withAnimation(.easeInOut(duration: 0.8)) {
+                            showingAlbumArt.toggle()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func stopTimer() {
+        timer?.cancel()
+        timer = nil
+    }
+}
+
 struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
     @ObservedObject private var unreadPostsManager = UnreadPostsManager.shared
@@ -1665,7 +1698,16 @@ struct WaveformView: View {
         HStack(spacing: 6) {
             ForEach(0..<5, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.white.opacity(0.8))
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.orange.opacity(0.9),
+                                Color.red.opacity(0.7)
+                            ]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                     .frame(width: 4, height: animationValues[index] * 50)
                     .animation(.easeInOut(duration: 0.3), value: animationValues[index])
             }
@@ -2160,8 +2202,7 @@ struct UserRadioButton: View {
     let hasUnreadPosts: Bool
 
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
-    @State private var showingAlbumArt = true
-    @State private var switchTimer: Task<Void, Never>?
+    @ObservedObject private var timerCoordinator = RadioButtonTimerCoordinator.shared
 
     private var currentPost: Post? {
         guard currentPostIndex < userPosts.posts.count else {
@@ -2191,8 +2232,40 @@ struct UserRadioButton: View {
             ZStack {
             // Main circle with border
             ZStack {
-                // Alternating between album art and profile image
-                if showingAlbumArt {
+                // For discovery tab (user.id == -1), alternate between app icon and album art
+                if userPosts.user.id == -1 {
+                    if timerCoordinator.showingAlbumArt {
+                        // Show album artwork
+                        if let artworkUrl = currentPost?.artworkUrl,
+                           let url = URL(string: artworkUrl) {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .empty:
+                                    placeholderView(isAlbumArt: true)
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 54, height: 54)
+                                        .clipShape(Circle())
+                                case .failure:
+                                    placeholderView(isAlbumArt: true)
+                                @unknown default:
+                                    placeholderView(isAlbumArt: true)
+                                }
+                            }
+                        } else {
+                            placeholderView(isAlbumArt: true)
+                        }
+                    } else {
+                        // Show static app icon (when others show profile)
+                        Image("DiscoveryIcon")
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 54, height: 54)
+                            .clipShape(Circle())
+                    }
+                } else if timerCoordinator.showingAlbumArt {
                     // Album artwork
                     if let artworkUrl = currentPost?.artworkUrl,
                        let url = URL(string: artworkUrl) {
@@ -2315,12 +2388,6 @@ struct UserRadioButton: View {
             .frame(width: 54, height: 54)
             .contentShape(Circle())
         }
-        .onAppear {
-            startSwitchTimer()
-        }
-        .onDisappear {
-            stopSwitchTimer()
-        }
     }
 
     private func placeholderView(isAlbumArt: Bool) -> some View {
@@ -2333,24 +2400,6 @@ struct UserRadioButton: View {
                     .foregroundColor(.white.opacity(0.6))
             )
     }
-
-    private func startSwitchTimer() {
-        switchTimer = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-                if !Task.isCancelled {
-                    withAnimation(.easeInOut(duration: 0.8)) {
-                        showingAlbumArt.toggle()
-                    }
-                }
-            }
-        }
-    }
-
-    private func stopSwitchTimer() {
-        switchTimer?.cancel()
-        switchTimer = nil
-    }
 }
 
 // Mini waveform for radio button
@@ -2362,7 +2411,16 @@ struct MiniWaveformView: View {
         HStack(spacing: 3) {
             ForEach(0..<3, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 1.5)
-                    .fill(Color.white.opacity(0.9))
+                    .fill(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.orange.opacity(0.9),
+                                Color.red.opacity(0.7)
+                            ]),
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
                     .frame(width: 3, height: animationValues[index] * 20)
                     .animation(.easeInOut(duration: 0.3), value: animationValues[index])
             }

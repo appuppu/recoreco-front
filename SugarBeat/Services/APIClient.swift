@@ -35,8 +35,8 @@ struct ErrorResponse: Codable {
 class APIClient {
     static let shared = APIClient()
 
-    private let baseURL = "http://192.168.0.4:8080/api"
-    private let serverBaseURL = "http://192.168.0.4:8080/api"
+    private let baseURL = "http://192.168.0.2:8080/api"
+    private let serverBaseURL = "http://192.168.0.2:8080/api"
     private var authToken: String?
     private(set) var currentUserId: Int64?
 
@@ -140,6 +140,7 @@ class APIClient {
         let displayName: String
         let profileImageUrl: String?
         let bio: String?
+        let isPublic: Bool?
     }
 
     func updateProfile(request: UpdateProfileRequest) async throws -> User {
@@ -199,6 +200,11 @@ class APIClient {
 
     func getMutualFollowsFeed() async throws -> [Post] {
         let url = URL(string: "\(baseURL)/posts/feed")!
+        return try await performRequest(url: url, method: "GET")
+    }
+
+    func getDiscoveryFeed(page: Int = 0, size: Int = 20) async throws -> [Post] {
+        let url = URL(string: "\(baseURL)/posts/discovery?page=\(page)&size=\(size)")!
         return try await performRequest(url: url, method: "GET")
     }
 
@@ -372,7 +378,9 @@ class APIClient {
             throw APIError.invalidResponse(statusCode: -1, data: nil)
         }
 
-        if httpResponse.statusCode == 401 {
+        // Handle authentication errors (401 or 403)
+        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            clearAuthToken()
             throw APIError.unauthorized
         }
 
@@ -409,7 +417,9 @@ class APIClient {
             throw APIError.invalidResponse(statusCode: -1, data: nil)
         }
 
-        if httpResponse.statusCode == 401 {
+        // Handle authentication errors (401 or 403)
+        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+            clearAuthToken()
             throw APIError.unauthorized
         }
 

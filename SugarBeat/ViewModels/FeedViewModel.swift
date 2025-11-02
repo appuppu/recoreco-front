@@ -28,6 +28,10 @@ class FeedViewModel: ObservableObject {
                 return
             }
 
+            // Load discovery feed
+            let discoveryPosts = try await APIClient.shared.getDiscoveryFeed()
+            print("📥 Loaded \(discoveryPosts.count) posts from discovery feed")
+
             // Load current user's posts
             let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId)
             print("📥 Loaded \(currentUserPostsList.count) posts for current user \(currentUserId)")
@@ -61,8 +65,32 @@ class FeedViewModel: ObservableObject {
                 allUserPosts.insert(currentUser, at: 0)
             }
 
-            // Update latest post date for polling
+            // Update latest post date for polling (before adding discovery tab)
             latestPostDate = allUserPosts.first?.posts.first?.createdAt
+
+            // Add discovery feed at the beginning (leftmost) with special ID -1
+            // Always add discovery tab even if there are no posts
+            let discoveryUser = User(
+                id: -1,
+                username: "discovery",
+                email: nil,
+                displayName: "発見",
+                profileImageUrl: nil,
+                bio: nil,
+                isPublic: nil,
+                createdAt: nil,
+                isFollowing: nil,
+                isFollower: nil,
+                isMutual: nil,
+                followingCount: nil,
+                followerCount: nil
+            )
+            let discoveryUserPosts = UserPosts(
+                id: -1,
+                user: discoveryUser,
+                posts: discoveryPosts.sorted { $0.createdAt > $1.createdAt }
+            )
+            allUserPosts.insert(discoveryUserPosts, at: 0)
 
             // Update LikeStateManager and CommentStateManager with server data
             for userPosts in allUserPosts {
@@ -136,6 +164,9 @@ class FeedViewModel: ObservableObject {
                 return
             }
 
+            // Load discovery feed
+            let discoveryPosts = try await APIClient.shared.getDiscoveryFeed()
+
             // Load current user's posts
             let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId)
 
@@ -172,8 +203,32 @@ class FeedViewModel: ObservableObject {
                     allUserPosts.insert(currentUser, at: 0)
                 }
 
-                // Update latest post date
+                // Update latest post date (before adding discovery tab)
                 latestPostDate = allUserPosts.first?.posts.first?.createdAt
+
+                // Add discovery feed at the beginning (leftmost) with special ID -1
+                // Always add discovery tab even if there are no posts
+                let discoveryUser = User(
+                    id: -1,
+                    username: "discovery",
+                    email: nil,
+                    displayName: "発見",
+                    profileImageUrl: nil,
+                    bio: nil,
+                    isPublic: nil,
+                    createdAt: nil,
+                    isFollowing: nil,
+                    isFollower: nil,
+                    isMutual: nil,
+                    followingCount: nil,
+                    followerCount: nil
+                )
+                let discoveryUserPosts = UserPosts(
+                    id: -1,
+                    user: discoveryUser,
+                    posts: discoveryPosts.sorted { $0.createdAt > $1.createdAt }
+                )
+                allUserPosts.insert(discoveryUserPosts, at: 0)
 
                 // Update LikeStateManager and CommentStateManager with server data
                 for userPosts in allUserPosts {

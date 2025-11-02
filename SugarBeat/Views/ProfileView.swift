@@ -5,6 +5,7 @@ struct ProfileView: View {
     @State private var showingEditProfile = false
     @State private var showingBlockedUsers = false
     @State private var showingOnboarding = false
+    @State private var showingDeleteConfirmation = false
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authManager: AuthManager
 
@@ -90,6 +91,32 @@ struct ProfileView: View {
                             .padding(.horizontal, 32)
                             .padding(.top, 16)
 
+                            // Public/Private Toggle
+                            HStack {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("公開アカウント")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.white)
+                                    Text(user.isPublic == true ? "すべてのユーザーがあなたの投稿を閲覧できます" : "相互フォローのユーザーのみ閲覧できます")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
+                                Spacer()
+                                Toggle("", isOn: Binding(
+                                    get: { user.isPublic ?? false },
+                                    set: { newValue in
+                                        Task {
+                                            await viewModel.updatePublicStatus(isPublic: newValue)
+                                        }
+                                    }
+                                ))
+                                .labelsHidden()
+                            }
+                            .padding()
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(10)
+                            .padding(.horizontal, 32)
+
                             // Blocked Users Button
                             Button(action: {
                                 showingBlockedUsers = true
@@ -131,6 +158,20 @@ struct ProfileView: View {
                                 authManager.logout()
                             }) {
                                 Text("ログアウト")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.white.opacity(0.1))
+                                    .cornerRadius(10)
+                            }
+                            .padding(.horizontal, 32)
+
+                            // Delete Account Button
+                            Button(action: {
+                                showingDeleteConfirmation = true
+                            }) {
+                                Text("アカウントを削除")
                                     .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(.red)
                                     .frame(maxWidth: .infinity)
@@ -174,6 +215,20 @@ struct ProfileView: View {
         .fullScreenCover(isPresented: $showingOnboarding) {
             OnboardingView(isPresented: $showingOnboarding)
         }
+        .alert("アカウントの削除", isPresented: $showingDeleteConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("削除", role: .destructive) {
+                Task {
+                    do {
+                        try await authManager.deleteAccount()
+                    } catch {
+                        print("❌ Failed to delete account: \(error)")
+                    }
+                }
+            }
+        } message: {
+            Text("本当にアカウントを削除しますか？この操作は取り消せません。")
+        }
         .task {
             await viewModel.loadCurrentUser()
         }
@@ -202,5 +257,24 @@ class ProfileViewModel: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    func updatePublicStatus(isPublic: Bool) async {
+        guard let user = currentUser else { return }
+
+        do {
+            let request = APIClient.UpdateProfileRequest(
+                displayName: user.displayName,
+                profileImageUrl: user.profileImageUrl,
+                bio: user.bio,
+                isPublic: isPublic
+            )
+            currentUser = try await APIClient.shared.updateProfile(request: request)
+            print("✅ Updated public status to: \(isPublic)")
+        } catch {
+            print("❌ Failed to update public status: \(error)")
+            // Reload to revert the toggle
+            await loadCurrentUser()
+        }
     }
 }

@@ -429,9 +429,37 @@ struct FeedView: View {
             NotificationsView()
         }
         .fullScreenCover(isPresented: $showingCreatePost, onDismiss: {
+            print("🔍 CreatePost dismissed, postCreated: \(postCreated)")
             if postCreated {
                 print("🎉 Post created, refreshing feed...")
+
+                // 投稿後、自分のタブを表示するため、現在のユーザーIDを保存
+                let currentUserId = APIClient.shared.currentUserId
+                print("🔍 Current user ID: \(currentUserId ?? -999)")
+
                 refreshTrigger.toggle()
+
+                // フィード更新が完了するまで待ってから、自分のタブに移動
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    print("🔍 All user posts count after refresh: \(viewModel.allUserPosts.count)")
+                    for (index, userPosts) in viewModel.allUserPosts.enumerated() {
+                        print("🔍 Index \(index): userId=\(userPosts.user.id), displayName=\(userPosts.user.displayName)")
+                    }
+
+                    if let userId = currentUserId {
+                        if let userIndex = viewModel.allUserPosts.firstIndex(where: { $0.user.id == userId }) {
+                            print("🔍 Found current user at index: \(userIndex)")
+                            print("📻 Navigating to current user's tab after post creation (index: \(userIndex))")
+                            print("🔍 Before update - currentDisplayedUserIndex: \(currentDisplayedUserIndex)")
+                            currentDisplayedUserIndex = userIndex
+                            print("🔍 After update - currentDisplayedUserIndex: \(currentDisplayedUserIndex)")
+                        } else {
+                            print("🔍 ❌ Could not find current user in allUserPosts")
+                        }
+                    } else {
+                        print("🔍 ❌ Current user ID is nil")
+                    }
+                }
 
                 // チュートリアル中の投稿だった場合、フィード更新後に完了モーダルを表示
                 if wasTutorialPost {
@@ -639,6 +667,7 @@ struct AllUserPostsView: View {
     @State private var horizontalDragOffset: CGFloat = 0
     @State private var isAnimating = false
     @State private var skipAutoPlay = false
+    @State private var hasInitialized = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -843,10 +872,19 @@ struct AllUserPostsView: View {
             currentDisplayedUserIndex = newIndex
             print("📻 AllUserPostsView: Updated currentDisplayedUserIndex to \(newIndex)")
         }
+        .onChange(of: currentDisplayedUserIndex) { newIndex in
+            if currentUserIndex != newIndex {
+                print("📻 AllUserPostsView: Parent changed currentDisplayedUserIndex to \(newIndex), updating currentUserIndex")
+                currentUserIndex = newIndex
+            }
+        }
         .onAppear {
-            if !allUserPosts.isEmpty {
+            if !hasInitialized && !allUserPosts.isEmpty {
                 currentDisplayedUserIndex = currentUserIndex
+                hasInitialized = true
                 print("📻 AllUserPostsView: Initialized currentDisplayedUserIndex to \(currentUserIndex)")
+            } else if hasInitialized {
+                print("📻 AllUserPostsView: Already initialized, skipping (currentUserIndex: \(currentUserIndex))")
             } else {
                 print("⚠️ AllUserPostsView: allUserPosts is empty, not setting currentDisplayedUserIndex")
             }
@@ -1175,6 +1213,8 @@ struct PostCardView: View {
     @State private var showingReportPostSheet = false
     @State private var showingPostActions = false
     @State private var showingUserProfile = false
+    @State private var showingAppleMusicConfirmation = false
+    @State private var appleMusicUrlToOpen: URL?
     @State private var backgroundScale: CGFloat = 1.0
     @State private var backgroundRotation: Double = 0
 
@@ -1341,38 +1381,44 @@ struct PostCardView: View {
                                     showingUserProfile = true
                                 }
 
-                                HStack(alignment: .bottom, spacing: 2) {
-                                    Text(APIClient.shared.currentUserId == post.user.id ? "あなた" : post.user.displayName)
-                                        .font(.system(size: 14, weight: .semibold))
-                                    Text("のおすすめ")
-                                        .font(.system(size: 11))
-                                }
-                                .foregroundStyle(
-                                    APIClient.shared.currentUserId == post.user.id ?
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.orange,
-                                            Color.red
-                                        ]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    ) :
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.white,
-                                            Color.white
-                                        ]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(alignment: .bottom, spacing: 2) {
+                                        Text(APIClient.shared.currentUserId == post.user.id ? "あなた" : post.user.displayName)
+                                            .font(.system(size: 14, weight: .semibold))
+                                        Text("のおすすめ")
+                                            .font(.system(size: 11))
+                                    }
+                                    .foregroundStyle(
+                                        APIClient.shared.currentUserId == post.user.id ?
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color.orange,
+                                                Color.red
+                                            ]),
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        ) :
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [
+                                                Color.white,
+                                                Color.white
+                                            ]),
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
                                     )
-                                )
+                                    .lineLimit(1)
+
+                                    Text(timeAgoString(from: post.createdAt))
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(
                                     Capsule()
                                         .fill(Color.black.opacity(0.5))
                                 )
-                                .lineLimit(1)
                                 .onTapGesture {
                                     showingUserProfile = true
                                 }
@@ -1556,7 +1602,8 @@ struct PostCardView: View {
             // Apple Music link (always show)
             if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
                 Button("Apple Musicで開く") {
-                    UIApplication.shared.open(url)
+                    appleMusicUrlToOpen = url
+                    showingAppleMusicConfirmation = true
                 }
             }
 
@@ -1607,6 +1654,18 @@ struct PostCardView: View {
                 UserProfileView(userId: post.user.id)
             }
             .navigationViewStyle(.stack)
+        }
+        .alert("外部サイトへ移動", isPresented: $showingAppleMusicConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("移動する") {
+                if let url = appleMusicUrlToOpen {
+                    UIApplication.shared.open(url)
+                }
+            }
+        } message: {
+            if let url = appleMusicUrlToOpen {
+                Text("Apple Musicに移動します。\n\n\(url.absoluteString)")
+            }
         }
     }
 
@@ -2276,7 +2335,7 @@ struct UserRadioButton: View {
     var body: some View {
         VStack(spacing: 4) {
             // User name
-            Text(userPosts.user.displayName)
+            Text(APIClient.shared.currentUserId == userPosts.user.id ? "あなた" : userPosts.user.displayName)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(
                     APIClient.shared.currentUserId == userPosts.user.id ?
@@ -2384,13 +2443,13 @@ struct UserRadioButton: View {
                     }
                 }
 
-                // Border with gradient - different color for unread posts
+                // Border with gradient - orange when playing
                 Circle()
                     .strokeBorder(
                         LinearGradient(
-                            gradient: Gradient(colors: hasUnreadPosts ? [
-                                Color.blue.opacity(0.9),
-                                Color.cyan.opacity(0.9)
+                            gradient: Gradient(colors: isPlaying ? [
+                                Color.orange.opacity(0.9),
+                                Color.red.opacity(0.7)
                             ] : [
                                 Color.white.opacity(0.6),
                                 Color.white.opacity(0.2)
@@ -2398,7 +2457,7 @@ struct UserRadioButton: View {
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: hasUnreadPosts ? 3 : 2
+                        lineWidth: isPlaying ? 3 : 2
                     )
                     .frame(width: 54, height: 54)
 
@@ -2501,5 +2560,33 @@ struct MiniWaveformView: View {
                 animationValues[index] = CGFloat.random(in: 0.3...1.0)
             }
         }
+    }
+}
+
+// Helper function to format time ago
+private func timeAgoString(from date: Date) -> String {
+    let now = Date()
+    let timeInterval = now.timeIntervalSince(date)
+
+    let seconds = Int(timeInterval)
+    let minutes = seconds / 60
+    let hours = minutes / 60
+    let days = hours / 24
+    let weeks = days / 7
+
+    if seconds < 60 {
+        return "たった今"
+    } else if minutes < 60 {
+        return "\(minutes)分前"
+    } else if hours < 24 {
+        return "\(hours)時間前"
+    } else if days < 7 {
+        return "\(days)日前"
+    } else if weeks < 4 {
+        return "\(weeks)週間前"
+    } else {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM/dd"
+        return formatter.string(from: date)
     }
 }

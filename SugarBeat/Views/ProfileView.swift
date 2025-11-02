@@ -6,6 +6,9 @@ struct ProfileView: View {
     @State private var showingBlockedUsers = false
     @State private var showingOnboarding = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingUrlConfirmation = false
+    @State private var urlToOpen: URL?
+    @State private var urlTitle: String = ""
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var authManager: AuthManager
 
@@ -176,6 +179,35 @@ struct ProfileView: View {
                                     .cornerRadius(10)
                             }
                             .padding(.horizontal, 32)
+
+                            // Terms and Privacy links
+                            HStack(spacing: 20) {
+                                Button(action: {
+                                    urlTitle = "利用規約"
+                                    urlToOpen = URL(string: "https://fukushimatakumi.github.io/sugarbeat/terms.html")
+                                    showingUrlConfirmation = true
+                                }) {
+                                    Text("利用規約")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.7))
+                                        .underline()
+                                }
+
+                                Text("・")
+                                    .foregroundColor(.white.opacity(0.5))
+
+                                Button(action: {
+                                    urlTitle = "プライバシーポリシー"
+                                    urlToOpen = URL(string: "https://fukushimatakumi.github.io/sugarbeat/privacy.html")
+                                    showingUrlConfirmation = true
+                                }) {
+                                    Text("プライバシーポリシー")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.7))
+                                        .underline()
+                                }
+                            }
+                            .padding(.top, 10)
                             .padding(.bottom, 32)
                         }
                         .padding(.top, 32)
@@ -224,6 +256,18 @@ struct ProfileView: View {
             }
         } message: {
             Text("本当にアカウントを削除しますか？この操作は取り消せません。")
+        }
+        .alert("外部サイトへ移動", isPresented: $showingUrlConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("移動する") {
+                if let url = urlToOpen {
+                    UIApplication.shared.open(url)
+                }
+            }
+        } message: {
+            if let url = urlToOpen {
+                Text("\(urlTitle)のページに移動します。\n\n\(url.absoluteString)")
+            }
         }
         .task {
             await viewModel.loadCurrentUser()

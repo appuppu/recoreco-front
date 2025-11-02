@@ -8,6 +8,9 @@ struct SignUpView: View {
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showingUrlConfirmation = false
+    @State private var urlToOpen: URL?
+    @State private var urlTitle: String = ""
 
     var body: some View {
         NavigationView {
@@ -122,6 +125,35 @@ struct SignUpView: View {
                             }
                             .disabled(isLoading || !isFormValid)
                             .opacity((isLoading || !isFormValid) ? 0.6 : 1.0)
+
+                            // Terms and Privacy links
+                            HStack(spacing: 20) {
+                                Button(action: {
+                                    urlTitle = "利用規約"
+                                    urlToOpen = URL(string: "https://fukushimatakumi.github.io/sugarbeat/terms.html")
+                                    showingUrlConfirmation = true
+                                }) {
+                                    Text("利用規約")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .underline()
+                                }
+
+                                Text("・")
+                                    .foregroundColor(.white.opacity(0.5))
+
+                                Button(action: {
+                                    urlTitle = "プライバシーポリシー"
+                                    urlToOpen = URL(string: "https://fukushimatakumi.github.io/sugarbeat/privacy.html")
+                                    showingUrlConfirmation = true
+                                }) {
+                                    Text("プライバシーポリシー")
+                                        .font(.system(size: 13))
+                                        .foregroundColor(.white.opacity(0.8))
+                                        .underline()
+                                }
+                            }
+                            .padding(.top, 20)
                         }
                         .padding(.horizontal, 32)
                         .padding(.bottom, 40)
@@ -140,6 +172,18 @@ struct SignUpView: View {
                         }
                         .foregroundColor(.white)
                     }
+                }
+            }
+            .alert("外部サイトへ移動", isPresented: $showingUrlConfirmation) {
+                Button("キャンセル", role: .cancel) {}
+                Button("移動する") {
+                    if let url = urlToOpen {
+                        UIApplication.shared.open(url)
+                    }
+                }
+            } message: {
+                if let url = urlToOpen {
+                    Text("\(urlTitle)のページに移動します。\n\n\(url.absoluteString)")
                 }
             }
         }

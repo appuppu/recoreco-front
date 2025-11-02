@@ -27,4 +27,8 @@ class PlaybackStateManager: ObservableObject {
     func isPlayingInContext(postId: Int64, userId: Int64) -> Bool {
         return currentlyPlayingPostId == postId && currentlyPlayingUserId == userId
     }
+
+    func updatePlaybackContext(userId: Int64) {
+        currentlyPlayingUserId = userId
+    }
 }

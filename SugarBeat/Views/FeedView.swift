@@ -131,17 +131,13 @@ struct FeedView: View {
                                         // Reset swipe hint timer on interaction
                                         resetSwipeHintTimer()
 
-                                        print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
-
-                                            // User interaction detected - disable initial load flag
+                                        // User interaction detected - disable initial load flag
                                             if isInitialLoad {
                                                 isInitialLoad = false
-                                                print("🎵 Disabled isInitialLoad flag due to radio button tap")
                                             }
 
                                             // Set skip flag immediately before any action
                                             skipNextAutoPlay = true
-                                            print("🎵 Set skipNextAutoPlay flag to true")
 
                                             // Play music first
                                             if index < viewModel.allUserPosts.count {
@@ -153,43 +149,40 @@ struct FeedView: View {
                                                    let previewUrl = targetUserPosts.posts[postIndex].previewUrl {
                                                     let post = targetUserPosts.posts[postIndex]
                                                     let postId = post.id
-                                                    print("🎵 Radio button: Target post: \(post.trackName), postId: \(postId)")
 
-                                                    // Check if this post is already playing
-                                                    if PlaybackStateManager.shared.currentlyPlayingPostId == postId {
-                                                        print("🎵 Radio button: Post \(postId) is already playing, skipping re-play")
+                                                    // Check if this post is already playing in the same context
+                                                    if PlaybackStateManager.shared.currentlyPlayingPostId == postId &&
+                                                       PlaybackStateManager.shared.currentlyPlayingUserId == targetUserId {
+                                                        // Already playing, skip
                                                     } else {
-                                                        print("🎵 Radio button: Starting playback for post: \(post.trackName), postId: \(postId)")
 
                                                         Task {
                                                             do {
                                                                 // Stop any currently playing post
                                                                 MusicKitManager.shared.stopPreview()
-                                                                print("🎵 Radio button: Stopped previous playback")
 
                                                                 // Small delay for smooth transition
                                                                 try? await Task.sleep(nanoseconds: 200_000_000)
 
                                                                 // Start playback
                                                                 try await MusicKitManager.shared.playPreviewFromURL(previewUrl, startTime: post.startTime)
-                                                                PlaybackStateManager.shared.startPlayback(for: postId, userId: targetUserId)
-                                                                print("🎵 Radio button: Successfully started playback for postId: \(postId), userId: \(targetUserId)")
+                                                                await MainActor.run {
+                                                                    PlaybackStateManager.shared.startPlayback(for: postId, userId: targetUserId)
+                                                                }
 
                                                                 // Auto-stop after duration
                                                                 let duration = post.endTime - post.startTime
-                                                                print("🎵 Radio button: Auto-stop scheduled in \(duration) seconds for postId: \(postId)")
                                                                 Task {
                                                                     try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                                                                    if PlaybackStateManager.shared.currentlyPlayingPostId == postId {
-                                                                        MusicKitManager.shared.stopPreview()
-                                                                        PlaybackStateManager.shared.stopPlayback()
-                                                                        print("🎵 Radio button: Auto-stopped playback for postId: \(postId)")
-                                                                    } else {
-                                                                        print("🎵 Radio button: Skipped auto-stop for postId: \(postId) (different song playing)")
+                                                                    await MainActor.run {
+                                                                        if PlaybackStateManager.shared.currentlyPlayingPostId == postId {
+                                                                            MusicKitManager.shared.stopPreview()
+                                                                            PlaybackStateManager.shared.stopPlayback()
+                                                                        }
                                                                     }
                                                                 }
                                                             } catch {
-                                                                print("🎵 Radio button: Failed to play music: \(error)")
+                                                                // Silently fail
                                                             }
                                                         }
                                                     }
@@ -208,23 +201,18 @@ struct FeedView: View {
 
                                             // Navigate to user's posts only if needed
                                             if currentDisplayedUserIndex != index {
-                                                print("🎵 Radio button: Need to switch from user index \(currentDisplayedUserIndex) to \(index)")
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                                                    print("🎵 Radio button: Sending ScrollToUser notification with skipAutoPlay=true")
                                                     NotificationCenter.default.post(
                                                         name: NSNotification.Name("ScrollToUser"),
                                                         object: nil,
                                                         userInfo: ["index": index, "skipAutoPlay": true]
                                                     )
                                                 }
-                                            } else {
-                                                print("🎵 Radio button: Already displaying user index \(index), skipping screen transition")
                                             }
 
                                             // Reset flag after transition completes (longer delay)
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                                                 skipNextAutoPlay = false
-                                                print("🎵 Radio button: Reset skipNextAutoPlay flag to false")
                                             }
                                         }
 
@@ -477,7 +465,6 @@ struct FeedView: View {
                     if let userId = currentUserId {
                         if let userIndex = viewModel.allUserPosts.firstIndex(where: { $0.user.id == userId }) {
                             print("🔍 Found current user at index: \(userIndex)")
-                            print("📻 Navigating to current user's tab after post creation (index: \(userIndex))")
                             print("🔍 Before update - currentDisplayedUserIndex: \(currentDisplayedUserIndex)")
                             currentDisplayedUserIndex = userIndex
                             print("🔍 After update - currentDisplayedUserIndex: \(currentDisplayedUserIndex)")
@@ -599,11 +586,9 @@ struct FeedView: View {
                let postIndex = userInfo["postIndex"] as? Int {
                 let oldIndex = userCurrentPostIndices[userId] ?? 0
                 userCurrentPostIndices[userId] = postIndex
-                print("📻 FeedView: Updated radio button post index for user \(userId): \(oldIndex) → \(postIndex)")
 
                 // Find user display name for better logging
                 if let userPosts = viewModel.allUserPosts.first(where: { $0.user.id == userId }) {
-                    print("📻 FeedView: Radio button for \(userPosts.user.displayName) now shows post \(postIndex)")
                 }
             }
         }
@@ -663,7 +648,7 @@ struct FeedView: View {
     private func startSwipeHintTimer() {
         swipeHintTask?.cancel()
         swipeHintTask = Task {
-            try? await Task.sleep(nanoseconds: 35_000_000_000) // 35 seconds
+            try? await Task.sleep(nanoseconds: 40_000_000_000) // 40 seconds
             if !Task.isCancelled {
                 await MainActor.run {
                     withAnimation(.easeInOut(duration: 0.5)) {
@@ -881,7 +866,6 @@ struct AllUserPostsView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ScrollToUser"))) { notification in
             if let index = notification.userInfo?["index"] as? Int {
-                print("📻 ScrollToUser notification received - target index: \(index), current index: \(currentUserIndex), skipNextAutoPlay: \(skipNextAutoPlay)")
 
                 // Validate index is within bounds
                 guard index >= 0 && index < allUserPosts.count else {
@@ -892,7 +876,6 @@ struct AllUserPostsView: View {
                 // Check if skipAutoPlay flag is set (from notification or binding)
                 if skipNextAutoPlay || (notification.userInfo?["skipAutoPlay"] as? Bool ?? false) {
                     skipAutoPlay = true
-                    print("📻 skipAutoPlay flag set to true")
                 } else {
                     skipAutoPlay = false
                 }
@@ -900,12 +883,10 @@ struct AllUserPostsView: View {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     currentUserIndex = index
                 }
-                print("📻 Updated currentUserIndex to: \(currentUserIndex)")
 
                 // If postIndex is specified, send ScrollToPost notification after user transition
                 if let postIndex = notification.userInfo?["postIndex"] as? Int,
                    index < allUserPosts.count {
-                    print("📻 Will scroll to post index: \(postIndex)")
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                         // Double-check array bounds before accessing
                         guard index < allUserPosts.count else {
@@ -924,7 +905,6 @@ struct AllUserPostsView: View {
                 if skipAutoPlay {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                         skipAutoPlay = false
-                        print("📻 AllUserPostsView: skipAutoPlay flag reset to false")
                     }
                 }
             }
@@ -942,11 +922,9 @@ struct AllUserPostsView: View {
         }
         .onChange(of: currentUserIndex) { newIndex in
             currentDisplayedUserIndex = newIndex
-            print("📻 AllUserPostsView: Updated currentDisplayedUserIndex to \(newIndex)")
         }
         .onChange(of: currentDisplayedUserIndex) { newIndex in
             if currentUserIndex != newIndex {
-                print("📻 AllUserPostsView: Parent changed currentDisplayedUserIndex to \(newIndex), updating currentUserIndex")
                 currentUserIndex = newIndex
             }
         }
@@ -954,9 +932,7 @@ struct AllUserPostsView: View {
             if !hasInitialized && !allUserPosts.isEmpty {
                 currentDisplayedUserIndex = currentUserIndex
                 hasInitialized = true
-                print("📻 AllUserPostsView: Initialized currentDisplayedUserIndex to \(currentUserIndex)")
             } else if hasInitialized {
-                print("📻 AllUserPostsView: Already initialized, skipping (currentUserIndex: \(currentUserIndex))")
             } else {
                 print("⚠️ AllUserPostsView: allUserPosts is empty, not setting currentDisplayedUserIndex")
             }
@@ -1009,6 +985,7 @@ struct UserPostsScrollView: View {
                         isCurrent: false,
                         currentPostIndex: $currentPostIndex,
                         expectedIndex: previousIndex,
+                        contextUserId: userPosts.user.id,
                         onDelete: onRefresh
                     )
                         .frame(width: screenWidth, height: screenHeight)
@@ -1022,6 +999,7 @@ struct UserPostsScrollView: View {
                         isCurrent: true,
                         currentPostIndex: $currentPostIndex,
                         expectedIndex: currentPostIndex,
+                        contextUserId: userPosts.user.id,
                         onDelete: onRefresh
                     )
                         .frame(width: screenWidth, height: screenHeight)
@@ -1035,6 +1013,7 @@ struct UserPostsScrollView: View {
                         isCurrent: false,
                         currentPostIndex: $currentPostIndex,
                         expectedIndex: nextIndex,
+                        contextUserId: userPosts.user.id,
                         onDelete: onRefresh
                     )
                         .frame(width: screenWidth, height: screenHeight)
@@ -1138,7 +1117,6 @@ struct UserPostsScrollView: View {
             isAnimating = false
         }
         .onChange(of: isCurrent) { newValue in
-            print("📻 UserPostsScrollView isCurrent changed to: \(newValue) for user: \(userPosts.user.displayName), postIndex: \(currentPostIndex), skipAutoPlay: \(skipAutoPlay)")
 
             if newValue {
                 // Update radio button when this user becomes current
@@ -1147,50 +1125,50 @@ struct UserPostsScrollView: View {
                     object: nil,
                     userInfo: ["userId": userPosts.user.id, "postIndex": currentPostIndex]
                 )
-                print("📻 Sent UpdateCurrentPostIndex notification on isCurrent change: userId=\(userPosts.user.id), postIndex=\(currentPostIndex)")
 
                 if !skipAutoPlay && !isInitialLoad {
                     // Auto-play music when this user becomes current (but not on initial app launch)
-                    print("📻 Starting playback for user: \(userPosts.user.displayName), post index: \(currentPostIndex)")
                     Task {
                         await startPlaybackForCurrentPost()
                     }
                 } else {
-                    print("📻 Skipping auto-play due to skipAutoPlay: \(skipAutoPlay) or isInitialLoad: \(isInitialLoad)")
                 }
             }
         }
         .onChange(of: currentPostIndex) { newIndex in
             // Update radio button when post index changes
             if isCurrent {
-                print("📻 currentPostIndex changed to: \(newIndex) for user: \(userPosts.user.displayName)")
                 NotificationCenter.default.post(
                     name: NSNotification.Name("UpdateCurrentPostIndex"),
                     object: nil,
                     userInfo: ["userId": userPosts.user.id, "postIndex": newIndex]
                 )
-                print("📻 Sent UpdateCurrentPostIndex notification on postIndex change: userId=\(userPosts.user.id), postIndex=\(newIndex)")
             }
         }
         .onAppear {
-            print("📻 UserPostsScrollView onAppear - isCurrent: \(isCurrent) for user: \(userPosts.user.displayName), postIndex: \(currentPostIndex), skipAutoPlay: \(skipAutoPlay)")
-
             // Always update radio button on appear
             NotificationCenter.default.post(
                 name: NSNotification.Name("UpdateCurrentPostIndex"),
                 object: nil,
                 userInfo: ["userId": userPosts.user.id, "postIndex": currentPostIndex]
             )
-            print("📻 Sent UpdateCurrentPostIndex notification on appear: userId=\(userPosts.user.id), postIndex=\(currentPostIndex)")
+
+            // If this tab becomes current and there's already a song playing
+            if isCurrent {
+                if let currentlyPlayingPostId = playbackStateManager.currentlyPlayingPostId {
+                    // Check if the currently playing post exists in this user's posts
+                    if userPosts.posts.contains(where: { $0.id == currentlyPlayingPostId }) {
+                        // Update the userId context to this tab
+                        playbackStateManager.updatePlaybackContext(userId: userPosts.user.id)
+                    }
+                }
+            }
 
             if isCurrent && !skipAutoPlay && !isInitialLoad {
                 // Auto-play music when first displayed (but not on initial app launch)
-                print("📻 Auto-playing on appear for user: \(userPosts.user.displayName)")
                 Task {
                     await startPlaybackForCurrentPost()
                 }
-            } else if isCurrent && (skipAutoPlay || isInitialLoad) {
-                print("📻 Skipping auto-play on appear due to skipAutoPlay: \(skipAutoPlay) or isInitialLoad: \(isInitialLoad)")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ScrollToPost"))) { notification in
@@ -1216,53 +1194,47 @@ struct UserPostsScrollView: View {
 
     private func startPlaybackForCurrentPost() async {
         guard !userPosts.posts.isEmpty else {
-            print("📻 No posts to play")
             return
         }
 
         let post = userPosts.posts[currentPostIndex]
         let postId = post.id
-        print("📻 startPlaybackForCurrentPost - user: \(userPosts.user.displayName), post: \(post.trackName), postId: \(postId)")
 
         // Check if this post is already playing
         if playbackStateManager.currentlyPlayingPostId == postId {
-            print("📻 Post \(postId) is already playing, skipping")
             return
         }
 
         guard let previewUrl = post.previewUrl else {
-            print("📻 No preview URL for post")
             return
         }
 
         do {
             // Stop any currently playing post
             musicPlayer.stopPreview()
-            print("📻 Stopped previous playback")
 
             // Small delay to ensure smooth transition
             try? await Task.sleep(nanoseconds: 300_000_000) // 0.3 seconds
 
             // Start playback for this post
             try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
-            playbackStateManager.startPlayback(for: postId, userId: userPosts.user.id)
-            print("📻 Started playback for post: \(postId), userId: \(userPosts.user.id)")
+            await MainActor.run {
+                playbackStateManager.startPlayback(for: postId, userId: userPosts.user.id)
+            }
 
             // Auto-stop after duration
             let duration = post.endTime - post.startTime
-            print("📻 Auto-stop scheduled in \(duration) seconds for postId: \(postId)")
             Task {
                 try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                if playbackStateManager.currentlyPlayingPostId == postId {
-                    musicPlayer.stopPreview()
-                    playbackStateManager.stopPlayback()
-                    print("📻 Auto-stopped playback for post: \(postId)")
-                } else {
-                    print("📻 Skipped auto-stop for post: \(postId) (different song playing)")
+                await MainActor.run {
+                    if playbackStateManager.currentlyPlayingPostId == postId {
+                        musicPlayer.stopPreview()
+                        playbackStateManager.stopPlayback()
+                    } else {
+                    }
                 }
             }
         } catch {
-            print("📻 Failed to start playback: \(error)")
         }
     }
 }
@@ -1272,6 +1244,7 @@ struct PostCardView: View {
     let isCurrent: Bool
     @Binding var currentPostIndex: Int
     let expectedIndex: Int
+    let contextUserId: Int64 // The userId of the UserPosts this post belongs to
     var onDelete: (() -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
@@ -1290,11 +1263,12 @@ struct PostCardView: View {
     @State private var backgroundScale: CGFloat = 1.0
     @State private var backgroundRotation: Double = 0
 
-    init(post: Post, isCurrent: Bool, currentPostIndex: Binding<Int>, expectedIndex: Int, onDelete: (() -> Void)? = nil) {
+    init(post: Post, isCurrent: Bool, currentPostIndex: Binding<Int>, expectedIndex: Int, contextUserId: Int64, onDelete: (() -> Void)? = nil) {
         self.post = post
         self.isCurrent = isCurrent
         self._currentPostIndex = currentPostIndex
         self.expectedIndex = expectedIndex
+        self.contextUserId = contextUserId
         self.onDelete = onDelete
     }
 
@@ -1750,15 +1724,21 @@ struct PostCardView: View {
 
             // Start playback for this post
             try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
-            playbackStateManager.startPlayback(for: post.id, userId: post.user.id)
+
+            // Update playback state on main actor - use contextUserId instead of post.user.id
+            await MainActor.run {
+                playbackStateManager.startPlayback(for: post.id, userId: contextUserId)
+            }
 
             // Auto-stop after duration
             let duration = post.endTime - post.startTime
             Task {
                 try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                if playbackStateManager.currentlyPlayingPostId == post.id {
-                    musicPlayer.stopPreview()
-                    playbackStateManager.stopPlayback()
+                await MainActor.run {
+                    if playbackStateManager.currentlyPlayingPostId == post.id {
+                        musicPlayer.stopPreview()
+                        playbackStateManager.stopPlayback()
+                    }
                 }
             }
         } catch {
@@ -1769,7 +1749,9 @@ struct PostCardView: View {
     private func togglePlayback() async {
         if isPlaying {
             musicPlayer.stopPreview()
-            playbackStateManager.stopPlayback()
+            await MainActor.run {
+                playbackStateManager.stopPlayback()
+            }
         } else {
             await startPlayback()
         }

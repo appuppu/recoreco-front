@@ -194,11 +194,11 @@ struct InstructionCard: View {
     private var stepTitle: String {
         switch step {
         case .welcome:
-            return "最初の音楽を紹介しよう！"
+            return "最初のおすすめ音楽を紹介しよう！"
         case .tapCreateButton:
-            return "新規音楽紹介をタップ"
+            return "おすすめの音楽紹介をタップ"
         case .searchSong:
-            return "好きな曲を検索"
+            return "おすすめの曲を検索"
         case .selectSong:
             return "曲を選択"
         case .tapPostButton:
@@ -211,17 +211,17 @@ struct InstructionCard: View {
     private var stepDescription: String {
         switch step {
         case .welcome:
-            return "一緒に最初の音楽紹介を作成してみましょう。\nステップごとにガイドします。"
+            return "一緒に最初のおすすめ音楽を紹介してみましょう。\nステップごとにガイドします。"
         case .tapCreateButton:
-            return "左下の「＋」ボタンをタップして、\n新しい音楽紹介を始めましょう。"
+            return "左下の「＋」ボタンをタップして、\nおすすめの音楽紹介を始めましょう。"
         case .searchSong:
             return "検索バーに曲名やアーティスト名を入力して、\n検索ボタンをタップして曲を探しましょう。"
         case .selectSong:
-            return "検索結果から好きな曲をタップして選択してください。"
+            return "検索結果からおすすめの曲をタップして選択してください。"
         case .tapPostButton:
-            return "準備ができたら「おすすめの音楽紹介」ボタンをタップして、\n最初の音楽紹介を完成させましょう！"
+            return "準備ができたら「この内容で紹介する」ボタンをタップして、\n最初のおすすめ音楽を完成させましょう！"
         case .completed:
-            return "素晴らしい！最初の音楽紹介が完成しました。\nこれからたくさんの音楽をシェアして楽しみましょう！"
+            return "素晴らしい！最初のおすすめ音楽が完成しました。\nこれからたくさんの音楽をシェアして楽しみましょう！"
         }
     }
 

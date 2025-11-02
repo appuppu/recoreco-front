@@ -55,6 +55,9 @@ struct FeedView: View {
     @State private var createButtonFrame: CGRect = .zero
     @State private var wasTutorialPost = false // チュートリアル中の投稿かどうかを記録
     @State private var isInitialLoad = true // アプリ起動時の初回のみ自動再生をスキップ
+    @State private var lastInteractionTime = Date()
+    @State private var showSwipeHint = false
+    @State private var swipeHintTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -94,10 +97,14 @@ struct FeedView: View {
                     skipNextAutoPlay: $skipNextAutoPlay,
                     currentDisplayedUserIndex: $currentDisplayedUserIndex,
                     isInitialLoad: $isInitialLoad,
+                    showSwipeHint: $showSwipeHint,
                     onRefresh: {
                         Task {
                             await viewModel.refreshFeed()
                         }
+                    },
+                    onInteraction: {
+                        resetSwipeHintTimer()
                     }
                 )
             }
@@ -111,16 +118,20 @@ struct FeedView: View {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
                             ForEach(Array(viewModel.allUserPosts.enumerated()), id: \.element.id) { index, userPosts in
-                                UserRadioButton(
-                                    userPosts: userPosts,
-                                    currentPostIndex: userCurrentPostIndices[userPosts.user.id] ?? 0,
-                                    unreadCount: unreadPostCounts[userPosts.user.id] ?? 0,
-                                    hasUnreadPosts: unreadPostsManager.hasUnreadPosts(in: userPosts.posts)
-                                )
-                                .frame(width: 60, height: 72)
-                                .id("\(userPosts.user.id)-\(index)")
-                                .onTapGesture {
-                                    print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
+                                HStack(spacing: 8) {
+                                    UserRadioButton(
+                                        userPosts: userPosts,
+                                        currentPostIndex: userCurrentPostIndices[userPosts.user.id] ?? 0,
+                                        unreadCount: unreadPostCounts[userPosts.user.id] ?? 0,
+                                        hasUnreadPosts: unreadPostsManager.hasUnreadPosts(in: userPosts.posts)
+                                    )
+                                    .frame(width: 60, height: 72)
+                                    .id("\(userPosts.user.id)-\(index)")
+                                    .onTapGesture {
+                                        // Reset swipe hint timer on interaction
+                                        resetSwipeHintTimer()
+
+                                        print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
 
                                             // User interaction detected - disable initial load flag
                                             if isInitialLoad {
@@ -216,6 +227,23 @@ struct FeedView: View {
                                                 print("🎵 Radio button: Reset skipNextAutoPlay flag to false")
                                             }
                                         }
+
+                                    // Show message for current user when no follows
+                                    if userPosts.user.id == APIClient.shared.currentUserId && viewModel.allUserPosts.count <= 2 {
+                                        Text("他のユーザーと繋がると\nここに表示されます。")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.white.opacity(0.7))
+                                            .multilineTextAlignment(.leading)
+                                            .lineSpacing(2)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .fill(Color.black.opacity(0.5))
+                                            )
+                                            .frame(width: 160)
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal, 20)
@@ -497,6 +525,7 @@ struct FeedView: View {
         .onAppear {
             startNotificationPolling()
             viewModel.startPolling()
+            startSwipeHintTimer()
 
             // Check if user has seen onboarding
             if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
@@ -517,6 +546,7 @@ struct FeedView: View {
         .onDisappear {
             stopNotificationPolling()
             viewModel.stopPolling()
+            swipeHintTask?.cancel()
         }
         .onChange(of: showingNotifications) { isShowing in
             if isShowing {
@@ -622,6 +652,27 @@ struct FeedView: View {
         notificationPollingTask?.cancel()
         notificationPollingTask = nil
     }
+
+    private func resetSwipeHintTimer() {
+        lastInteractionTime = Date()
+        showSwipeHint = false
+        swipeHintTask?.cancel()
+        startSwipeHintTimer()
+    }
+
+    private func startSwipeHintTimer() {
+        swipeHintTask?.cancel()
+        swipeHintTask = Task {
+            try? await Task.sleep(nanoseconds: 35_000_000_000) // 35 seconds
+            if !Task.isCancelled {
+                await MainActor.run {
+                    withAnimation(.easeInOut(duration: 0.5)) {
+                        showSwipeHint = true
+                    }
+                }
+            }
+        }
+    }
 }
 
 struct FloatingMenuButton: View {
@@ -662,7 +713,9 @@ struct AllUserPostsView: View {
     @Binding var skipNextAutoPlay: Bool
     @Binding var currentDisplayedUserIndex: Int
     @Binding var isInitialLoad: Bool
+    @Binding var showSwipeHint: Bool
     let onRefresh: () -> Void
+    let onInteraction: () -> Void
     @State private var currentUserIndex = 0
     @State private var horizontalDragOffset: CGFloat = 0
     @State private var isAnimating = false
@@ -717,6 +770,9 @@ struct AllUserPostsView: View {
                                 // Ignore gestures while animating
                                 guard !isAnimating else { return }
 
+                                // User interaction detected
+                                onInteraction()
+
                                 // User interaction detected - disable initial load flag
                                 if isInitialLoad {
                                     isInitialLoad = false
@@ -735,6 +791,9 @@ struct AllUserPostsView: View {
                             .onEnded { value in
                                 // Ignore gestures while animating
                                 guard !isAnimating else { return }
+
+                                // User interaction detected
+                                onInteraction()
 
                                 let horizontalAmount = abs(value.translation.width)
                                 let verticalAmount = abs(value.translation.height)
@@ -799,6 +858,19 @@ struct AllUserPostsView: View {
                                 }
                             }
                     )
+                }
+
+                // Swipe hint overlay
+                if showSwipeHint {
+                    VStack {
+                        Spacer()
+                            .frame(height: screenHeight * 0.5)
+
+                        SwipeHintView(showSwipeHint: $showSwipeHint)
+                            .transition(.opacity)
+
+                        Spacer()
+                    }
                 }
             }
         }
@@ -2588,5 +2660,110 @@ private func timeAgoString(from date: Date) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy/MM/dd"
         return formatter.string(from: date)
+    }
+}
+
+// Swipe hint view with animated arrows
+struct SwipeHintView: View {
+    @Binding var showSwipeHint: Bool
+    @State private var animationOffset: CGFloat = 0
+    @State private var opacity: Double = 1.0
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            VStack(spacing: 16) {
+                // Arrow grid (3 rows)
+                VStack(spacing: 8) {
+                    // First row: up arrow (centered)
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 24, weight: .bold))
+
+                    // Second row: left and right arrows with space in center
+                    HStack(spacing: 32) {
+                        Image(systemName: "arrow.left")
+                            .font(.system(size: 24, weight: .bold))
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 24, weight: .bold))
+                    }
+
+                    // Third row: down arrow (centered)
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 24, weight: .bold))
+                }
+                .foregroundStyle(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.orange,
+                            Color.red
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+                // Text
+                Text("上下左右のスライドで\n投稿を切り替えよう！")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.orange,
+                                Color.red
+                            ]),
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.black.opacity(0.7))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color.orange.opacity(0.8),
+                                        Color.red.opacity(0.8)
+                                    ]),
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 2
+                            )
+                    )
+            )
+
+            // Close button (top-left)
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    showSwipeHint = false
+                }
+            }) {
+                Image(systemName: "xmark.circle")
+                    .font(.system(size: 24))
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .padding(8)
+        }
+        .offset(y: animationOffset)
+        .opacity(opacity)
+        .onAppear {
+            withAnimation(
+                .easeInOut(duration: 1.5)
+                .repeatForever(autoreverses: true)
+            ) {
+                animationOffset = -10
+            }
+            withAnimation(
+                .easeInOut(duration: 1.0)
+                .repeatForever(autoreverses: true)
+            ) {
+                opacity = 0.7
+            }
+        }
     }
 }

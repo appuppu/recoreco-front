@@ -7,8 +7,8 @@ struct OnboardingView: View {
     private let pages: [OnboardingPage] = [
         OnboardingPage(
             icon: "music.note.list",
-            title: "音楽を紹介しよう",
-            description: "好きな音楽の30秒プレビューを紹介できます。\nお気に入りの曲をシェアして楽しみましょう。",
+            title: "おすすめの音楽を紹介しよう",
+            description: "おすすめの音楽の30秒プレビューを紹介できます。\nお気に入りの曲をシェアして楽しみましょう。",
             gradient: [Color.purple, Color.blue]
         ),
         OnboardingPage(
@@ -26,7 +26,7 @@ struct OnboardingView: View {
         OnboardingPage(
             icon: "magnifyingglass",
             title: "ユーザーを検索",
-            description: "左下のメニューから「ユーザー検索」を選んで、新しい音楽好きの仲間を見つけましょう。\n\nフォローしたいユーザーを見つけたら、相互フォローを目指しましょう！",
+            description: "右下のメニューから「ユーザー検索」を選んで、新しい音楽好きの仲間を見つけましょう。\n\nフォローしたいユーザーを見つけたら、相互フォローを目指しましょう！",
             gradient: [Color.green, Color.yellow]
         )
     ]

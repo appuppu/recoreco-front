@@ -55,11 +55,6 @@ struct UserProfileView: View {
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundColor(.white)
 
-                            // Username
-                            Text(user.username)
-                                .font(.system(size: 16))
-                                .foregroundColor(.white.opacity(0.7))
-
                             // Follow counts
                             FollowCountsView(user: user)
                                 .padding(.top, 8)

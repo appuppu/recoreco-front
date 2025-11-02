@@ -62,11 +62,6 @@ struct ProfileView: View {
                                 .font(.system(size: 24, weight: .bold))
                                 .foregroundColor(.white)
 
-                            // Username
-                            Text(user.username)
-                                .font(.system(size: 16))
-                                .foregroundColor(.white.opacity(0.6))
-
                             // Bio
                             if let bio = user.bio, !bio.isEmpty {
                                 Text(bio)

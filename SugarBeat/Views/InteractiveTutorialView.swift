@@ -78,7 +78,7 @@ struct HighlightCutout: View {
             // ハイライト部分を明るくする（リング効果）
             RoundedRectangle(cornerRadius: 20)
                 .stroke(Color.white, lineWidth: 3)
-                .frame(width: targetFrame.width + 20, height: targetFrame.height + 20)
+                .frame(width: targetFrame.width + 40, height: targetFrame.height + 20)
                 .position(
                     x: targetFrame.midX,
                     y: targetFrame.midY
@@ -219,7 +219,7 @@ struct InstructionCard: View {
         case .selectSong:
             return "検索結果から好きな曲をタップして選択してください。"
         case .tapPostButton:
-            return "準備ができたら「紹介」ボタンをタップして、\n最初の音楽紹介を完成させましょう！"
+            return "準備ができたら「おすすめの音楽紹介」ボタンをタップして、\n最初の音楽紹介を完成させましょう！"
         case .completed:
             return "素晴らしい！最初の音楽紹介が完成しました。\nこれからたくさんの音楽をシェアして楽しみましょう！"
         }

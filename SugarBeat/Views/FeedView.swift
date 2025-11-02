@@ -54,6 +54,7 @@ struct FeedView: View {
     @State private var tutorialStep: TutorialStep = .welcome
     @State private var createButtonFrame: CGRect = .zero
     @State private var wasTutorialPost = false // チュートリアル中の投稿かどうかを記録
+    @State private var isInitialLoad = true // アプリ起動時の初回のみ自動再生をスキップ
 
     var body: some View {
         ZStack {
@@ -92,6 +93,7 @@ struct FeedView: View {
                     allUserPosts: viewModel.allUserPosts,
                     skipNextAutoPlay: $skipNextAutoPlay,
                     currentDisplayedUserIndex: $currentDisplayedUserIndex,
+                    isInitialLoad: $isInitialLoad,
                     onRefresh: {
                         Task {
                             await viewModel.refreshFeed()
@@ -119,6 +121,12 @@ struct FeedView: View {
                                 .id("\(userPosts.user.id)-\(index)")
                                 .onTapGesture {
                                     print("🎵 Radio button tapped for user: \(userPosts.user.displayName), index: \(index)")
+
+                                            // User interaction detected - disable initial load flag
+                                            if isInitialLoad {
+                                                isInitialLoad = false
+                                                print("🎵 Disabled isInitialLoad flag due to radio button tap")
+                                            }
 
                                             // Set skip flag immediately before any action
                                             skipNextAutoPlay = true
@@ -249,7 +257,7 @@ struct FeedView: View {
                                 }
 
                                 // Post button
-                                FloatingMenuButton(icon: "plus", label: "紹介") {
+                                FloatingMenuButton(icon: "plus", label: "おすすめの音楽紹介") {
                                     print("➕ Plus button tapped - current tutorialStep: \(tutorialStep)")
                                     if tutorialStep == .tapCreateButton {
                                         tutorialStep = .searchSong
@@ -625,6 +633,7 @@ struct AllUserPostsView: View {
     let allUserPosts: [UserPosts]
     @Binding var skipNextAutoPlay: Bool
     @Binding var currentDisplayedUserIndex: Int
+    @Binding var isInitialLoad: Bool
     let onRefresh: () -> Void
     @State private var currentUserIndex = 0
     @State private var horizontalDragOffset: CGFloat = 0
@@ -648,7 +657,7 @@ struct AllUserPostsView: View {
 
                         // Previous user - always rendered (on the left)
                         if previousIndex < allUserPosts.count {
-                            UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, onRefresh: onRefresh)
+                            UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh)
                                 .frame(width: screenWidth, height: screenHeight)
                                 .offset(x: -screenWidth + horizontalDragOffset)
                                 .zIndex(horizontalDragOffset > 0 ? 1 : 0)
@@ -656,7 +665,7 @@ struct AllUserPostsView: View {
                         }
 
                         // Current user - always rendered
-                        UserPostsScrollView(userPosts: allUserPosts[currentUserIndex], isCurrent: true, skipAutoPlay: $skipAutoPlay, onRefresh: onRefresh)
+                        UserPostsScrollView(userPosts: allUserPosts[currentUserIndex], isCurrent: true, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh)
                             .frame(width: screenWidth, height: screenHeight)
                             .offset(x: horizontalDragOffset)
                             .zIndex(2)
@@ -664,7 +673,7 @@ struct AllUserPostsView: View {
 
                         // Next user - always rendered (on the right)
                         if nextIndex < allUserPosts.count {
-                            UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, onRefresh: onRefresh)
+                            UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh)
                                 .frame(width: screenWidth, height: screenHeight)
                                 .offset(x: screenWidth + horizontalDragOffset)
                                 .zIndex(horizontalDragOffset < 0 ? 1 : 0)
@@ -678,6 +687,11 @@ struct AllUserPostsView: View {
                             .onChanged { value in
                                 // Ignore gestures while animating
                                 guard !isAnimating else { return }
+
+                                // User interaction detected - disable initial load flag
+                                if isInitialLoad {
+                                    isInitialLoad = false
+                                }
 
                                 // Determine if this is a horizontal or vertical swipe
                                 let horizontalAmount = abs(value.translation.width)
@@ -845,6 +859,7 @@ struct UserPostsScrollView: View {
     let userPosts: UserPosts
     let isCurrent: Bool
     @Binding var skipAutoPlay: Bool
+    let isInitialLoad: Bool
     let onRefresh: () -> Void
     @State private var currentPostIndex = 0
     @State private var dragOffset: CGFloat = 0
@@ -1024,14 +1039,14 @@ struct UserPostsScrollView: View {
                 )
                 print("📻 Sent UpdateCurrentPostIndex notification on isCurrent change: userId=\(userPosts.user.id), postIndex=\(currentPostIndex)")
 
-                if !skipAutoPlay {
-                    // Auto-play music when this user becomes current
+                if !skipAutoPlay && !isInitialLoad {
+                    // Auto-play music when this user becomes current (but not on initial app launch)
                     print("📻 Starting playback for user: \(userPosts.user.displayName), post index: \(currentPostIndex)")
                     Task {
                         await startPlaybackForCurrentPost()
                     }
                 } else {
-                    print("📻 Skipping auto-play due to skipAutoPlay flag")
+                    print("📻 Skipping auto-play due to skipAutoPlay: \(skipAutoPlay) or isInitialLoad: \(isInitialLoad)")
                 }
             }
         }
@@ -1058,14 +1073,14 @@ struct UserPostsScrollView: View {
             )
             print("📻 Sent UpdateCurrentPostIndex notification on appear: userId=\(userPosts.user.id), postIndex=\(currentPostIndex)")
 
-            if isCurrent && !skipAutoPlay {
-                // Auto-play music when first displayed
+            if isCurrent && !skipAutoPlay && !isInitialLoad {
+                // Auto-play music when first displayed (but not on initial app launch)
                 print("📻 Auto-playing on appear for user: \(userPosts.user.displayName)")
                 Task {
                     await startPlaybackForCurrentPost()
                 }
-            } else if isCurrent && skipAutoPlay {
-                print("📻 Skipping auto-play on appear due to skipAutoPlay flag")
+            } else if isCurrent && (skipAutoPlay || isInitialLoad) {
+                print("📻 Skipping auto-play on appear due to skipAutoPlay: \(skipAutoPlay) or isInitialLoad: \(isInitialLoad)")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ScrollToPost"))) { notification in
@@ -1326,19 +1341,41 @@ struct PostCardView: View {
                                     showingUserProfile = true
                                 }
 
-                                Text(post.user.displayName)
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(
-                                        Capsule()
-                                            .fill(Color.black.opacity(0.5))
+                                HStack(alignment: .bottom, spacing: 2) {
+                                    Text(APIClient.shared.currentUserId == post.user.id ? "あなた" : post.user.displayName)
+                                        .font(.system(size: 14, weight: .semibold))
+                                    Text("のおすすめ")
+                                        .font(.system(size: 11))
+                                }
+                                .foregroundStyle(
+                                    APIClient.shared.currentUserId == post.user.id ?
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color.orange,
+                                            Color.red
+                                        ]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    ) :
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color.white,
+                                            Color.white
+                                        ]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
                                     )
-                                    .lineLimit(1)
-                                    .onTapGesture {
-                                        showingUserProfile = true
-                                    }
+                                )
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(Color.black.opacity(0.5))
+                                )
+                                .lineLimit(1)
+                                .onTapGesture {
+                                    showingUserProfile = true
+                                }
 
                                 Spacer()
                             }
@@ -1430,13 +1467,9 @@ struct PostCardView: View {
                                             Image(systemName: isLiked ? "heart.fill" : "heart")
                                                 .font(.system(size: 20))
                                                 .foregroundColor(isLiked ? .red : .white)
-                                            // Show like count only for own posts
-                                            if let currentUserId = APIClient.shared.currentUserId,
-                                               post.user.id == currentUserId {
-                                                Text("\(likeCount)")
-                                                    .font(.system(size: 14, weight: .semibold))
-                                                    .foregroundColor(.white)
-                                            }
+                                            Text("\(likeCount)")
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundColor(.white)
                                         }
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
@@ -2123,9 +2156,25 @@ struct CommentRowView: View {
                 HStack {
                     Text(comment.user.displayName)
                         .font(.system(size: 14, weight: .semibold))
-                    Text(comment.user.username)
-                        .font(.system(size: 12))
-                        .foregroundColor(.gray)
+                        .foregroundStyle(
+                            APIClient.shared.currentUserId == comment.user.id ?
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.orange,
+                                    Color.red
+                                ]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ) :
+                            LinearGradient(
+                                gradient: Gradient(colors: [
+                                    Color.primary,
+                                    Color.primary
+                                ]),
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
                     Spacer()
                     Text(timeAgoString(from: comment.createdAt))
                         .font(.system(size: 12))
@@ -2228,7 +2277,25 @@ struct UserRadioButton: View {
             // User name
             Text(userPosts.user.displayName)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundColor(.white.opacity(0.8))
+                .foregroundStyle(
+                    APIClient.shared.currentUserId == userPosts.user.id ?
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.orange,
+                            Color.red
+                        ]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ) :
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.white.opacity(0.8),
+                            Color.white.opacity(0.8)
+                        ]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
                 .lineLimit(1)
                 .frame(width: 60, height: 14, alignment: .center)
 

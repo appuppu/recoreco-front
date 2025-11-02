@@ -16,7 +16,8 @@ struct UserProfileView: View {
             // Background
             LinearGradient(
                 gradient: Gradient(colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.2),
+                    Color.orange.opacity(0.8),
+                    Color.red.opacity(0.6),
                     Color.black
                 ]),
                 startPoint: .topLeading,
@@ -222,7 +223,18 @@ struct UserProfileView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(viewModel.user?.displayName ?? "プロフィール")
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    dismiss()
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+            }
+
             if let currentUserId = APIClient.shared.currentUserId, currentUserId != userId {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {

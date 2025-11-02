@@ -303,7 +303,7 @@ struct CreatePostView: View {
                                     .frame(maxWidth: .infinity)
                                     .padding()
                             } else {
-                                Text("おすすめの音楽紹介")
+                                Text("この内容で紹介する")
                                     .font(.headline)
                                     .foregroundColor(.white)
                                     .frame(maxWidth: .infinity)

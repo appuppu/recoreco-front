@@ -1606,6 +1606,7 @@ struct PostCardView: View {
             NavigationView {
                 UserProfileView(userId: post.user.id)
             }
+            .navigationViewStyle(.stack)
         }
     }
 

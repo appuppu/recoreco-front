@@ -15,7 +15,8 @@ struct SignUpView: View {
                 // Background gradient
                 LinearGradient(
                     gradient: Gradient(colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.2),
+                        Color.orange.opacity(0.8),
+                        Color.red.opacity(0.6),
                         Color.black
                     ]),
                     startPoint: .topLeading,
@@ -32,8 +33,8 @@ struct SignUpView: View {
                                     .fill(
                                         LinearGradient(
                                             gradient: Gradient(colors: [
-                                                Color.purple.opacity(0.3),
-                                                Color.blue.opacity(0.3)
+                                                Color.orange.opacity(0.4),
+                                                Color.red.opacity(0.3)
                                             ]),
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
@@ -42,18 +43,11 @@ struct SignUpView: View {
                                     .frame(width: 100, height: 100)
                                     .blur(radius: 20)
 
-                                Image(systemName: "music.note.list")
-                                    .font(.system(size: 50, weight: .light))
-                                    .foregroundStyle(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color.white,
-                                                Color.white.opacity(0.8)
-                                            ]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
+                                Image("DiscoveryIcon")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(width: 70, height: 70)
+                                    .clipShape(Circle())
                             }
 
                             Text("アカウント作成")
@@ -116,15 +110,15 @@ struct SignUpView: View {
                                 .background(
                                     LinearGradient(
                                         gradient: Gradient(colors: [
-                                            Color.purple,
-                                            Color.blue
+                                            Color.orange,
+                                            Color.red
                                         ]),
                                         startPoint: .leading,
                                         endPoint: .trailing
                                     )
                                 )
                                 .cornerRadius(16)
-                                .shadow(color: Color.purple.opacity(0.3), radius: 10, x: 0, y: 5)
+                                .shadow(color: Color.orange.opacity(0.5), radius: 10, x: 0, y: 5)
                             }
                             .disabled(isLoading || !isFormValid)
                             .opacity((isLoading || !isFormValid) ? 0.6 : 1.0)

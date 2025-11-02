@@ -13,7 +13,8 @@ struct NotificationsView: View {
                 // Background
                 LinearGradient(
                     gradient: Gradient(colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.2),
+                        Color.orange.opacity(0.8),
+                        Color.red.opacity(0.6),
                         Color.black
                     ]),
                     startPoint: .topLeading,

@@ -86,12 +86,14 @@ struct FollowListRow: View {
 
             // User info
             VStack(alignment: .leading, spacing: 4) {
-                Text(user.displayName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
-                Text(user.username)
-                    .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.6))
+                HStack(spacing: 4) {
+                    Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.6))
+                    Text(user.displayName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
             }
 
             Spacer()

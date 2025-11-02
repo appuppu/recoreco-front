@@ -262,21 +262,35 @@ struct CreatePostView: View {
                                 .font(.subheadline)
                                 .fontWeight(.medium)
                                 .foregroundColor(.white)
-                            TextEditor(text: $viewModel.comment)
-                                .frame(height: 80)
-                                .padding(8)
-                                .background(Color(.systemGray6))
-                                .cornerRadius(8)
-                                .focused($isCommentFocused)
-                                .scrollContentBackground(.hidden)
-                                .toolbar {
-                                    ToolbarItemGroup(placement: .keyboard) {
-                                        Spacer()
-                                        Button("完了") {
-                                            isCommentFocused = false
+                            ZStack(alignment: .topLeading) {
+                                Color(.systemGray6)
+                                    .cornerRadius(8)
+
+                                if viewModel.comment.isEmpty {
+                                    Text("最低一文字必要です")
+                                        .font(.body)
+                                        .foregroundColor(Color(.systemGray3))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 16)
+                                }
+
+                                TextEditor(text: $viewModel.comment)
+                                    .frame(height: 80)
+                                    .padding(8)
+                                    .background(Color.clear)
+                                    .cornerRadius(8)
+                                    .focused($isCommentFocused)
+                                    .scrollContentBackground(.hidden)
+                                    .toolbar {
+                                        ToolbarItemGroup(placement: .keyboard) {
+                                            Spacer()
+                                            Button("完了") {
+                                                isCommentFocused = false
+                                            }
                                         }
                                     }
-                                }
+                            }
+                            .frame(height: 80)
                         }
                         .padding(.horizontal)
 

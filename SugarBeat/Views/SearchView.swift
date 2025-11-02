@@ -52,11 +52,13 @@ struct UserRow: View {
             .clipShape(Circle())
 
             VStack(alignment: .leading) {
-                Text(user.displayName)
-                    .font(.headline)
-                Text(user.username)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                    Text(user.displayName)
+                        .font(.headline)
+                }
             }
 
             Spacer()

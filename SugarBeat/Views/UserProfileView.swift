@@ -52,9 +52,14 @@ struct UserProfileView: View {
                             .clipShape(Circle())
 
                             // Display Name
-                            Text(user.displayName)
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
+                            HStack(spacing: 6) {
+                                Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                                    .font(.system(size: 20))
+                                    .foregroundColor(.white.opacity(0.7))
+                                Text(user.displayName)
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
 
                             // Follow counts
                             FollowCountsView(user: user)

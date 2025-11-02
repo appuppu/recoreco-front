@@ -153,8 +153,8 @@ struct FeedView: View {
 
                                                                 // Start playback
                                                                 try await MusicKitManager.shared.playPreviewFromURL(previewUrl, startTime: post.startTime)
-                                                                PlaybackStateManager.shared.startPlayback(for: postId)
-                                                                print("🎵 Radio button: Successfully started playback for postId: \(postId)")
+                                                                PlaybackStateManager.shared.startPlayback(for: postId, userId: targetUserId)
+                                                                print("🎵 Radio button: Successfully started playback for postId: \(postId), userId: \(targetUserId)")
 
                                                                 // Auto-stop after duration
                                                                 let duration = post.endTime - post.startTime
@@ -1120,8 +1120,8 @@ struct UserPostsScrollView: View {
 
             // Start playback for this post
             try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
-            playbackStateManager.startPlayback(for: postId)
-            print("📻 Started playback for post: \(postId)")
+            playbackStateManager.startPlayback(for: postId, userId: userPosts.user.id)
+            print("📻 Started playback for post: \(postId), userId: \(userPosts.user.id)")
 
             // Auto-stop after duration
             let duration = post.endTime - post.startTime
@@ -1585,7 +1585,7 @@ struct PostCardView: View {
 
             // Start playback for this post
             try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
-            playbackStateManager.startPlayback(for: post.id)
+            playbackStateManager.startPlayback(for: post.id, userId: post.user.id)
 
             // Auto-stop after duration
             let duration = post.endTime - post.startTime
@@ -2213,11 +2213,14 @@ struct UserRadioButton: View {
     }
 
     private var isPlaying: Bool {
-        // Check if any of this user's posts is currently playing
-        guard let currentlyPlayingId = playbackStateManager.currentlyPlayingPostId else {
+        // Check if this user's tab is currently playing
+        guard let currentlyPlayingId = playbackStateManager.currentlyPlayingPostId,
+              let currentlyPlayingUserId = playbackStateManager.currentlyPlayingUserId else {
             return false
         }
-        return userPosts.posts.contains { $0.id == currentlyPlayingId }
+        // Only show playing animation if the playing context matches this user
+        return currentlyPlayingUserId == userPosts.user.id &&
+               userPosts.posts.contains { $0.id == currentlyPlayingId }
     }
 
     var body: some View {

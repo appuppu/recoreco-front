@@ -2480,12 +2480,25 @@ struct UserRadioButton: View {
                             placeholderView(isAlbumArt: true)
                         }
                     } else {
-                        // Show static app icon (when others show profile)
-                        Image("DiscoveryIcon")
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 54, height: 54)
-                            .clipShape(Circle())
+                        // Show music.note.list icon (when others show profile)
+                        ZStack {
+                            Circle()
+                                .fill(Color.black.opacity(0.3))
+                                .frame(width: 54, height: 54)
+
+                            Image(systemName: "music.note.list")
+                                .font(.system(size: 24))
+                                .foregroundStyle(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [
+                                            Color.orange,
+                                            Color.red
+                                        ]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                        }
                     }
                 } else if timerCoordinator.showingAlbumArt {
                     // Album artwork

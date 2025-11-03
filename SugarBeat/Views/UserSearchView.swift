@@ -83,18 +83,21 @@ struct UserSearchView: View {
                         ScrollView {
                             LazyVStack(spacing: 0) {
                                 ForEach(viewModel.users) { user in
-                                    UserSearchRow(
-                                        user: user,
-                                        onFollowToggle: {
-                                            Task {
-                                                if user.isFollowing == true {
-                                                    await viewModel.unfollowUser(userId: user.id)
-                                                } else {
-                                                    await viewModel.followUser(userId: user.id)
+                                    NavigationLink(destination: UserProfileView(userId: user.id)) {
+                                        UserSearchRow(
+                                            user: user,
+                                            onFollowToggle: {
+                                                Task {
+                                                    if user.isFollowing == true {
+                                                        await viewModel.unfollowUser(userId: user.id)
+                                                    } else {
+                                                        await viewModel.followUser(userId: user.id)
+                                                    }
                                                 }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                     .padding(.horizontal)
                                     .padding(.vertical, 12)
 

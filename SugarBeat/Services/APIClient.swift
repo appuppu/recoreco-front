@@ -148,6 +148,12 @@ class APIClient {
         return try await performRequest(url: url, method: "PUT", body: request)
     }
 
+    func checkUsernameAvailability(username: String) async throws -> Bool {
+        let encodedUsername = username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? username
+        let url = URL(string: "\(baseURL)/users/check-username?username=\(encodedUsername)")!
+        return try await performRequest(url: url, method: "GET", requiresAuth: false)
+    }
+
     func uploadImage(imageData: Data) async throws -> String {
         let url = URL(string: "\(baseURL)/images/upload")!
 

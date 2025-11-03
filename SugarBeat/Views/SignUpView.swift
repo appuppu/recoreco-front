@@ -11,6 +11,9 @@ struct SignUpView: View {
     @State private var showingUrlConfirmation = false
     @State private var urlToOpen: URL?
     @State private var urlTitle: String = ""
+    @State private var isCheckingUsername = false
+    @State private var usernameAvailable: Bool?
+    @State private var usernameCheckTask: Task<Void, Never>?
 
     var body: some View {
         NavigationView {
@@ -67,16 +70,45 @@ struct SignUpView: View {
                         // Sign Up Form
                         VStack(spacing: 20) {
                             VStack(spacing: 16) {
-                                TextField("", text: $username, prompt: Text("ユーザー名（英数字10文字以内）").foregroundColor(.white.opacity(0.5)))
-                                    .textFieldStyle(GlassTextFieldStyle())
-                                    .autocapitalization(.none)
-                                    .onChange(of: username) { newValue in
-                                        // Allow only alphanumeric characters
-                                        let filtered = newValue.filter { $0.isLetter || $0.isNumber }
-                                        if filtered != newValue {
-                                            username = filtered
+                                // Username field with validation indicator
+                                HStack(spacing: 8) {
+                                    TextField("", text: $username, prompt: Text("ユーザー名（英数字10文字以内）").foregroundColor(.white.opacity(0.5)))
+                                        .textFieldStyle(GlassTextFieldStyle())
+                                        .autocapitalization(.none)
+                                        .onChange(of: username) { newValue in
+                                            // Allow only alphanumeric characters
+                                            let filtered = newValue.filter { $0.isLetter || $0.isNumber }
+                                            if filtered != newValue {
+                                                username = filtered
+                                            }
+
+                                            // Cancel previous check
+                                            usernameCheckTask?.cancel()
+                                            usernameAvailable = nil
+
+                                            // Check username availability after user stops typing
+                                            guard !filtered.isEmpty else { return }
+
+                                            usernameCheckTask = Task {
+                                                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 second debounce
+                                                guard !Task.isCancelled else { return }
+
+                                                await checkUsernameAvailability(filtered)
+                                            }
                                         }
+
+                                    // Validation indicator
+                                    if isCheckingUsername {
+                                        ProgressView()
+                                            .tint(.white)
+                                            .frame(width: 20, height: 20)
+                                    } else if let available = usernameAvailable {
+                                        Image(systemName: available ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(available ? .green : .red)
                                     }
+                                }
+                                .padding(.trailing, 8)
 
                                 TextField("", text: $email, prompt: Text("メールアドレス").foregroundColor(.white.opacity(0.5)))
                                     .textFieldStyle(GlassTextFieldStyle())
@@ -190,7 +222,7 @@ struct SignUpView: View {
     }
 
     private var isFormValid: Bool {
-        !username.isEmpty && !email.isEmpty && !password.isEmpty && password.count >= 8 && username.count <= 10
+        !username.isEmpty && !email.isEmpty && !password.isEmpty && password.count >= 8 && username.count <= 10 && usernameAvailable == true
     }
 
     private func signUp() {
@@ -246,6 +278,22 @@ struct SignUpView: View {
         let emailRegex = "^[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
         let emailPredicate = NSPredicate(format: "SELF MATCHES %@", emailRegex)
         return emailPredicate.evaluate(with: email)
+    }
+
+    private func checkUsernameAvailability(_ username: String) async {
+        isCheckingUsername = true
+        defer { isCheckingUsername = false }
+
+        do {
+            let available = try await APIClient.shared.checkUsernameAvailability(username: username)
+            await MainActor.run {
+                usernameAvailable = available
+            }
+        } catch {
+            await MainActor.run {
+                usernameAvailable = nil
+            }
+        }
     }
 }
 

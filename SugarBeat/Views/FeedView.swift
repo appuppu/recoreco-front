@@ -263,7 +263,7 @@ struct FeedView: View {
 
             // Dark overlay when menu is shown
             if showingMenu {
-                Color.black.opacity(0.4)
+                Color.black.opacity(0.8)
                     .ignoresSafeArea()
                     .onTapGesture {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
@@ -603,12 +603,11 @@ struct FeedView: View {
             if let userInfo = notification.userInfo,
                let userId = userInfo["userId"] as? Int64,
                let postIndex = userInfo["postIndex"] as? Int {
-                let oldIndex = userCurrentPostIndices[userId] ?? 0
+                _ = userCurrentPostIndices[userId] ?? 0
                 userCurrentPostIndices[userId] = postIndex
 
                 // Find user display name for better logging
-                if let userPosts = viewModel.allUserPosts.first(where: { $0.user.id == userId }) {
-                }
+                _ = viewModel.allUserPosts.first(where: { $0.user.id == userId })
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("FollowStatusChanged"))) { _ in

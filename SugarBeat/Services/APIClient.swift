@@ -35,8 +35,8 @@ struct ErrorResponse: Codable {
 class APIClient {
     static let shared = APIClient()
 
-    private let baseURL = "http://192.168.0.2:8080/api"
-    private let serverBaseURL = "http://192.168.0.2:8080/api"
+    private let baseURL = "http://192.168.0.4:8080/api"
+    private let serverBaseURL = "http://192.168.0.4:8080/api"
     private var authToken: String?
     private(set) var currentUserId: Int64?
 

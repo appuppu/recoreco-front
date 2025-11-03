@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		008D9DA98E3D92AA0CF1F742 /* WaveformRangeSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0520DF8701555C7D9FDE6B1 /* WaveformRangeSelectorView.swift */; };
 		04E3E4F391AE053F2589DFE8 /* ReportPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D7D8C7F199F76C143A79CF /* ReportPostView.swift */; };
+		AD2222222222222222222222 /* AdConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD1111111111111111111111 /* AdConfig.swift */; };
+		AD4444444444444444444444 /* AdBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3333333333333333333333 /* AdBannerView.swift */; };
 		0862D93BCC4CDE338D028FDE /* BlockedUsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5701DF1321EE3E818035EE7 /* BlockedUsersView.swift */; };
 		0EBC7900F2E77A575BB868DD /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250136EC4050EE8B36C510F0 /* SearchViewModel.swift */; };
 		1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */; };
@@ -46,6 +48,7 @@
 		D502C95F7423366F343221A6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2C11195FE0D38EC0C1838891 /* Assets.xcassets */; };
 		D6FEF7D0C3D16E08FCAE573C /* Notification.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0E2A24E5A3D4B3EF70E4465 /* Notification.swift */; };
 		D8FE7888F27D690A5556042D /* CreatePostRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACE0B665A5F1830C3DA11AC2 /* CreatePostRequest.swift */; };
+		DCF648D079F1370D02E04BAE /* Pods_SugarBeat.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 46F4B3743EBA57F2560704F6 /* Pods_SugarBeat.framework */; };
 		DE7721F0C1441945BC7DF7EA /* UserSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91A2AE203D5FDC534ACD2AE /* UserSearchView.swift */; };
 		E395DB4F3C55DB0B8FE6659A /* CreateReportRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EDF588E72E6362CF25F5CBB /* CreateReportRequest.swift */; };
 		E3967D8A916857809CD0C32F /* ProfileEditView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6BC5939D8752E981B2440B2C /* ProfileEditView.swift */; };
@@ -55,6 +58,8 @@
 /* Begin PBXFileReference section */
 		0280860465fc676bd70c7d35 /* MusicPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicPermissionView.swift; sourceTree = "<group>"; };
 		13C3331FD9F72180FDA3F984 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
+		AD1111111111111111111111 /* AdConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdConfig.swift; sourceTree = "<group>"; };
+		AD3333333333333333333333 /* AdBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdBannerView.swift; sourceTree = "<group>"; };
 		13DD3F9848C5A9F165D64E50 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		183B04A2417F147ACECAFADA /* Post.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Post.swift; sourceTree = "<group>"; };
 		2200803D3C80571A5A7547AB /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
@@ -66,6 +71,7 @@
 		39C67D0037D92E07F82A211A /* SugarBeat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SugarBeat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FD08E3ADF25DE60B540F6E5 /* EditableImagePicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditableImagePicker.swift; sourceTree = "<group>"; };
 		43D7D8C7F199F76C143A79CF /* ReportPostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportPostView.swift; sourceTree = "<group>"; };
+		46F4B3743EBA57F2560704F6 /* Pods_SugarBeat.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_SugarBeat.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		4FE9F9756265FB4681327DAF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		5EC006309F1FF7C328CBEB44 /* SugarBeatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SugarBeatApp.swift; sourceTree = "<group>"; };
 		6BC5939D8752E981B2440B2C /* ProfileEditView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileEditView.swift; sourceTree = "<group>"; };
@@ -78,6 +84,7 @@
 		8761F86D639E7AFB7DF09C4C /* StoriesBarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoriesBarView.swift; sourceTree = "<group>"; };
 		8C9884B287176970FED46424 /* MusicModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicModels.swift; sourceTree = "<group>"; };
 		8EDF588E72E6362CF25F5CBB /* CreateReportRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateReportRequest.swift; sourceTree = "<group>"; };
+		903D4BA2E572342D64067C66 /* Pods-SugarBeat.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SugarBeat.release.xcconfig"; path = "Target Support Files/Pods-SugarBeat/Pods-SugarBeat.release.xcconfig"; sourceTree = "<group>"; };
 		911D9E5277B18C5968D58A59 /* AuthModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthModels.swift; sourceTree = "<group>"; };
 		97B170ADCF486B7113F37C76 /* FeedViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedViewModel.swift; sourceTree = "<group>"; };
 		9F1C82CDB2FF0F1088058E82 /* UserProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileView.swift; sourceTree = "<group>"; };
@@ -85,6 +92,7 @@
 		AB188FDA1D0978E1D3ECA85D /* UserPostsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsView.swift; sourceTree = "<group>"; };
 		ACE0B665A5F1830C3DA11AC2 /* CreatePostRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostRequest.swift; sourceTree = "<group>"; };
 		B26CCED5DF000501172A4A27 /* MusicKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicKitManager.swift; sourceTree = "<group>"; };
+		B4059D9212E76B02C3F82D8B /* Pods-SugarBeat.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SugarBeat.debug.xcconfig"; path = "Target Support Files/Pods-SugarBeat/Pods-SugarBeat.debug.xcconfig"; sourceTree = "<group>"; };
 		B67DBDFBDE6E03EEC51C977B /* UserPostsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsListView.swift; sourceTree = "<group>"; };
 		BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
 		C81162C40CE0C846263B8F88 /* UserProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileViewModel.swift; sourceTree = "<group>"; };
@@ -101,6 +109,17 @@
 		FADD45EA0EE661AA341F1AD0 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		68FE3F86093C1FA9062884AE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				DCF648D079F1370D02E04BAE /* Pods_SugarBeat.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
 		5458C0FA3C92516BC65321D6 /* SugarBeat */ = {
 			isa = PBXGroup;
@@ -109,6 +128,8 @@
 				4FE9F9756265FB4681327DAF /* Info.plist */,
 				E349706DCC43B2086706E01A /* SugarBeat.entitlements */,
 				5EC006309F1FF7C328CBEB44 /* SugarBeatApp.swift */,
+				AD1111111111111111111111 /* AdConfig.swift */,
+				AD3333333333333333333333 /* AdBannerView.swift */,
 				D25A6BB726E2F2A335A56847 /* Models */,
 				BE8EB3B2D70B2D367562AF6A /* Services */,
 				90C4D4DD04FAB2A999BA968A /* Utils */,
@@ -116,6 +137,16 @@
 				D25617C2B1210818F8F255E0 /* Views */,
 			);
 			path = SugarBeat;
+			sourceTree = "<group>";
+		};
+		724599561C334A622D202C20 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				B4059D9212E76B02C3F82D8B /* Pods-SugarBeat.debug.xcconfig */,
+				903D4BA2E572342D64067C66 /* Pods-SugarBeat.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 		90C4D4DD04FAB2A999BA968A /* Utils */ = {
@@ -153,6 +184,8 @@
 			children = (
 				5458C0FA3C92516BC65321D6 /* SugarBeat */,
 				B5F581F9B10A75F158A0E0B0 /* Products */,
+				724599561C334A622D202C20 /* Pods */,
+				E6FDCA54F76B34A73D0D00CF /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -210,6 +243,14 @@
 			path = ViewModels;
 			sourceTree = "<group>";
 		};
+		E6FDCA54F76B34A73D0D00CF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				46F4B3743EBA57F2560704F6 /* Pods_SugarBeat.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -217,16 +258,17 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5E24436DE3EE3F5951E61DB9 /* Build configuration list for PBXNativeTarget "SugarBeat" */;
 			buildPhases = (
+				BE24037BE626DA8251962817 /* [CP] Check Pods Manifest.lock */,
 				C3D411650FE2D78C8D67CDEB /* Sources */,
 				7BA02A89B04F5A26D1A08BFB /* Resources */,
+				68FE3F86093C1FA9062884AE /* Frameworks */,
+				083FCD3E5AEC483C42E4D209 /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = SugarBeat;
-			packageProductDependencies = (
-			);
 			productName = SugarBeat;
 			productReference = 39C67D0037D92E07F82A211A /* SugarBeat.app */;
 			productType = "com.apple.product-type.application";
@@ -256,6 +298,7 @@
 			);
 			mainGroup = CD609ABFCC5E8427C3719355;
 			minimizedProjectReferenceProxies = 1;
+			productRefGroup = B5F581F9B10A75F158A0E0B0 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -274,6 +317,48 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		083FCD3E5AEC483C42E4D209 /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-SugarBeat/Pods-SugarBeat-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-SugarBeat/Pods-SugarBeat-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-SugarBeat/Pods-SugarBeat-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		BE24037BE626DA8251962817 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-SugarBeat-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		C3D411650FE2D78C8D67CDEB /* Sources */ = {
@@ -314,6 +399,8 @@
 				B87F65882C387C176C3F5339 /* SignUpView.swift in Sources */,
 				D338B3B135CD44EE5D423D2E /* StoriesBarView.swift in Sources */,
 				37519DAEFD2AFAF8140A10CF /* SugarBeatApp.swift in Sources */,
+				AD2222222222222222222222 /* AdConfig.swift in Sources */,
+				AD4444444444444444444444 /* AdBannerView.swift in Sources */,
 				5DF231F6EDB1FA567DCCA427 /* UnreadPostsManager.swift in Sources */,
 				BCD94333C6513E636F24189D /* User.swift in Sources */,
 				9D071B3E04510F675E9BB88E /* UserPostsListView.swift in Sources */,
@@ -388,6 +475,7 @@
 		};
 		3D6F2C9B9C2260CBA580923D /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 903D4BA2E572342D64067C66 /* Pods-SugarBeat.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = SugarBeat/SugarBeat.entitlements;
@@ -476,6 +564,7 @@
 		};
 		D411A947453FA2FA2B3853BA /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = B4059D9212E76B02C3F82D8B /* Pods-SugarBeat.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = SugarBeat/SugarBeat.entitlements;

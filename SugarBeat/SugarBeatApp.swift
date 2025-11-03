@@ -1,4 +1,6 @@
 import SwiftUI
+import AppTrackingTransparency
+import GoogleMobileAds
 
 @main
 struct SugarBeatApp: App {
@@ -6,21 +8,34 @@ struct SugarBeatApp: App {
     @ObservedObject private var musicKitManager = MusicKitManager.shared
     @State private var showLaunchScreen = true
 
+    init() {
+        // Google Mobile Ads SDKを初期化
+        MobileAds.shared.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             ZStack {
-                // Main Content
-                if authManager.isAuthenticated {
-                    if musicKitManager.isAuthorized {
-                        ContentView()
-                            .environmentObject(authManager)
+                // Main Content with Ad
+                VStack(spacing: 0) {
+                    // Main Content
+                    if authManager.isAuthenticated {
+                        if musicKitManager.isAuthorized {
+                            ContentView()
+                                .environmentObject(authManager)
+                        } else {
+                            MusicPermissionView()
+                                .environmentObject(authManager)
+                        }
                     } else {
-                        MusicPermissionView()
+                        LoginView()
                             .environmentObject(authManager)
                     }
-                } else {
-                    LoginView()
-                        .environmentObject(authManager)
+
+                    // Banner Ad at the bottom
+                    AdBannerView()
+                        .frame(height: 50)
+                        .background(Color.black.opacity(0.9))
                 }
 
                 // Launch Screen
@@ -50,10 +65,35 @@ struct SugarBeatApp: App {
                 }
             }
             .onAppear {
+                // トラッキング許可をリクエスト
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    requestTrackingAuthorization()
+                }
+
+                // ローンチスクリーンを非表示
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                     withAnimation(.linear(duration: 2.0)) {
                         showLaunchScreen = false
                     }
+                }
+            }
+        }
+    }
+
+    private func requestTrackingAuthorization() {
+        if #available(iOS 14, *) {
+            ATTrackingManager.requestTrackingAuthorization { status in
+                switch status {
+                case .authorized:
+                    print("トラッキングが許可されました")
+                case .denied:
+                    print("トラッキングが拒否されました")
+                case .notDetermined:
+                    print("トラッキングの許可が未決定です")
+                case .restricted:
+                    print("トラッキングが制限されています")
+                @unknown default:
+                    break
                 }
             }
         }

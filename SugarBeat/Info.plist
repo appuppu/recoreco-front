@@ -44,6 +44,10 @@
 	<string>Sugar Beat needs access to Apple Music to allow you to share and discover music with your friends.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>プロフィール画像を設定するために写真ライブラリへのアクセスが必要です。</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>より関連性の高い広告を表示するために、トラッキングの許可をお願いします。</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3107120992746486~2414005410</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Sugar Beat needs access to your local network to connect to the development server.</string>
 	<key>UIApplicationSceneManifest</key>

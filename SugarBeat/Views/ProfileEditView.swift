@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 
 struct ProfileEditView: View {
     @Environment(\.dismiss) private var dismiss
@@ -37,7 +38,7 @@ struct ProfileEditView: View {
                         // Profile Image
                         VStack(spacing: 16) {
                             Button(action: {
-                                showingPicker = true
+                                requestPhotoLibraryPermission()
                             }) {
                                 ZStack {
                                     // Profile image
@@ -200,6 +201,26 @@ struct ProfileEditView: View {
                 pendingImage = img
                 viewModel.shouldDeleteImage = false
                 selectedImage = nil
+            }
+        }
+    }
+
+    private func requestPhotoLibraryPermission() {
+        PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
+            DispatchQueue.main.async {
+                switch status {
+                case .authorized, .limited:
+                    // 許可されたので写真選択画面を開く
+                    showingPicker = true
+                case .denied, .restricted:
+                    // 拒否された場合は何もしない（ユーザーが設定アプリで変更可能）
+                    print("写真ライブラリへのアクセスが拒否されました")
+                case .notDetermined:
+                    // 通常ここには来ないが、念のため
+                    break
+                @unknown default:
+                    break
+                }
             }
         }
     }

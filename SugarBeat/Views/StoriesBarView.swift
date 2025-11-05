@@ -13,7 +13,6 @@ struct StoriesBarView: View {
                         isCurrentUser: index == 0
                     )
                     .onTapGesture {
-                        print("🎵 Tapped story for user: \(userPosts.user.displayName)")
                         onUserTapped(index, userPosts)
                     }
                 }

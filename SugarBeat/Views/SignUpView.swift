@@ -72,12 +72,12 @@ struct SignUpView: View {
                             VStack(spacing: 16) {
                                 // Username field with validation indicator
                                 HStack(spacing: 8) {
-                                    TextField("", text: $username, prompt: Text("ユーザー名（英数字10文字以内）").foregroundColor(.white.opacity(0.5)))
+                                    TextField("", text: $username, prompt: Text("ユーザー名（英数字._ 10文字以内）").foregroundColor(.white.opacity(0.5)))
                                         .textFieldStyle(GlassTextFieldStyle())
                                         .autocapitalization(.none)
                                         .onChange(of: username) { newValue in
-                                            // Allow only alphanumeric characters
-                                            let filtered = newValue.filter { $0.isLetter || $0.isNumber }
+                                            // Allow only alphanumeric characters, dots, and underscores
+                                            let filtered = newValue.filter { $0.isLetter || $0.isNumber || $0 == "." || $0 == "_" }
                                             if filtered != newValue {
                                                 username = filtered
                                             }
@@ -187,7 +187,7 @@ struct SignUpView: View {
                             }
                             .padding(.top, 20)
                         }
-                        .padding(.horizontal, 32)
+                        .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 32)
                         .padding(.bottom, 40)
                     }
                 }
@@ -219,6 +219,7 @@ struct SignUpView: View {
                 }
             }
         }
+        .navigationViewStyle(.stack)
     }
 
     private var isFormValid: Bool {
@@ -232,10 +233,10 @@ struct SignUpView: View {
             return
         }
 
-        // Check if username contains only alphanumeric characters
-        let alphanumericSet = CharacterSet.alphanumerics
-        if username.unicodeScalars.contains(where: { !alphanumericSet.contains($0) }) {
-            errorMessage = "ユーザー名は英数字のみで入力してください"
+        // Check if username contains only allowed characters (alphanumeric, dot, underscore)
+        let allowedCharacterSet = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._"))
+        if username.unicodeScalars.contains(where: { !allowedCharacterSet.contains($0) }) {
+            errorMessage = "ユーザー名は英数字、ピリオド、アンダースコアのみで入力してください"
             return
         }
 

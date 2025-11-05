@@ -33,9 +33,11 @@ struct SugarBeatApp: App {
                     }
 
                     // Banner Ad at the bottom
-                    AdBannerView()
-                        .frame(height: 50)
-                        .background(Color.black.opacity(0.9))
+                    if !AdConfig.hideAdsForScreenshot {
+                        AdBannerView()
+                            .frame(height: 50)
+                            .background(Color.black.opacity(0.9))
+                    }
                 }
 
                 // Launch Screen
@@ -82,20 +84,7 @@ struct SugarBeatApp: App {
 
     private func requestTrackingAuthorization() {
         if #available(iOS 14, *) {
-            ATTrackingManager.requestTrackingAuthorization { status in
-                switch status {
-                case .authorized:
-                    print("トラッキングが許可されました")
-                case .denied:
-                    print("トラッキングが拒否されました")
-                case .notDetermined:
-                    print("トラッキングの許可が未決定です")
-                case .restricted:
-                    print("トラッキングが制限されています")
-                @unknown default:
-                    break
-                }
-            }
+            ATTrackingManager.requestTrackingAuthorization { _ in }
         }
     }
 }

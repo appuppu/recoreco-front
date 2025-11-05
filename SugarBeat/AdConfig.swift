@@ -11,7 +11,10 @@ struct AdConfig {
     static let testBannerID = "ca-app-pub-3940256099942544/2435281174"
 
     // テストモード切り替え（本番リリース時にfalseに変更）
-    static let isTestMode = true
+    static let isTestMode = false
+
+    // スクリーンショット撮影時に広告を非表示にする（撮影後はfalseに戻す）
+    static let hideAdsForScreenshot = false
 
     static var bannerAdUnitID: String {
         return isTestMode ? testBannerID : productionBannerID

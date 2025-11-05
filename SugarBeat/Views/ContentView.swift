@@ -135,10 +135,14 @@ struct CreatePostView: View {
 
                 // Scrollable content area
                 if viewModel.isSearching {
-                    Spacer()
-                    ProgressView()
-                        .tint(.white)
-                    Spacer()
+                    VStack {
+                        Spacer()
+                        ProgressView()
+                            .tint(.white)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
                 } else if !viewModel.searchResults.isEmpty {
                     // Search results
                     ScrollView {

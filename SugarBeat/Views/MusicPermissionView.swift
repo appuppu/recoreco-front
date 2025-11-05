@@ -30,14 +30,14 @@ struct MusicPermissionView: View {
                     .font(.system(size: 24, weight: .bold))
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+                    .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 40)
 
                 // Description
-                Text("SugarBeatは音楽を検索・共有するためにApple Musicへのアクセスが必要です")
+                Text("レコレコは音楽を検索・共有するためにApple Musicへのアクセスが必要です")
                     .font(.system(size: 16))
                     .foregroundColor(.white.opacity(0.8))
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
+                    .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 40)
 
                 Spacer()
 
@@ -61,14 +61,14 @@ struct MusicPermissionView: View {
                                     endPoint: .trailing
                                 )
 
-                                Text("許可する")
+                                Text("Continue")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(.white)
                             }
                             .frame(height: 56)
                             .cornerRadius(28)
                         }
-                        .padding(.horizontal, 40)
+                        .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 40)
                     } else if musicKitManager.authorizationStatus == .denied ||
                               musicKitManager.authorizationStatus == .restricted {
                         // Show settings button when permission was denied
@@ -100,7 +100,7 @@ struct MusicPermissionView: View {
                                 .frame(height: 56)
                                 .cornerRadius(28)
                             }
-                            .padding(.horizontal, 40)
+                            .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 40)
                             .padding(.top, 8)
                         }
                     }

@@ -105,7 +105,7 @@ struct UserProfileView: View {
                                                 .font(.system(size: 16, weight: .semibold))
                                                 .foregroundColor(.white)
                                         }
-                                        .frame(width: 200, height: 44)
+                                        .frame(width: UIDevice.current.userInterfaceIdiom == .pad ? 300 : 200, height: 44)
                                         .cornerRadius(22)
                                     }
                                     .padding(.top, 8)
@@ -124,7 +124,17 @@ struct UserProfileView: View {
                                           (user.isPublic == true) ||
                                           (user.isPublic != true && (user.isMutual ?? false))
 
-                        if canViewPosts && !viewModel.posts.isEmpty {
+                        if viewModel.isBlocked {
+                            VStack(spacing: 12) {
+                                Image(systemName: "hand.raised.fill")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.white.opacity(0.4))
+                                Text("ブロック中のユーザーです")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                            .padding(.top, 40)
+                        } else if canViewPosts && !viewModel.posts.isEmpty {
                             LazyVGrid(columns: [
                                 GridItem(.flexible(), spacing: 2),
                                 GridItem(.flexible(), spacing: 2),

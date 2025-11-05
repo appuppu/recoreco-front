@@ -90,7 +90,6 @@ struct ReportCommentView: View {
                 reason: selectedReason,
                 description: description.isEmpty ? nil : description
             )
-            print("✅ Comment reported successfully")
             isSubmitting = false
             showingSuccessAlert = true
         } catch {

@@ -90,7 +90,6 @@ struct ReportPostView: View {
                 reason: selectedReason,
                 description: description.isEmpty ? nil : description
             )
-            print("✅ Post reported successfully")
             isSubmitting = false
             showingSuccessAlert = true
         } catch {

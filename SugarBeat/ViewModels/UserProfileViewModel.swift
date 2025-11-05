@@ -7,6 +7,7 @@ class UserProfileViewModel: ObservableObject {
     @Published var posts: [Post] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var isBlocked = false
 
     func loadUser(userId: Int64) async {
         isLoading = true
@@ -49,6 +50,19 @@ class UserProfileViewModel: ObservableObject {
     func blockUser(userId: Int64) async {
         do {
             try await APIClient.shared.blockUser(userId: userId)
+
+            // Set blocked state
+            isBlocked = true
+
+            // Clear posts
+            posts = []
+
+            // Notify FeedView to remove this user
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UserBlocked"),
+                object: nil,
+                userInfo: ["blockedUserId": userId]
+            )
         } catch {
             errorMessage = "Failed to block user: \(error.localizedDescription)"
         }

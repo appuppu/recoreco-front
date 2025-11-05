@@ -1,4 +1,23 @@
 import SwiftUI
+import UIKit
+
+// Device type detection for iPad responsive design
+enum DeviceType {
+    case iPhone
+    case iPad
+
+    static var current: DeviceType {
+        UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
+    }
+
+    static var isIPad: Bool {
+        current == .iPad
+    }
+
+    static var isIPhone: Bool {
+        current == .iPhone
+    }
+}
 
 // Shared timer coordinator for all radio buttons
 class RadioButtonTimerCoordinator: ObservableObject {
@@ -64,7 +83,8 @@ struct FeedView: View {
             // Background color
             Color.black.ignoresSafeArea()
 
-            // Content
+            // Content wrapper for iPad
+            Group {
             if viewModel.isLoading {
                 ProgressView()
                     .tint(.white)
@@ -78,15 +98,15 @@ struct FeedView: View {
                         .foregroundColor(.white.opacity(0.7))
                 }
             } else if viewModel.allUserPosts.isEmpty {
-                VStack(spacing: 20) {
+                VStack(spacing: DeviceType.isIPad ? 24 : 20) {
                     Image(systemName: "music.note")
-                        .font(.system(size: 60))
+                        .font(.system(size: DeviceType.isIPad ? 72 : 60))
                         .foregroundColor(.white.opacity(0.4))
                     Text("紹介がありません")
-                        .font(.title2)
+                        .font(DeviceType.isIPad ? .title : .title2)
                         .foregroundColor(.white.opacity(0.7))
                     Text("紹介を作成するか、ユーザーをフォローして音楽を共有しましょう")
-                        .font(.caption)
+                        .font(DeviceType.isIPad ? .body : .caption)
                         .foregroundColor(.white.opacity(0.5))
                         .multilineTextAlignment(.center)
                 }
@@ -108,15 +128,17 @@ struct FeedView: View {
                     }
                 )
             }
+            }
+            .frame(maxWidth: DeviceType.isIPad ? 700 : .infinity)
 
             // Horizontal user radio buttons at top (fixed position, not affected by vertical scroll)
             if !viewModel.allUserPosts.isEmpty {
                 VStack(spacing: 0) {
                     Spacer()
-                        .frame(height: 70)
+                        .frame(height: DeviceType.isIPad ? 90 : 70)
 
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
+                        HStack(spacing: DeviceType.isIPad ? 16 : 12) {
                             ForEach(Array(viewModel.allUserPosts.enumerated()), id: \.element.id) { index, userPosts in
                                 HStack(spacing: 8) {
                                     UserRadioButton(
@@ -127,7 +149,7 @@ struct FeedView: View {
                                             ? viewModel.hasUnreadDiscoveryPosts
                                             : (viewModel.usersWithUnreadPosts.contains(userPosts.user.id) || unreadPostsManager.hasUnreadPosts(in: userPosts.posts))
                                     )
-                                    .frame(width: 60, height: 72)
+                                    .frame(width: DeviceType.isIPad ? 80 : 60, height: DeviceType.isIPad ? 92 : 72)
                                     .id("\(userPosts.user.id)-\(index)")
                                     .onTapGesture {
                                         // Reset swipe hint timer on interaction
@@ -235,7 +257,7 @@ struct FeedView: View {
                                     // Show message for current user when no follows
                                     if userPosts.user.id == APIClient.shared.currentUserId && viewModel.allUserPosts.count <= 2 {
                                         Text("他のユーザーと繋がると\nここに表示されます。")
-                                            .font(.system(size: 11))
+                                            .font(.system(size: DeviceType.isIPad ? 13 : 11))
                                             .foregroundColor(.white.opacity(0.7))
                                             .multilineTextAlignment(.leading)
                                             .lineSpacing(2)
@@ -250,9 +272,9 @@ struct FeedView: View {
                                 }
                             }
                         }
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, DeviceType.isIPad ? 32 : 20)
                     }
-                    .frame(height: 72)
+                    .frame(height: DeviceType.isIPad ? 92 : 72)
                     .disabled(false)
 
                     Spacer()
@@ -281,7 +303,7 @@ struct FeedView: View {
                     ZStack(alignment: .bottomLeading) {
                         // Expanded menu buttons (positioned absolutely above main button)
                         if showingMenu {
-                            VStack(alignment: .leading, spacing: 16) {
+                            VStack(alignment: .leading, spacing: DeviceType.isIPad ? 20 : 16) {
                                 // Profile button
                                 FloatingMenuButton(icon: "person", label: "プロフィール") {
                                     showingProfile = true
@@ -308,7 +330,7 @@ struct FeedView: View {
                                     showingMenu = false
                                 }
                             }
-                            .offset(y: -72)
+                            .offset(y: DeviceType.isIPad ? -90 : -72)
                             .transition(.move(edge: .bottom).combined(with: .opacity))
                         }
 
@@ -321,23 +343,23 @@ struct FeedView: View {
                             ZStack {
                                 Circle()
                                     .fill(Color.white.opacity(0.15))
-                                    .frame(width: 56, height: 56)
+                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
                                     .blur(radius: 10)
 
                                 Circle()
                                     .fill(Color.white.opacity(0.2))
-                                    .frame(width: 56, height: 56)
+                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
 
                                 Image(systemName: showingMenu ? "xmark" : "ellipsis")
-                                    .font(.system(size: 20, weight: .semibold))
+                                    .font(.system(size: DeviceType.isIPad ? 24 : 20, weight: .semibold))
                                     .foregroundColor(.white)
                                     .rotationEffect(.degrees(showingMenu ? 0 : 90))
                             }
                         }
-                        .frame(width: 56, height: 56)
+                        .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
                     }
-                    .padding(.leading, 20)
-                    .padding(.bottom, 100)
+                    .padding(.leading, DeviceType.isIPad ? 32 : 20)
+                    .padding(.bottom, DeviceType.isIPad ? 120 : 100)
 
                     Spacer()
 
@@ -348,15 +370,15 @@ struct FeedView: View {
                         ZStack {
                             Circle()
                                 .fill(Color.white.opacity(0.15))
-                                .frame(width: 56, height: 56)
+                                .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
                                 .blur(radius: 10)
 
                             Circle()
                                 .fill(Color.white.opacity(0.2))
-                                .frame(width: 56, height: 56)
+                                .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
 
                             Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
-                                .font(.system(size: 22, weight: .semibold))
+                                .font(.system(size: DeviceType.isIPad ? 26 : 22, weight: .semibold))
                                 .foregroundColor(.white)
 
                             // Badge for unread count
@@ -368,13 +390,13 @@ struct FeedView: View {
                                             // Pulsing background
                                             Circle()
                                                 .fill(Color.red.opacity(0.5))
-                                                .frame(width: 24, height: 24)
+                                                .frame(width: DeviceType.isIPad ? 28 : 24, height: DeviceType.isIPad ? 28 : 24)
                                                 .scaleEffect(1.2)
                                                 .opacity(0.6)
                                                 .modifier(PulseAnimation())
 
                                             Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
-                                                .font(.system(size: 10, weight: .bold))
+                                                .font(.system(size: DeviceType.isIPad ? 12 : 10, weight: .bold))
                                                 .foregroundColor(.white)
                                                 .padding(4)
                                                 .background(Color.red)
@@ -384,13 +406,13 @@ struct FeedView: View {
                                     }
                                     Spacer()
                                 }
-                                .frame(width: 56, height: 56)
+                                .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
                             }
                         }
                     }
-                    .frame(width: 56, height: 56)
-                    .padding(.trailing, 20)
-                    .padding(.bottom, 100)
+                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
+                    .padding(.trailing, DeviceType.isIPad ? 32 : 20)
+                    .padding(.bottom, DeviceType.isIPad ? 120 : 100)
                 }
             }
 
@@ -622,6 +644,39 @@ struct FeedView: View {
                 refreshTrigger.toggle()
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("UserBlocked"))) { notification in
+            // Remove blocked user from feed immediately
+            if let userInfo = notification.userInfo,
+               let blockedUserId = userInfo["blockedUserId"] as? Int64 {
+
+                // Check if currently viewing this user before removal
+                let wasViewingBlockedUser = currentDisplayedUserIndex < viewModel.allUserPosts.count &&
+                                           viewModel.allUserPosts[currentDisplayedUserIndex].user.id == blockedUserId
+
+                // Remove user from allUserPosts
+                viewModel.allUserPosts.removeAll { $0.user.id == blockedUserId }
+
+                // Remove from discovery feed as well
+                if let discoveryIndex = viewModel.allUserPosts.firstIndex(where: { $0.user.id == -1 }) {
+                    var discoveryPosts = viewModel.allUserPosts[discoveryIndex]
+                    discoveryPosts.posts.removeAll { $0.user.id == blockedUserId }
+                    viewModel.allUserPosts[discoveryIndex] = discoveryPosts
+                }
+
+                // If was viewing this user or index is now out of range, navigate to first user (Discovery)
+                if wasViewingBlockedUser || currentDisplayedUserIndex >= viewModel.allUserPosts.count {
+                    currentDisplayedUserIndex = 0
+                    // Notify AllUserPostsView to update its currentUserIndex
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("ScrollToUser"),
+                        object: nil,
+                        userInfo: ["index": 0, "skipAutoPlay": true]
+                    )
+                }
+
+                print("🚫 Blocked user \(blockedUserId) removed from feed")
+            }
+        }
     }
 
     private func loadUnreadCount() async {
@@ -697,24 +752,24 @@ struct FloatingMenuButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 12) {
+            HStack(spacing: DeviceType.isIPad ? 16 : 12) {
                 ZStack {
                     Circle()
                         .fill(Color.white.opacity(0.15))
-                        .frame(width: 44, height: 44)
+                        .frame(width: DeviceType.isIPad ? 56 : 44, height: DeviceType.isIPad ? 56 : 44)
                         .blur(radius: 8)
 
                     Circle()
                         .fill(Color.white.opacity(0.2))
-                        .frame(width: 44, height: 44)
+                        .frame(width: DeviceType.isIPad ? 56 : 44, height: DeviceType.isIPad ? 56 : 44)
 
                     Image(systemName: icon)
-                        .font(.system(size: 18, weight: .medium))
+                        .font(.system(size: DeviceType.isIPad ? 22 : 18, weight: .medium))
                         .foregroundColor(.white)
                 }
 
                 Text(label)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(.system(size: DeviceType.isIPad ? 16 : 14, weight: .medium))
                     .foregroundColor(.white)
             }
         }
@@ -747,7 +802,7 @@ struct AllUserPostsView: View {
                     .ignoresSafeArea()
 
                 // Main content with horizontal slide (same as vertical)
-                if !allUserPosts.isEmpty {
+                if !allUserPosts.isEmpty && currentUserIndex < allUserPosts.count {
                     ZStack {
                         let previousIndex = (currentUserIndex - 1 + allUserPosts.count) % allUserPosts.count
                         let nextIndex = (currentUserIndex + 1) % allUserPosts.count
@@ -1282,6 +1337,7 @@ struct PostCardView: View {
     @ObservedObject private var commentStateManager = CommentStateManager.shared
     private let musicPlayer = MusicKitManager.shared
     @State private var showingDeleteConfirmation = false
+    @State private var showingBlockConfirmation = false
     @State private var showingComments = false
     @State private var showingReportCommentSheet = false
     @State private var commentToReport: Comment?
@@ -1339,7 +1395,7 @@ struct PostCardView: View {
                         .frame(width: screenWidth, height: screenHeight)
                         .blur(radius: 50)
                         .scaleEffect(backgroundScale)
-                        .rotationEffect(.degrees(backgroundRotation))
+                        // .rotationEffect(.degrees(backgroundRotation))
                         .clipped()
                 } placeholder: {
                     Rectangle()
@@ -1355,13 +1411,16 @@ struct PostCardView: View {
                         )
                         .frame(width: screenWidth, height: screenHeight)
                         .scaleEffect(backgroundScale)
-                        .rotationEffect(.degrees(backgroundRotation))
+                        // .rotationEffect(.degrees(backgroundRotation))
                 }
                 .allowsHitTesting(false)
                 .zIndex(1)
                 .onChange(of: isPlaying) { playing in
                     if playing {
-                        startBackgroundAnimation()
+                        // 画面遷移アニメーション完了後に回転を開始
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            startBackgroundAnimation()
+                        }
                     } else {
                         stopBackgroundAnimation()
                     }
@@ -1395,11 +1454,11 @@ struct PostCardView: View {
 
                     MarqueeText(
                         text: trackInfo,
-                        font: .system(size: 20, weight: .semibold),
+                        font: .system(size: DeviceType.isIPad ? 24 : 20, weight: .semibold),
                         color: .white,
                         frameWidth: albumSize
                     )
-                    .frame(height: 30)
+                    .frame(height: DeviceType.isIPad ? 36 : 30)
                 }
                 .padding(.horizontal, albumLeftPadding)
                 .padding(.bottom, 6)
@@ -1441,11 +1500,11 @@ struct PostCardView: View {
                                         .fill(Color.white.opacity(0.3))
                                         .overlay(
                                             Image(systemName: "person.fill")
-                                                .font(.system(size: 12))
+                                                .font(.system(size: DeviceType.isIPad ? 14 : 12))
                                                 .foregroundColor(.white.opacity(0.6))
                                         )
                                 }
-                                .frame(width: 36, height: 36)
+                                .frame(width: DeviceType.isIPad ? 44 : 36, height: DeviceType.isIPad ? 44 : 36)
                                 .clipShape(Circle())
                                 .overlay(
                                     Circle()
@@ -1460,9 +1519,9 @@ struct PostCardView: View {
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(alignment: .bottom, spacing: 2) {
                                         Text(APIClient.shared.currentUserId == post.user.id ? "あなた" : post.user.displayName)
-                                            .font(.system(size: 14, weight: .semibold))
+                                            .font(.system(size: DeviceType.isIPad ? 16 : 14, weight: .semibold))
                                         Text("のおすすめ")
-                                            .font(.system(size: 11))
+                                            .font(.system(size: DeviceType.isIPad ? 13 : 11))
                                     }
                                     .foregroundStyle(
                                         APIClient.shared.currentUserId == post.user.id ?
@@ -1487,15 +1546,15 @@ struct PostCardView: View {
 
                                     HStack(spacing: 4) {
                                         Text(timeAgoString(from: post.createdAt))
-                                            .font(.system(size: 10))
+                                            .font(.system(size: DeviceType.isIPad ? 12 : 10))
                                             .foregroundColor(.white.opacity(0.6))
                                         Image(systemName: post.user.isPublic == true ? "network" : "network.badge.shield.half.filled")
-                                            .font(.system(size: 10))
+                                            .font(.system(size: DeviceType.isIPad ? 12 : 10))
                                             .foregroundColor(.white.opacity(0.6))
                                     }
                                 }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
+                                .padding(.horizontal, DeviceType.isIPad ? 16 : 12)
+                                .padding(.vertical, DeviceType.isIPad ? 8 : 6)
                                 .background(
                                     Capsule()
                                         .fill(Color.black.opacity(0.5))
@@ -1506,7 +1565,7 @@ struct PostCardView: View {
 
                                 Spacer()
                             }
-                            .padding(12)
+                            .padding(DeviceType.isIPad ? 16 : 12)
                             Spacer()
                         }
                         .frame(width: albumSize, height: albumSize)
@@ -1520,10 +1579,10 @@ struct PostCardView: View {
                                 }) {
                                     Circle()
                                         .fill(Color.black.opacity(0.5))
-                                        .frame(width: 36, height: 36)
+                                        .frame(width: DeviceType.isIPad ? 44 : 36, height: DeviceType.isIPad ? 44 : 36)
                                         .overlay(
                                             Image(systemName: "ellipsis")
-                                                .font(.system(size: 16, weight: .semibold))
+                                                .font(.system(size: DeviceType.isIPad ? 20 : 16, weight: .semibold))
                                                 .foregroundColor(.white)
                                                 .rotationEffect(.degrees(90))
                                         )
@@ -1555,11 +1614,11 @@ struct PostCardView: View {
                                                     endPoint: .bottomTrailing
                                                 )
                                             )
-                                            .frame(width: 60, height: 60)
+                                            .frame(width: DeviceType.isIPad ? 72 : 60, height: DeviceType.isIPad ? 72 : 60)
                                             .shadow(color: Color.black.opacity(0.4), radius: 8, x: 0, y: 4)
 
                                         Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                            .font(.system(size: 24))
+                                            .font(.system(size: DeviceType.isIPad ? 28 : 24))
                                             .foregroundColor(.black)
                                             .offset(x: isPlaying ? 0 : 2)
                                     }
@@ -1567,13 +1626,13 @@ struct PostCardView: View {
 
                                 if isPlaying {
                                     WaveformView()
-                                        .frame(width: 80, height: 50)
+                                        .frame(width: DeviceType.isIPad ? 96 : 80, height: DeviceType.isIPad ? 60 : 50)
                                         .transition(.scale.combined(with: .opacity))
                                 }
 
                                 Spacer()
                             }
-                            .padding(16)
+                            .padding(DeviceType.isIPad ? 20 : 16)
                             .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isPlaying)
                         }
                         .frame(width: albumSize, height: albumSize)
@@ -1592,14 +1651,14 @@ struct PostCardView: View {
                                     }) {
                                         HStack(spacing: 6) {
                                             Image(systemName: isLiked ? "heart.fill" : "heart")
-                                                .font(.system(size: 20))
+                                                .font(.system(size: DeviceType.isIPad ? 24 : 20))
                                                 .foregroundColor(isLiked ? .red : .white)
                                             Text("\(likeCount)")
-                                                .font(.system(size: 14, weight: .semibold))
+                                                .font(.system(size: DeviceType.isIPad ? 16 : 14, weight: .semibold))
                                                 .foregroundColor(.white)
                                         }
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
+                                        .padding(.horizontal, DeviceType.isIPad ? 16 : 12)
+                                        .padding(.vertical, DeviceType.isIPad ? 10 : 8)
                                         .background(Color.black.opacity(0.5))
                                         .cornerRadius(20)
                                     }
@@ -1610,18 +1669,18 @@ struct PostCardView: View {
                                     }) {
                                         HStack(spacing: 6) {
                                             Image(systemName: "bubble.right")
-                                                .font(.system(size: 20))
+                                                .font(.system(size: DeviceType.isIPad ? 24 : 20))
                                             Text("\(commentCount)")
-                                                .font(.system(size: 14, weight: .semibold))
+                                                .font(.system(size: DeviceType.isIPad ? 16 : 14, weight: .semibold))
                                         }
                                         .foregroundColor(.white)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
+                                        .padding(.horizontal, DeviceType.isIPad ? 16 : 12)
+                                        .padding(.vertical, DeviceType.isIPad ? 10 : 8)
                                         .background(Color.black.opacity(0.5))
                                         .cornerRadius(20)
                                     }
                                 }
-                                .padding(16)
+                                .padding(DeviceType.isIPad ? 20 : 16)
                             }
                         }
                         .frame(width: albumSize, height: albumSize)
@@ -1693,6 +1752,9 @@ struct PostCardView: View {
                     showingDeleteConfirmation = true
                 }
             } else {
+                Button("ブロック", role: .destructive) {
+                    showingBlockConfirmation = true
+                }
                 Button("報告", role: .destructive) {
                     showingReportPostSheet = true
                 }
@@ -1708,6 +1770,16 @@ struct PostCardView: View {
             }
         } message: {
             Text("この紹介を削除してもよろしいですか？")
+        }
+        .alert("ユーザーをブロック", isPresented: $showingBlockConfirmation) {
+            Button("キャンセル", role: .cancel) { }
+            Button("ブロック", role: .destructive) {
+                Task {
+                    await blockUser()
+                }
+            }
+        } message: {
+            Text("\(post.user.displayName)をブロックしますか？ブロックすると、このユーザーの投稿が表示されなくなります。")
         }
         .overlay(
             Group {
@@ -1840,6 +1912,22 @@ struct PostCardView: View {
             }
         } catch {
             print("❌ Failed to delete post: \(error)")
+        }
+    }
+
+    private func blockUser() async {
+        do {
+            try await APIClient.shared.blockUser(userId: post.user.id)
+            print("🚫 Blocked user: \(post.user.id)")
+
+            // Notify FeedView to remove this user's posts
+            NotificationCenter.default.post(
+                name: NSNotification.Name("UserBlocked"),
+                object: nil,
+                userInfo: ["blockedUserId": post.user.id]
+            )
+        } catch {
+            print("❌ Failed to block user: \(error)")
         }
     }
 

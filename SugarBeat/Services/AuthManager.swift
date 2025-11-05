@@ -12,6 +12,19 @@ class AuthManager: ObservableObject {
 
     init() {
         loadSavedAuth()
+        setupSessionExpirationListener()
+    }
+
+    private func setupSessionExpirationListener() {
+        NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("SessionExpired"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.logout()
+            }
+        }
     }
 
     func signUp(username: String, email: String, password: String) async throws {
@@ -37,6 +50,8 @@ class AuthManager: ObservableObject {
         token = nil
         currentUser = nil
         isAuthenticated = false
+        APIClient.shared.clearAuthToken()
+        print("🚪 User logged out")
     }
 
     func deleteAccount() async throws {

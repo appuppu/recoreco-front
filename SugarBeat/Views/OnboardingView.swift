@@ -99,7 +99,7 @@ struct OnboardingView: View {
                                     .stroke(Color.white.opacity(0.5), lineWidth: 2)
                             )
                     }
-                    .padding(.horizontal, 40)
+                    .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 40)
                     .padding(.bottom, 50)
                     .transition(.opacity)
                 } else {
@@ -130,7 +130,7 @@ struct OnboardingView: View {
                                 .stroke(Color.white.opacity(0.5), lineWidth: 2)
                         )
                     }
-                    .padding(.horizontal, 40)
+                    .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 40)
                     .padding(.bottom, 50)
                     .transition(.opacity)
                 }

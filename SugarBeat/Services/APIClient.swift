@@ -35,8 +35,36 @@ struct ErrorResponse: Codable {
 class APIClient {
     static let shared = APIClient()
 
-    private let baseURL = "http://192.168.0.4:8080/api"
-    private let serverBaseURL = "http://192.168.0.4:8080/api"
+    // MARK: - Environment Configuration
+
+    enum Environment {
+        case dev
+        case prod
+
+        var baseURL: String {
+            switch self {
+            case .dev:
+                return "http://localhost:8080/api"
+            case .prod:
+                return "https://recoreco.net/api"
+            }
+        }
+
+        var serverBaseURL: String {
+            switch self {
+            case .dev:
+                return "http://localhost:8080"
+            case .prod:
+                return "https://recoreco.net"
+            }
+        }
+    }
+
+    // 環境を変更する場合はここを .dev または .prod に変更
+    private let environment: Environment = .prod
+
+    private var baseURL: String { environment.baseURL }
+    private var serverBaseURL: String { environment.serverBaseURL }
     private var authToken: String?
     private(set) var currentUserId: Int64?
 
@@ -387,6 +415,10 @@ class APIClient {
         // Handle authentication errors (401 or 403)
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
             clearAuthToken()
+            // Notify the app to return to login screen
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: NSNotification.Name("SessionExpired"), object: nil)
+            }
             throw APIError.unauthorized
         }
 
@@ -426,6 +458,10 @@ class APIClient {
         // Handle authentication errors (401 or 403)
         if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
             clearAuthToken()
+            // Notify the app to return to login screen
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: NSNotification.Name("SessionExpired"), object: nil)
+            }
             throw APIError.unauthorized
         }
 

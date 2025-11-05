@@ -130,7 +130,7 @@ struct LoginView: View {
                         }
                         .padding(.top, 8)
                     }
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 32)
 
                     Spacer()
                 }
@@ -140,6 +140,7 @@ struct LoginView: View {
                 SignUpView()
             }
         }
+        .navigationViewStyle(.stack)
     }
 
     private func login() {

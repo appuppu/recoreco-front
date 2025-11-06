@@ -129,7 +129,6 @@ struct FeedView: View {
                 )
             }
             }
-            .frame(maxWidth: DeviceType.isIPad ? 700 : .infinity)
 
             // Horizontal user radio buttons at top (fixed position, not affected by vertical scroll)
             if !viewModel.allUserPosts.isEmpty {
@@ -359,7 +358,7 @@ struct FeedView: View {
                         .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
                     }
                     .padding(.leading, DeviceType.isIPad ? 32 : 20)
-                    .padding(.bottom, DeviceType.isIPad ? 120 : 100)
+                    .padding(.bottom, DeviceType.isIPad ? 30 : 20)
 
                     Spacer()
 
@@ -412,7 +411,7 @@ struct FeedView: View {
                     }
                     .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
                     .padding(.trailing, DeviceType.isIPad ? 32 : 20)
-                    .padding(.bottom, DeviceType.isIPad ? 120 : 100)
+                    .padding(.bottom, DeviceType.isIPad ? 30 : 20)
                 }
             }
 
@@ -1378,8 +1377,9 @@ struct PostCardView: View {
         GeometryReader { geometry in
             let screenWidth = geometry.size.width
             let screenHeight = geometry.size.height
-            let albumSize: CGFloat = 340
-            let albumLeftPadding = (screenWidth - albumSize) / 2
+            let horizontalPadding: CGFloat = DeviceType.isIPad ? 32 : 20
+            let albumSize: CGFloat = DeviceType.isIPad ? screenWidth / 2 : screenWidth - (horizontalPadding * 2)
+            let albumLeftPadding = DeviceType.isIPad ? (screenWidth - albumSize) / 2 : horizontalPadding
 
             ZStack(alignment: .bottom) {
                 // Black background to prevent white background showing
@@ -1444,7 +1444,11 @@ struct PostCardView: View {
 
                 // Content
                 VStack(spacing: 0) {
-                    Spacer().frame(height: 150)
+                    if DeviceType.isIPad {
+                        Spacer()  // iPadは上下中央に配置
+                    } else {
+                        Spacer().frame(height: 150)  // iPhoneは固定位置
+                    }
 
                 // Track info (top, single line with marquee)
                 VStack(spacing: 0) {

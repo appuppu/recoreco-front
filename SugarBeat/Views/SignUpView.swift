@@ -14,6 +14,7 @@ struct SignUpView: View {
     @State private var isCheckingUsername = false
     @State private var usernameAvailable: Bool?
     @State private var usernameCheckTask: Task<Void, Never>?
+    @State private var agreedToTerms = false
 
     var body: some View {
         NavigationView {
@@ -158,6 +159,22 @@ struct SignUpView: View {
                             .disabled(isLoading || !isFormValid)
                             .opacity((isLoading || !isFormValid) ? 0.6 : 1.0)
 
+                            // Agreement checkbox
+                            HStack(spacing: 12) {
+                                Button(action: {
+                                    agreedToTerms.toggle()
+                                }) {
+                                    Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
+                                        .font(.system(size: 24))
+                                        .foregroundColor(agreedToTerms ? .orange : .white.opacity(0.6))
+                                }
+
+                                Text("利用規約とプライバシーポリシーに同意する")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                            .padding(.top, 8)
+
                             // Terms and Privacy links
                             HStack(spacing: 20) {
                                 Button(action: {
@@ -223,7 +240,7 @@ struct SignUpView: View {
     }
 
     private var isFormValid: Bool {
-        !username.isEmpty && !email.isEmpty && !password.isEmpty && password.count >= 8 && username.count <= 10 && usernameAvailable == true
+        !username.isEmpty && !email.isEmpty && !password.isEmpty && password.count >= 8 && username.count <= 10 && usernameAvailable == true && agreedToTerms
     }
 
     private func signUp() {

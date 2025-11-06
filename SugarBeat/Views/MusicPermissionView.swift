@@ -61,7 +61,7 @@ struct MusicPermissionView: View {
                                     endPoint: .trailing
                                 )
 
-                                Text("Continue")
+                                Text("続ける")
                                     .font(.system(size: 18, weight: .semibold))
                                     .foregroundColor(.white)
                             }

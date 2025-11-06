@@ -1742,7 +1742,32 @@ struct PostCardView: View {
         .sheet(isPresented: $showingReportPostSheet) {
             ReportPostView(post: post)
         }
-        .confirmationDialog("", isPresented: $showingPostActions) {
+        // iPad: Use custom sheet
+        .sheet(isPresented: UIDevice.current.userInterfaceIdiom == .pad ? $showingPostActions : .constant(false)) {
+            PostActionSheet(
+                post: post,
+                onAppleMusicTap: {
+                    if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
+                        appleMusicUrlToOpen = url
+                        showingAppleMusicConfirmation = true
+                    }
+                },
+                onDeleteTap: {
+                    showingDeleteConfirmation = true
+                },
+                onBlockTap: {
+                    showingBlockConfirmation = true
+                },
+                onReportTap: {
+                    showingReportPostSheet = true
+                },
+                onDismiss: {
+                    showingPostActions = false
+                }
+            )
+        }
+        // iPhone: Use confirmationDialog
+        .confirmationDialog("", isPresented: UIDevice.current.userInterfaceIdiom == .pad ? .constant(false) : $showingPostActions) {
             // Apple Music link (always show)
             if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
                 Button("Apple Musicで開く") {
@@ -2435,7 +2460,23 @@ struct CommentRowView: View {
                 Image(systemName: "ellipsis")
                     .foregroundColor(.gray)
             }
-            .confirmationDialog("", isPresented: $showingActions) {
+            // iPad: Use custom sheet
+            .sheet(isPresented: UIDevice.current.userInterfaceIdiom == .pad ? $showingActions : .constant(false)) {
+                CommentActionSheet(
+                    comment: comment,
+                    onDeleteTap: {
+                        onDelete()
+                    },
+                    onReportTap: {
+                        onReport()
+                    },
+                    onDismiss: {
+                        showingActions = false
+                    }
+                )
+            }
+            // iPhone: Use confirmationDialog
+            .confirmationDialog("", isPresented: UIDevice.current.userInterfaceIdiom == .pad ? .constant(false) : $showingActions) {
                 if let currentUserId = APIClient.shared.currentUserId, currentUserId == comment.user.id {
                     Button("削除", role: .destructive) {
                         onDelete()
@@ -2481,6 +2522,194 @@ struct PulseAnimation: ViewModifier {
                     isAnimating = true
                 }
             }
+    }
+}
+
+// Custom action sheet for iPad - Post actions
+struct PostActionSheet: View {
+    let post: Post
+    let onAppleMusicTap: () -> Void
+    let onDeleteTap: () -> Void
+    let onBlockTap: () -> Void
+    let onReportTap: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            // Full background overlay to hide default white background
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Apple Music link (if available)
+                if post.appleMusicUrl != nil {
+                    Button(action: {
+                        onAppleMusicTap()
+                        onDismiss()
+                    }) {
+                        HStack {
+                            Text("Apple Musicで開く")
+                                .foregroundColor(.white)
+                                .font(.system(size: 17))
+                            Spacer()
+                        }
+                        .padding()
+                    }
+                    Divider().background(Color.white.opacity(0.2))
+                }
+
+                // Delete or Block/Report
+                if let currentUserId = APIClient.shared.currentUserId, currentUserId == post.user.id {
+                    Button(action: {
+                        onDeleteTap()
+                        onDismiss()
+                    }) {
+                        HStack {
+                            Text("削除")
+                                .foregroundColor(.red)
+                                .font(.system(size: 17))
+                            Spacer()
+                        }
+                        .padding()
+                    }
+                } else {
+                    Button(action: {
+                        onBlockTap()
+                        onDismiss()
+                    }) {
+                        HStack {
+                            Text("ブロック")
+                                .foregroundColor(.red)
+                                .font(.system(size: 17))
+                            Spacer()
+                        }
+                        .padding()
+                    }
+                    Divider().background(Color.white.opacity(0.2))
+                    Button(action: {
+                        onReportTap()
+                        onDismiss()
+                    }) {
+                        HStack {
+                            Text("報告")
+                                .foregroundColor(.red)
+                                .font(.system(size: 17))
+                            Spacer()
+                        }
+                        .padding()
+                    }
+                }
+
+                Divider().background(Color.white.opacity(0.2))
+
+                // Cancel button
+                Button(action: onDismiss) {
+                    HStack {
+                        Text("キャンセル")
+                            .foregroundColor(.white)
+                            .font(.system(size: 17, weight: .semibold))
+                        Spacer()
+                    }
+                    .padding()
+                }
+            }
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.15, green: 0.15, blue: 0.25),
+                        Color(red: 0.1, green: 0.1, blue: 0.2)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+            .padding()
+        }
+        .presentationDetents([.height(300)])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+// Custom action sheet for iPad - Comment actions
+struct CommentActionSheet: View {
+    let comment: Comment
+    let onDeleteTap: () -> Void
+    let onReportTap: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            // Full background overlay to hide default white background
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                if let currentUserId = APIClient.shared.currentUserId, currentUserId == comment.user.id {
+                    Button(action: {
+                        onDeleteTap()
+                        onDismiss()
+                    }) {
+                        HStack {
+                            Text("削除")
+                                .foregroundColor(.red)
+                                .font(.system(size: 17))
+                            Spacer()
+                        }
+                        .padding()
+                    }
+                } else {
+                    Button(action: {
+                        onReportTap()
+                        onDismiss()
+                    }) {
+                        HStack {
+                            Text("報告")
+                                .foregroundColor(.red)
+                                .font(.system(size: 17))
+                            Spacer()
+                        }
+                        .padding()
+                    }
+                }
+
+                Divider().background(Color.white.opacity(0.2))
+
+                Button(action: onDismiss) {
+                    HStack {
+                        Text("キャンセル")
+                            .foregroundColor(.white)
+                            .font(.system(size: 17, weight: .semibold))
+                        Spacer()
+                    }
+                    .padding()
+                }
+            }
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.15, green: 0.15, blue: 0.25),
+                        Color(red: 0.1, green: 0.1, blue: 0.2)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+            .padding()
+        }
+        .presentationDetents([.height(200)])
+        .presentationDragIndicator(.visible)
     }
 }
 

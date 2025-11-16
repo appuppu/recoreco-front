@@ -17,9 +17,11 @@
 	<key>CFBundlePackageType</key>
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.0.1</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>1.0.1</string>
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3107120992746486~2414005410</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -28,6 +30,11 @@
 		<true/>
 		<key>NSExceptionDomains</key>
 		<dict>
+			<key>192.168.0.2</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
 			<key>192.168.0.3</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
@@ -42,14 +49,12 @@
 	</dict>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>レコレコは音楽を検索し共有するために、Apple Musicへのアクセスが必要です。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>レコレコは開発用サーバーに接続するために、ローカルネットワークへのアクセスが必要です。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>プロフィール画像を設定するために写真ライブラリへのアクセスが必要です。</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>より関連性の高い広告を表示するために、トラッキングの許可をお願いします。</string>
-	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3107120992746486~2414005410</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>レコレコは開発用サーバーに接続するために、ローカルネットワークへのアクセスが必要です。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -58,8 +63,7 @@
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>
-	<dict>
-	</dict>
+	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
 		<string>armv7</string>

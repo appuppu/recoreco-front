@@ -32,8 +32,8 @@ struct SugarBeatApp: App {
                             .environmentObject(authManager)
                     }
 
-                    // Banner Ad at the bottom
-                    if !AdConfig.hideAdsForScreenshot {
+                    // Banner Ad at the bottom (非表示: ログイン/登録画面、MusicPermission画面、テストモード)
+                    if AdConfig.shouldShowAds && authManager.isAuthenticated && musicKitManager.isAuthorized {
                         AdBannerView()
                             .frame(height: 50)
                             .background(Color.black.opacity(0.9))

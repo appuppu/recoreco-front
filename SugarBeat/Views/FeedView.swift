@@ -2536,8 +2536,8 @@ struct PostActionSheet: View {
 
     var body: some View {
         ZStack {
-            // Full background overlay to hide default white background
-            Color.black.opacity(0.001)
+            // Transparent background to let album art blur through
+            Color.clear
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -2613,22 +2613,13 @@ struct PostActionSheet: View {
                     .padding()
                 }
             }
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(red: 0.15, green: 0.15, blue: 0.25),
-                        Color(red: 0.1, green: 0.1, blue: 0.2)
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(Color.black.opacity(0.5))
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
             .padding()
         }
         .presentationDetents([.height(300)])
@@ -2645,8 +2636,8 @@ struct CommentActionSheet: View {
 
     var body: some View {
         ZStack {
-            // Full background overlay to hide default white background
-            Color.black.opacity(0.001)
+            // Transparent background to let album art blur through
+            Color.clear
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
@@ -2690,22 +2681,13 @@ struct CommentActionSheet: View {
                     .padding()
                 }
             }
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color(red: 0.15, green: 0.15, blue: 0.25),
-                        Color(red: 0.1, green: 0.1, blue: 0.2)
-                    ]),
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(Color.black.opacity(0.5))
             .cornerRadius(16)
             .overlay(
                 RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.3), lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(0.5), radius: 20, x: 0, y: 10)
             .padding()
         }
         .presentationDetents([.height(200)])

@@ -44,7 +44,7 @@ class APIClient {
         var baseURL: String {
             switch self {
             case .dev:
-                return "http://localhost:8080/api"
+                return "http://192.168.0.2:8080/api"
             case .prod:
                 return "https://recoreco.net/api"
             }
@@ -53,7 +53,7 @@ class APIClient {
         var serverBaseURL: String {
             switch self {
             case .dev:
-                return "http://localhost:8080"
+                return "http://192.168.0.2:8080"
             case .prod:
                 return "https://recoreco.net"
             }
@@ -126,7 +126,7 @@ class APIClient {
     func getFullImageURL(_ imageURL: String?) -> String? {
         guard let imageURL = imageURL, !imageURL.isEmpty else { return nil }
 
-        // If already a full URL, return as is (for backward compatibility)
+        // If already a full URL, return as is
         if imageURL.starts(with: "http://") || imageURL.starts(with: "https://") {
             return imageURL
         }

@@ -9,8 +9,6 @@
 /* Begin PBXBuildFile section */
 		008D9DA98E3D92AA0CF1F742 /* WaveformRangeSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E0520DF8701555C7D9FDE6B1 /* WaveformRangeSelectorView.swift */; };
 		04E3E4F391AE053F2589DFE8 /* ReportPostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D7D8C7F199F76C143A79CF /* ReportPostView.swift */; };
-		AD2222222222222222222222 /* AdConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD1111111111111111111111 /* AdConfig.swift */; };
-		AD4444444444444444444444 /* AdBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3333333333333333333333 /* AdBannerView.swift */; };
 		0862D93BCC4CDE338D028FDE /* BlockedUsersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5701DF1321EE3E818035EE7 /* BlockedUsersView.swift */; };
 		0EBC7900F2E77A575BB868DD /* SearchViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 250136EC4050EE8B36C510F0 /* SearchViewModel.swift */; };
 		1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */; };
@@ -41,6 +39,8 @@
 		9D071B3E04510F675E9BB88E /* UserPostsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B67DBDFBDE6E03EEC51C977B /* UserPostsListView.swift */; };
 		9DC00C53EBF6059825A89195 /* UserPostsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB188FDA1D0978E1D3ECA85D /* UserPostsView.swift */; };
 		AA1B69BE32110332D191F683 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD72D37F34C087EDA9BBCBDF /* ContentView.swift */; };
+		AD2222222222222222222222 /* AdConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD1111111111111111111111 /* AdConfig.swift */; };
+		AD4444444444444444444444 /* AdBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3333333333333333333333 /* AdBannerView.swift */; };
 		B87F65882C387C176C3F5339 /* SignUpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C3331FD9F72180FDA3F984 /* SignUpView.swift */; };
 		BCD94333C6513E636F24189D /* User.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3BBF0A127E07FBDE8DB480A /* User.swift */; };
 		D338B3B135CD44EE5D423D2E /* StoriesBarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8761F86D639E7AFB7DF09C4C /* StoriesBarView.swift */; };
@@ -58,8 +58,6 @@
 /* Begin PBXFileReference section */
 		0280860465fc676bd70c7d35 /* MusicPermissionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicPermissionView.swift; sourceTree = "<group>"; };
 		13C3331FD9F72180FDA3F984 /* SignUpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpView.swift; sourceTree = "<group>"; };
-		AD1111111111111111111111 /* AdConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdConfig.swift; sourceTree = "<group>"; };
-		AD3333333333333333333333 /* AdBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdBannerView.swift; sourceTree = "<group>"; };
 		13DD3F9848C5A9F165D64E50 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		183B04A2417F147ACECAFADA /* Post.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Post.swift; sourceTree = "<group>"; };
 		2200803D3C80571A5A7547AB /* NotificationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationsView.swift; sourceTree = "<group>"; };
@@ -91,6 +89,8 @@
 		A1B2C3D4E5F6789012345678 /* InteractiveTutorialView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InteractiveTutorialView.swift; sourceTree = "<group>"; };
 		AB188FDA1D0978E1D3ECA85D /* UserPostsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsView.swift; sourceTree = "<group>"; };
 		ACE0B665A5F1830C3DA11AC2 /* CreatePostRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostRequest.swift; sourceTree = "<group>"; };
+		AD1111111111111111111111 /* AdConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdConfig.swift; sourceTree = "<group>"; };
+		AD3333333333333333333333 /* AdBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdBannerView.swift; sourceTree = "<group>"; };
 		B26CCED5DF000501172A4A27 /* MusicKitManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicKitManager.swift; sourceTree = "<group>"; };
 		B4059D9212E76B02C3F82D8B /* Pods-SugarBeat.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-SugarBeat.debug.xcconfig"; path = "Target Support Files/Pods-SugarBeat/Pods-SugarBeat.debug.xcconfig"; sourceTree = "<group>"; };
 		B67DBDFBDE6E03EEC51C977B /* UserPostsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsListView.swift; sourceTree = "<group>"; };
@@ -145,7 +145,6 @@
 				B4059D9212E76B02C3F82D8B /* Pods-SugarBeat.debug.xcconfig */,
 				903D4BA2E572342D64067C66 /* Pods-SugarBeat.release.xcconfig */,
 			);
-			name = Pods;
 			path = Pods;
 			sourceTree = "<group>";
 		};
@@ -327,9 +326,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-SugarBeat/Pods-SugarBeat-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-SugarBeat/Pods-SugarBeat-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -481,6 +484,7 @@
 				CODE_SIGN_ENTITLEMENTS = SugarBeat/SugarBeat.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1.0.1;
 				DEVELOPMENT_TEAM = M86QCKBHW8;
 				INFOPLIST_FILE = SugarBeat/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "レコレコ";
@@ -490,6 +494,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sugarbeat.SugarBeat;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
@@ -570,6 +575,7 @@
 				CODE_SIGN_ENTITLEMENTS = SugarBeat/SugarBeat.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1.0.1;
 				DEVELOPMENT_TEAM = M86QCKBHW8;
 				INFOPLIST_FILE = SugarBeat/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "レコレコ";
@@ -579,6 +585,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sugarbeat.SugarBeat;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;

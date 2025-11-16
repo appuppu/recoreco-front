@@ -285,6 +285,14 @@ struct CreatePostView: View {
                                     .cornerRadius(8)
                                     .focused($isCommentFocused)
                                     .scrollContentBackground(.hidden)
+                                    .simultaneousGesture(
+                                        TapGesture()
+                                            .onEnded { _ in
+                                                if isCommentFocused {
+                                                    isCommentFocused = false
+                                                }
+                                            }
+                                    )
                                     .toolbar {
                                         ToolbarItemGroup(placement: .keyboard) {
                                             Spacer()

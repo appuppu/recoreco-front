@@ -55,6 +55,7 @@ class RadioButtonTimerCoordinator: ObservableObject {
 struct FeedView: View {
     @StateObject private var viewModel = FeedViewModel()
     @ObservedObject private var unreadPostsManager = UnreadPostsManager.shared
+    @EnvironmentObject private var authManager: AuthManager
     @Binding var refreshTrigger: Bool
     @State private var showingMenu = false
     @State private var showingUserSearch = false
@@ -77,6 +78,8 @@ struct FeedView: View {
     @State private var lastInteractionTime = Date()
     @State private var showSwipeHint = false
     @State private var swipeHintTask: Task<Void, Never>?
+    @State private var showingLoginPrompt = false
+    @State private var showingLoginView = false
 
     var body: some View {
         ZStack {
@@ -118,6 +121,7 @@ struct FeedView: View {
                     currentDisplayedUserIndex: $currentDisplayedUserIndex,
                     isInitialLoad: $isInitialLoad,
                     showSwipeHint: $showSwipeHint,
+                    showingLoginPrompt: $showingLoginPrompt,
                     onRefresh: {
                         Task {
                             await viewModel.refreshFeed()
@@ -305,28 +309,43 @@ struct FeedView: View {
                             VStack(alignment: .leading, spacing: DeviceType.isIPad ? 20 : 16) {
                                 // Profile button
                                 FloatingMenuButton(icon: "person", label: "プロフィール") {
-                                    showingProfile = true
-                                    showingMenu = false
+                                    if !authManager.isAuthenticated {
+                                        showingLoginPrompt = true
+                                        showingMenu = false
+                                    } else {
+                                        showingProfile = true
+                                        showingMenu = false
+                                    }
                                 }
 
                                 // Post button
                                 FloatingMenuButton(icon: "plus", label: "おすすめの音楽紹介") {
-                                    print("➕ Plus button tapped - current tutorialStep: \(tutorialStep)")
-                                    if tutorialStep == .tapCreateButton {
-                                        tutorialStep = .searchSong
-                                        showingInteractiveTutorial = true
-                                        wasTutorialPost = true // チュートリアル中の投稿であることを記録
-                                        print("➕ Moved to searchSong step, marked as tutorial post")
+                                    if !authManager.isAuthenticated {
+                                        showingLoginPrompt = true
+                                        showingMenu = false
+                                    } else {
+                                        print("➕ Plus button tapped - current tutorialStep: \(tutorialStep)")
+                                        if tutorialStep == .tapCreateButton {
+                                            tutorialStep = .searchSong
+                                            showingInteractiveTutorial = true
+                                            wasTutorialPost = true // チュートリアル中の投稿であることを記録
+                                            print("➕ Moved to searchSong step, marked as tutorial post")
+                                        }
+                                        showingCreatePost = true
+                                        showingMenu = false
                                     }
-                                    showingCreatePost = true
-                                    showingMenu = false
                                 }
                                 .captureFrame(in: $createButtonFrame)
 
                                 // Search button
                                 FloatingMenuButton(icon: "magnifyingglass", label: "ユーザー検索") {
-                                    showingUserSearch = true
-                                    showingMenu = false
+                                    if !authManager.isAuthenticated {
+                                        showingLoginPrompt = true
+                                        showingMenu = false
+                                    } else {
+                                        showingUserSearch = true
+                                        showingMenu = false
+                                    }
                                 }
                             }
                             .offset(y: DeviceType.isIPad ? -90 : -72)
@@ -362,56 +381,58 @@ struct FeedView: View {
 
                     Spacer()
 
-                    // Right side: Notification button
-                    Button(action: {
-                        showingNotifications = true
-                    }) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.white.opacity(0.15))
-                                .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-                                .blur(radius: 10)
+                    // Right side: Notification button (only for authenticated users)
+                    if authManager.isAuthenticated {
+                        Button(action: {
+                            showingNotifications = true
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.white.opacity(0.15))
+                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
+                                    .blur(radius: 10)
 
-                            Circle()
-                                .fill(Color.white.opacity(0.2))
-                                .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
+                                Circle()
+                                    .fill(Color.white.opacity(0.2))
+                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
 
-                            Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
-                                .font(.system(size: DeviceType.isIPad ? 26 : 22, weight: .semibold))
-                                .foregroundColor(.white)
+                                Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
+                                    .font(.system(size: DeviceType.isIPad ? 26 : 22, weight: .semibold))
+                                    .foregroundColor(.white)
 
-                            // Badge for unread count
-                            if unreadNotificationCount > 0 {
-                                VStack {
-                                    HStack {
-                                        Spacer()
-                                        ZStack {
-                                            // Pulsing background
-                                            Circle()
-                                                .fill(Color.red.opacity(0.5))
-                                                .frame(width: DeviceType.isIPad ? 28 : 24, height: DeviceType.isIPad ? 28 : 24)
-                                                .scaleEffect(1.2)
-                                                .opacity(0.6)
-                                                .modifier(PulseAnimation())
+                                // Badge for unread count
+                                if unreadNotificationCount > 0 {
+                                    VStack {
+                                        HStack {
+                                            Spacer()
+                                            ZStack {
+                                                // Pulsing background
+                                                Circle()
+                                                    .fill(Color.red.opacity(0.5))
+                                                    .frame(width: DeviceType.isIPad ? 28 : 24, height: DeviceType.isIPad ? 28 : 24)
+                                                    .scaleEffect(1.2)
+                                                    .opacity(0.6)
+                                                    .modifier(PulseAnimation())
 
-                                            Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
-                                                .font(.system(size: DeviceType.isIPad ? 12 : 10, weight: .bold))
-                                                .foregroundColor(.white)
-                                                .padding(4)
-                                                .background(Color.red)
-                                                .clipShape(Circle())
+                                                Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
+                                                    .font(.system(size: DeviceType.isIPad ? 12 : 10, weight: .bold))
+                                                    .foregroundColor(.white)
+                                                    .padding(4)
+                                                    .background(Color.red)
+                                                    .clipShape(Circle())
+                                            }
+                                            .offset(x: 10, y: -10)
                                         }
-                                        .offset(x: 10, y: -10)
+                                        Spacer()
                                     }
-                                    Spacer()
+                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
                                 }
-                                .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
                             }
                         }
+                        .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
+                        .padding(.trailing, DeviceType.isIPad ? 32 : 20)
+                        .padding(.bottom, DeviceType.isIPad ? 30 : 20)
                     }
-                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-                    .padding(.trailing, DeviceType.isIPad ? 32 : 20)
-                    .padding(.bottom, DeviceType.isIPad ? 30 : 20)
                 }
             }
 
@@ -546,27 +567,37 @@ struct FeedView: View {
             OnboardingView(isPresented: $showingOnboarding)
         }
         .task {
-            await loadUnreadCount()
-            await loadUnreadPostCounts()
+            // Only load unread counts for authenticated users
+            if authManager.isAuthenticated {
+                await loadUnreadCount()
+                await loadUnreadPostCounts()
+            }
         }
         .onAppear {
-            startNotificationPolling()
-            viewModel.startPolling()
+            // Only start polling for authenticated users
+            if authManager.isAuthenticated {
+                startNotificationPolling()
+                viewModel.startPolling()
+            }
+
             startSwipeHintTimer()
 
-            // Check if user has seen onboarding
-            if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
-                // Small delay to let the view load first
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    showingOnboarding = true
+            // Only show onboarding/tutorial for authenticated users
+            if authManager.isAuthenticated {
+                // Check if user has seen onboarding
+                if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
+                    // Small delay to let the view load first
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        showingOnboarding = true
+                    }
                 }
-            }
-            // Check if user has completed interactive tutorial
-            else if !UserDefaults.standard.bool(forKey: "hasCompletedTutorial") {
-                // Start interactive tutorial after onboarding
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                    showingInteractiveTutorial = true
-                    tutorialStep = .welcome
+                // Check if user has completed interactive tutorial
+                else if !UserDefaults.standard.bool(forKey: "hasCompletedTutorial") {
+                    // Start interactive tutorial after onboarding
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        showingInteractiveTutorial = true
+                        tutorialStep = .welcome
+                    }
                 }
             }
         }
@@ -576,22 +607,31 @@ struct FeedView: View {
             swipeHintTask?.cancel()
         }
         .onChange(of: showingNotifications) { isShowing in
-            if isShowing {
-                // Stop polling when notification view is open
-                stopNotificationPolling()
-            } else {
-                // Resume polling when notification view is closed
-                startNotificationPolling()
+            // Only handle polling for authenticated users
+            if authManager.isAuthenticated {
+                if isShowing {
+                    // Stop polling when notification view is open
+                    stopNotificationPolling()
+                } else {
+                    // Resume polling when notification view is closed
+                    startNotificationPolling()
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: Foundation.Notification.Name("RefreshNotificationBadge"))) { _ in
-            Task {
-                await loadUnreadCount()
+            // Only load unread count for authenticated users
+            if authManager.isAuthenticated {
+                Task {
+                    await loadUnreadCount()
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: Foundation.Notification.Name("ReloadUnreadCounts"))) { _ in
-            Task {
-                await loadUnreadPostCounts()
+            // Only load unread post counts for authenticated users
+            if authManager.isAuthenticated {
+                Task {
+                    await loadUnreadPostCounts()
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("NavigateToPost"))) { notification in
@@ -675,6 +715,18 @@ struct FeedView: View {
 
                 print("🚫 Blocked user \(blockedUserId) removed from feed")
             }
+        }
+        .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
+            Button("ログイン", role: .none) {
+                showingLoginView = true
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("この機能を使用するにはログインが必要です。ログイン画面に移動しますか？")
+        }
+        .fullScreenCover(isPresented: $showingLoginView) {
+            LoginView()
+                .environmentObject(authManager)
         }
     }
 
@@ -783,6 +835,7 @@ struct AllUserPostsView: View {
     @Binding var currentDisplayedUserIndex: Int
     @Binding var isInitialLoad: Bool
     @Binding var showSwipeHint: Bool
+    @Binding var showingLoginPrompt: Bool
     let onRefresh: () -> Void
     let onInteraction: () -> Void
     @State private var currentUserIndex = 0
@@ -808,7 +861,7 @@ struct AllUserPostsView: View {
 
                         // Previous user - always rendered (on the left)
                         if previousIndex < allUserPosts.count {
-                            UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh)
+                            UserPostsScrollView(userPosts: allUserPosts[previousIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh, showingLoginPrompt: $showingLoginPrompt)
                                 .frame(width: screenWidth, height: screenHeight)
                                 .offset(x: -screenWidth + horizontalDragOffset)
                                 .zIndex(horizontalDragOffset > 0 ? 1 : 0)
@@ -816,7 +869,7 @@ struct AllUserPostsView: View {
                         }
 
                         // Current user - always rendered
-                        UserPostsScrollView(userPosts: allUserPosts[currentUserIndex], isCurrent: true, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh)
+                        UserPostsScrollView(userPosts: allUserPosts[currentUserIndex], isCurrent: true, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh, showingLoginPrompt: $showingLoginPrompt)
                             .frame(width: screenWidth, height: screenHeight)
                             .offset(x: horizontalDragOffset)
                             .zIndex(2)
@@ -824,7 +877,7 @@ struct AllUserPostsView: View {
 
                         // Next user - always rendered (on the right)
                         if nextIndex < allUserPosts.count {
-                            UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh)
+                            UserPostsScrollView(userPosts: allUserPosts[nextIndex], isCurrent: false, skipAutoPlay: $skipAutoPlay, isInitialLoad: isInitialLoad, onRefresh: onRefresh, showingLoginPrompt: $showingLoginPrompt)
                                 .frame(width: screenWidth, height: screenHeight)
                                 .offset(x: screenWidth + horizontalDragOffset)
                                 .zIndex(horizontalDragOffset < 0 ? 1 : 0)
@@ -1031,6 +1084,7 @@ struct UserPostsScrollView: View {
     @Binding var skipAutoPlay: Bool
     let isInitialLoad: Bool
     let onRefresh: () -> Void
+    @Binding var showingLoginPrompt: Bool
     @State private var currentPostIndex = 0
     @State private var dragOffset: CGFloat = 0
     @State private var isAnimating = false
@@ -1070,6 +1124,7 @@ struct UserPostsScrollView: View {
                         currentPostIndex: $currentPostIndex,
                         expectedIndex: previousIndex,
                         contextUserId: userPosts.user.id,
+                        showingLoginPrompt: $showingLoginPrompt,
                         onDelete: onRefresh
                     )
                         .frame(width: screenWidth, height: screenHeight)
@@ -1084,6 +1139,7 @@ struct UserPostsScrollView: View {
                         currentPostIndex: $currentPostIndex,
                         expectedIndex: currentPostIndex,
                         contextUserId: userPosts.user.id,
+                        showingLoginPrompt: $showingLoginPrompt,
                         onDelete: onRefresh
                     )
                         .frame(width: screenWidth, height: screenHeight)
@@ -1098,6 +1154,7 @@ struct UserPostsScrollView: View {
                         currentPostIndex: $currentPostIndex,
                         expectedIndex: nextIndex,
                         contextUserId: userPosts.user.id,
+                        showingLoginPrompt: $showingLoginPrompt,
                         onDelete: onRefresh
                     )
                         .frame(width: screenWidth, height: screenHeight)
@@ -1330,6 +1387,8 @@ struct PostCardView: View {
     let expectedIndex: Int
     let contextUserId: Int64 // The userId of the UserPosts this post belongs to
     var onDelete: (() -> Void)? = nil
+    @Binding var showingLoginPrompt: Bool
+    @EnvironmentObject var authManager: AuthManager
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
     @ObservedObject private var likeStateManager = LikeStateManager.shared
@@ -1348,12 +1407,13 @@ struct PostCardView: View {
     @State private var backgroundScale: CGFloat = 1.0
     @State private var backgroundRotation: Double = 0
 
-    init(post: Post, isCurrent: Bool, currentPostIndex: Binding<Int>, expectedIndex: Int, contextUserId: Int64, onDelete: (() -> Void)? = nil) {
+    init(post: Post, isCurrent: Bool, currentPostIndex: Binding<Int>, expectedIndex: Int, contextUserId: Int64, showingLoginPrompt: Binding<Bool>, onDelete: (() -> Void)? = nil) {
         self.post = post
         self.isCurrent = isCurrent
         self._currentPostIndex = currentPostIndex
         self.expectedIndex = expectedIndex
         self.contextUserId = contextUserId
+        self._showingLoginPrompt = showingLoginPrompt
         self.onDelete = onDelete
     }
 
@@ -1517,7 +1577,11 @@ struct PostCardView: View {
                                 .shadow(color: Color.black.opacity(0.4), radius: 6, x: 0, y: 3)
                                 .contentShape(Circle())
                                 .onTapGesture {
-                                    showingUserProfile = true
+                                    if !authManager.isAuthenticated {
+                                        showingLoginPrompt = true
+                                    } else {
+                                        showingUserProfile = true
+                                    }
                                 }
 
                                 VStack(alignment: .leading, spacing: 2) {
@@ -1564,7 +1628,11 @@ struct PostCardView: View {
                                         .fill(Color.black.opacity(0.5))
                                 )
                                 .onTapGesture {
-                                    showingUserProfile = true
+                                    if !authManager.isAuthenticated {
+                                        showingLoginPrompt = true
+                                    } else {
+                                        showingUserProfile = true
+                                    }
                                 }
 
                                 Spacer()
@@ -1649,8 +1717,12 @@ struct PostCardView: View {
                                 VStack(spacing: 12) {
                                     // Like button
                                     Button(action: {
-                                        Task {
-                                            await toggleLike()
+                                        if !authManager.isAuthenticated {
+                                            showingLoginPrompt = true
+                                        } else {
+                                            Task {
+                                                await toggleLike()
+                                            }
                                         }
                                     }) {
                                         HStack(spacing: 6) {
@@ -1669,7 +1741,11 @@ struct PostCardView: View {
 
                                     // Comment button
                                     Button(action: {
-                                        showingComments = true
+                                        if !authManager.isAuthenticated {
+                                            showingLoginPrompt = true
+                                        } else {
+                                            showingComments = true
+                                        }
                                     }) {
                                         HStack(spacing: 6) {
                                             Image(systemName: "bubble.right")
@@ -1756,10 +1832,18 @@ struct PostCardView: View {
                     showingDeleteConfirmation = true
                 },
                 onBlockTap: {
-                    showingBlockConfirmation = true
+                    if !authManager.isAuthenticated {
+                        showingLoginPrompt = true
+                    } else {
+                        showingBlockConfirmation = true
+                    }
                 },
                 onReportTap: {
-                    showingReportPostSheet = true
+                    if !authManager.isAuthenticated {
+                        showingLoginPrompt = true
+                    } else {
+                        showingReportPostSheet = true
+                    }
                 },
                 onDismiss: {
                     showingPostActions = false
@@ -1782,10 +1866,18 @@ struct PostCardView: View {
                 }
             } else {
                 Button("ブロック", role: .destructive) {
-                    showingBlockConfirmation = true
+                    if !authManager.isAuthenticated {
+                        showingLoginPrompt = true
+                    } else {
+                        showingBlockConfirmation = true
+                    }
                 }
                 Button("報告", role: .destructive) {
-                    showingReportPostSheet = true
+                    if !authManager.isAuthenticated {
+                        showingLoginPrompt = true
+                    } else {
+                        showingReportPostSheet = true
+                    }
                 }
             }
             Button("キャンセル", role: .cancel) { }

@@ -25,50 +25,51 @@ class FeedViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            guard let currentUserId = APIClient.shared.currentUserId else {
-                errorMessage = "ユーザーIDが取得できません"
-                isLoading = false
-                return
-            }
-
             // Load discovery feed (limit to 20 posts for performance)
             let discoveryPosts = try await APIClient.shared.getDiscoveryFeed(page: 0, size: 20)
             print("📥 Loaded \(discoveryPosts.count) posts from discovery feed")
 
-            // Load current user's posts (limit to 20 posts for performance)
-            let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId, page: 0, size: 20)
-            print("📥 Loaded \(currentUserPostsList.count) posts for current user \(currentUserId)")
+            // Check if user is authenticated
+            if let currentUserId = APIClient.shared.currentUserId {
+                // Authenticated user: Load all feeds
+                // Load current user's posts (limit to 20 posts for performance)
+                let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId, page: 0, size: 20)
+                print("📥 Loaded \(currentUserPostsList.count) posts for current user \(currentUserId)")
 
-            // Get mutual follows feed
-            let mutualFollowsPosts = try await APIClient.shared.getMutualFollowsFeed()
-            print("📥 Loaded \(mutualFollowsPosts.count) posts from mutual follows")
+                // Get mutual follows feed
+                let mutualFollowsPosts = try await APIClient.shared.getMutualFollowsFeed()
+                print("📥 Loaded \(mutualFollowsPosts.count) posts from mutual follows")
 
-            // Combine current user posts and mutual follows posts
-            let allPosts = currentUserPostsList + mutualFollowsPosts
+                // Combine current user posts and mutual follows posts
+                let allPosts = currentUserPostsList + mutualFollowsPosts
 
-            // Group posts by user
-            let grouped = Dictionary(grouping: allPosts) { $0.user.id }
+                // Group posts by user
+                let grouped = Dictionary(grouping: allPosts) { $0.user.id }
 
-            // Create UserPosts for each user and sort by most recent post
-            allUserPosts = grouped.map { userId, userPostsList in
-                UserPosts(
-                    id: userId,
-                    user: userPostsList.first!.user,
-                    posts: userPostsList.sorted { $0.createdAt > $1.createdAt }
-                )
-            }.sorted {
-                // Sort by latest post timestamp
-                $0.posts.first?.createdAt ?? Date.distantPast >
-                $1.posts.first?.createdAt ?? Date.distantPast
-            }
+                // Create UserPosts for each user and sort by most recent post
+                allUserPosts = grouped.map { userId, userPostsList in
+                    UserPosts(
+                        id: userId,
+                        user: userPostsList.first!.user,
+                        posts: userPostsList.sorted { $0.createdAt > $1.createdAt }
+                    )
+                }.sorted {
+                    // Sort by latest post timestamp
+                    $0.posts.first?.createdAt ?? Date.distantPast >
+                    $1.posts.first?.createdAt ?? Date.distantPast
+                }
 
-            // Update latest post date for polling (BEFORE moving current user to front)
-            latestPostDate = allUserPosts.first?.posts.first?.createdAt
+                // Update latest post date for polling (BEFORE moving current user to front)
+                latestPostDate = allUserPosts.first?.posts.first?.createdAt
 
-            // Move current user to the front (always first)
-            if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
-                let currentUser = allUserPosts.remove(at: currentUserIndex)
-                allUserPosts.insert(currentUser, at: 0)
+                // Move current user to the front (always first)
+                if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
+                    let currentUser = allUserPosts.remove(at: currentUserIndex)
+                    allUserPosts.insert(currentUser, at: 0)
+                }
+            } else {
+                // Unauthenticated user: Only show discovery feed
+                allUserPosts = []
             }
 
             // Add discovery feed at the beginning (leftmost) with special ID -1

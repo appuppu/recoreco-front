@@ -20,6 +20,7 @@ struct SugarBeatApp: App {
                 VStack(spacing: 0) {
                     // Main Content
                     if authManager.isAuthenticated {
+                        // Authenticated users need MusicKit authorization
                         if musicKitManager.isAuthorized {
                             ContentView()
                                 .environmentObject(authManager)
@@ -28,11 +29,12 @@ struct SugarBeatApp: App {
                                 .environmentObject(authManager)
                         }
                     } else {
-                        LoginView()
+                        // Unauthenticated users can view discovery feed
+                        ContentView()
                             .environmentObject(authManager)
                     }
 
-                    // Banner Ad at the bottom (非表示: ログイン/登録画面、MusicPermission画面、テストモード)
+                    // Banner Ad at the bottom (非表示: ログイン/登録画面、MusicPermission画面、テストモード、未ログイン時)
                     if AdConfig.shouldShowAds && authManager.isAuthenticated && musicKitManager.isAuthorized {
                         AdBannerView()
                             .frame(height: 50)

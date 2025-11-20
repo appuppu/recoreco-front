@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LoginView: View {
     @EnvironmentObject var authManager: AuthManager
+    @Environment(\.dismiss) var dismiss
     @State private var email = ""
     @State private var password = ""
     @State private var isLoading = false
@@ -132,6 +133,32 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 32)
 
+                    Spacer()
+                }
+
+                // Close button (top right)
+                VStack {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.white.opacity(0.8))
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    Circle()
+                                        .fill(Color.white.opacity(0.1))
+                                        .overlay(
+                                            Circle()
+                                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                                        )
+                                )
+                        }
+                        .padding(.top, 50)
+                        .padding(.trailing, 20)
+                    }
                     Spacer()
                 }
             }

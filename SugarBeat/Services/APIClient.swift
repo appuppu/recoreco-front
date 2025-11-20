@@ -239,7 +239,7 @@ class APIClient {
 
     func getDiscoveryFeed(page: Int = 0, size: Int = 20) async throws -> [Post] {
         let url = URL(string: "\(baseURL)/posts/discovery?page=\(page)&size=\(size)")!
-        return try await performRequest(url: url, method: "GET")
+        return try await performRequest(url: url, method: "GET", requiresAuth: false)
     }
 
     func getUserPosts(userId: Int64, page: Int = 0, size: Int = 20, sort: String = "desc") async throws -> [Post] {

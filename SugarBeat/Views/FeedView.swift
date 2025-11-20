@@ -57,7 +57,6 @@ struct FeedView: View {
     @ObservedObject private var unreadPostsManager = UnreadPostsManager.shared
     @EnvironmentObject private var authManager: AuthManager
     @Binding var refreshTrigger: Bool
-    @State private var showingMenu = false
     @State private var showingUserSearch = false
     @State private var showingCreatePost = false
     @State private var showingProfile = false
@@ -80,6 +79,7 @@ struct FeedView: View {
     @State private var swipeHintTask: Task<Void, Never>?
     @State private var showingLoginPrompt = false
     @State private var showingLoginView = false
+    @StateObject private var screenshotMode = ScreenshotModeManager.shared
 
     var body: some View {
         ZStack {
@@ -114,26 +114,35 @@ struct FeedView: View {
                         .multilineTextAlignment(.center)
                 }
             } else {
-                // All user posts with horizontal and vertical navigation
-                AllUserPostsView(
-                    allUserPosts: viewModel.allUserPosts,
-                    skipNextAutoPlay: $skipNextAutoPlay,
-                    currentDisplayedUserIndex: $currentDisplayedUserIndex,
-                    isInitialLoad: $isInitialLoad,
-                    showSwipeHint: $showSwipeHint,
-                    showingLoginPrompt: $showingLoginPrompt,
-                    onRefresh: {
-                        Task {
-                            await viewModel.refreshFeed()
-                        }
-                    },
-                    onInteraction: {
-                        resetSwipeHintTimer()
-                    }
-                )
+                // User posts grid view (current user only)
+                if let currentUserId = APIClient.shared.currentUserId,
+                   let currentUserPosts = viewModel.allUserPosts.first(where: { $0.user.id == currentUserId }) {
+                    UserPostsGridView(
+                        allUserPosts: viewModel.allUserPosts,
+                        userPosts: currentUserPosts,
+                        showingLoginPrompt: $showingLoginPrompt,
+                        unreadPostCounts: $unreadPostCounts,
+                        userCurrentPostIndices: $userCurrentPostIndices,
+                        hasUnreadDiscoveryPosts: viewModel.hasUnreadDiscoveryPosts,
+                        usersWithUnreadPosts: viewModel.usersWithUnreadPosts
+                    )
+                } else if let discoveryPosts = viewModel.allUserPosts.first(where: { $0.user.id == -1 }) {
+                    // Show discovery feed for unauthenticated users
+                    UserPostsGridView(
+                        allUserPosts: viewModel.allUserPosts,
+                        userPosts: discoveryPosts,
+                        showingLoginPrompt: $showingLoginPrompt,
+                        unreadPostCounts: $unreadPostCounts,
+                        userCurrentPostIndices: $userCurrentPostIndices,
+                        hasUnreadDiscoveryPosts: viewModel.hasUnreadDiscoveryPosts,
+                        usersWithUnreadPosts: viewModel.usersWithUnreadPosts
+                    )
+                }
             }
             }
 
+            // MARK: - Horizontal user radio buttons (COMMENTED OUT)
+            /*
             // Horizontal user radio buttons at top (fixed position, not affected by vertical scroll)
             if !viewModel.allUserPosts.isEmpty {
                 VStack(spacing: 0) {
@@ -194,7 +203,7 @@ struct FeedView: View {
                                                                 // Start playback
                                                                 try await MusicKitManager.shared.playPreviewFromURL(previewUrl, startTime: post.startTime)
                                                                 await MainActor.run {
-                                                                    PlaybackStateManager.shared.startPlayback(for: postId, userId: targetUserId)
+                                                                    PlaybackStateManager.shared.startPlayback(for: postId, userId: targetUserId, post: post, user: targetUserPosts.user)
                                                                 }
 
                                                                 // Auto-stop after duration
@@ -285,156 +294,7 @@ struct FeedView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .allowsHitTesting(true)
             }
-
-            // Dark overlay when menu is shown
-            if showingMenu {
-                Color.black.opacity(0.8)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                            showingMenu = false
-                        }
-                    }
-                    .transition(.opacity)
-            }
-
-            // Floating action buttons (bottom left and right)
-            VStack {
-                Spacer()
-                HStack(alignment: .bottom, spacing: 0) {
-                    // Left side: Menu button
-                    ZStack(alignment: .bottomLeading) {
-                        // Expanded menu buttons (positioned absolutely above main button)
-                        if showingMenu {
-                            VStack(alignment: .leading, spacing: DeviceType.isIPad ? 20 : 16) {
-                                // Profile button
-                                FloatingMenuButton(icon: "person", label: "プロフィール") {
-                                    if !authManager.isAuthenticated {
-                                        showingLoginPrompt = true
-                                        showingMenu = false
-                                    } else {
-                                        showingProfile = true
-                                        showingMenu = false
-                                    }
-                                }
-
-                                // Post button
-                                FloatingMenuButton(icon: "plus", label: "おすすめの音楽紹介") {
-                                    if !authManager.isAuthenticated {
-                                        showingLoginPrompt = true
-                                        showingMenu = false
-                                    } else {
-                                        print("➕ Plus button tapped - current tutorialStep: \(tutorialStep)")
-                                        if tutorialStep == .tapCreateButton {
-                                            tutorialStep = .searchSong
-                                            showingInteractiveTutorial = true
-                                            wasTutorialPost = true // チュートリアル中の投稿であることを記録
-                                            print("➕ Moved to searchSong step, marked as tutorial post")
-                                        }
-                                        showingCreatePost = true
-                                        showingMenu = false
-                                    }
-                                }
-                                .captureFrame(in: $createButtonFrame)
-
-                                // Search button
-                                FloatingMenuButton(icon: "magnifyingglass", label: "ユーザー検索") {
-                                    if !authManager.isAuthenticated {
-                                        showingLoginPrompt = true
-                                        showingMenu = false
-                                    } else {
-                                        showingUserSearch = true
-                                        showingMenu = false
-                                    }
-                                }
-                            }
-                            .offset(y: DeviceType.isIPad ? -90 : -72)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                        }
-
-                        // Main menu button (fixed position)
-                        Button(action: {
-                            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                showingMenu.toggle()
-                            }
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.white.opacity(0.15))
-                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-                                    .blur(radius: 10)
-
-                                Circle()
-                                    .fill(Color.white.opacity(0.2))
-                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-
-                                Image(systemName: showingMenu ? "xmark" : "ellipsis")
-                                    .font(.system(size: DeviceType.isIPad ? 24 : 20, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .rotationEffect(.degrees(showingMenu ? 0 : 90))
-                            }
-                        }
-                        .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-                    }
-                    .padding(.leading, DeviceType.isIPad ? 32 : 20)
-                    .padding(.bottom, DeviceType.isIPad ? 30 : 20)
-
-                    Spacer()
-
-                    // Right side: Notification button (only for authenticated users)
-                    if authManager.isAuthenticated {
-                        Button(action: {
-                            showingNotifications = true
-                        }) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.white.opacity(0.15))
-                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-                                    .blur(radius: 10)
-
-                                Circle()
-                                    .fill(Color.white.opacity(0.2))
-                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-
-                                Image(systemName: unreadNotificationCount > 0 ? "bell.badge.fill" : "bell.fill")
-                                    .font(.system(size: DeviceType.isIPad ? 26 : 22, weight: .semibold))
-                                    .foregroundColor(.white)
-
-                                // Badge for unread count
-                                if unreadNotificationCount > 0 {
-                                    VStack {
-                                        HStack {
-                                            Spacer()
-                                            ZStack {
-                                                // Pulsing background
-                                                Circle()
-                                                    .fill(Color.red.opacity(0.5))
-                                                    .frame(width: DeviceType.isIPad ? 28 : 24, height: DeviceType.isIPad ? 28 : 24)
-                                                    .scaleEffect(1.2)
-                                                    .opacity(0.6)
-                                                    .modifier(PulseAnimation())
-
-                                                Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
-                                                    .font(.system(size: DeviceType.isIPad ? 12 : 10, weight: .bold))
-                                                    .foregroundColor(.white)
-                                                    .padding(4)
-                                                    .background(Color.red)
-                                                    .clipShape(Circle())
-                                            }
-                                            .offset(x: 10, y: -10)
-                                        }
-                                        Spacer()
-                                    }
-                                    .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-                                }
-                            }
-                        }
-                        .frame(width: DeviceType.isIPad ? 70 : 56, height: DeviceType.isIPad ? 70 : 56)
-                        .padding(.trailing, DeviceType.isIPad ? 32 : 20)
-                        .padding(.bottom, DeviceType.isIPad ? 30 : 20)
-                    }
-                }
-            }
+            */
 
             // Interactive Tutorial Overlay
             if showingInteractiveTutorial && tutorialStep != .searchSong {
@@ -445,10 +305,6 @@ struct FeedView: View {
                     onNext: {
                         if tutorialStep == .welcome {
                             tutorialStep = .tapCreateButton
-                            // メニューを自動で開く
-                            withAnimation {
-                                showingMenu = true
-                            }
                             // Warmup search in background for faster first search
                             Task {
                                 await MusicKitManager.shared.warmupSearch()
@@ -461,7 +317,6 @@ struct FeedView: View {
                 )
             }
         }
-        .ignoresSafeArea()
         .refreshable {
             await viewModel.refreshFeed()
         }
@@ -1360,7 +1215,7 @@ struct UserPostsScrollView: View {
             // Start playback for this post
             try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
             await MainActor.run {
-                playbackStateManager.startPlayback(for: postId, userId: userPosts.user.id)
+                playbackStateManager.startPlayback(for: postId, userId: userPosts.user.id, post: post, user: userPosts.user)
             }
 
             // Auto-stop after duration
@@ -1955,7 +1810,7 @@ struct PostCardView: View {
 
             // Update playback state on main actor - use contextUserId instead of post.user.id
             await MainActor.run {
-                playbackStateManager.startPlayback(for: post.id, userId: contextUserId)
+                playbackStateManager.startPlayback(for: post.id, userId: contextUserId, post: post, user: post.user)
             }
 
             // Auto-stop after duration
@@ -3177,5 +3032,643 @@ struct SwipeHintView: View {
                 opacity = 0.7
             }
         }
+    }
+}
+
+// MARK: - User Posts Grid View
+struct UserPostsGridView: View {
+    let allUserPosts: [UserPosts]
+    let userPosts: UserPosts
+    @Binding var showingLoginPrompt: Bool
+    @Binding var unreadPostCounts: [Int64: Int]
+    @Binding var userCurrentPostIndices: [Int64: Int]
+    let hasUnreadDiscoveryPosts: Bool
+    let usersWithUnreadPosts: Set<Int64>
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var musicKit = MusicKitManager.shared
+    @ObservedObject private var unreadPostsManager = UnreadPostsManager.shared
+    @StateObject private var timerCoordinator = RadioButtonTimerCoordinator.shared
+    @ObservedObject private var playbackState = PlaybackStateManager.shared
+    @StateObject private var screenshotMode = ScreenshotModeManager.shared
+
+    var body: some View {
+        GeometryReader { geometry in
+            let screenWidth = geometry.size.width
+            let spacing: CGFloat = 2
+            let safeAreaTop = geometry.safeAreaInsets.top
+
+            ZStack {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // Top: Currently playing post or latest post
+                        if let playingInfo = playbackState.currentlyPlayingInfo {
+                            // Show currently playing post
+                            FeaturedPostCell(
+                                post: playingInfo.post,
+                                user: playingInfo.user,
+                                width: screenWidth,
+                                height: screenWidth,
+                                showingLoginPrompt: $showingLoginPrompt,
+                                isScreenshotMode: $screenshotMode.isScreenshotMode,
+                                safeAreaTop: safeAreaTop
+                            )
+                        } else if let latestPost = userPosts.posts.first {
+                            // Show latest post when nothing is playing
+                            FeaturedPostCell(
+                                post: latestPost,
+                                user: userPosts.user,
+                                width: screenWidth,
+                                height: screenWidth,
+                                showingLoginPrompt: $showingLoginPrompt,
+                                isScreenshotMode: $screenshotMode.isScreenshotMode,
+                                safeAreaTop: safeAreaTop
+                            )
+                        }
+
+                        // Below: Original grid layout
+                        if userPosts.posts.count > 1 {
+                            originalGridLayout(screenWidth: screenWidth, spacing: spacing)
+                                .padding(.top, spacing)
+                        }
+                    }
+                }
+
+                // Tap overlay for exiting screenshot mode (respects safe area)
+                if screenshotMode.isScreenshotMode {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                screenshotMode.isScreenshotMode = false
+                            }
+                        }
+                }
+            }
+        }
+    }
+
+    // Original grid layout: 2 rows of 5 cols (with 4-cell merge), then 2 rows of 6 cols, then 10 cols
+    @ViewBuilder
+    private func originalGridLayout(screenWidth: CGFloat, spacing: CGFloat) -> some View {
+        let posts = Array(userPosts.posts.dropFirst()) // Exclude first post (already shown at top)
+
+        // Rows 1-2: 5 columns (left 4 cells merged for second post)
+        let row12CellWidth = (screenWidth - spacing * 4) / 5
+        let row12CellHeight = row12CellWidth
+
+        // Rows 3-4: 6 columns
+        let row34CellWidth = (screenWidth - spacing * 5) / 6
+        let row34CellHeight = row34CellWidth
+
+        // Row 5+: 10 columns
+        let row5PlusCellWidth = (screenWidth - spacing * 9) / 10
+        let row5PlusCellHeight = row5PlusCellWidth
+
+        // Merged cell (2x2) for second post
+        let mergedCellWidth = row12CellWidth * 2 + spacing
+        let mergedCellHeight = row12CellHeight * 2 + spacing
+
+        VStack(spacing: spacing) {
+            // Rows 1-2 (5 columns with merged cell)
+            HStack(alignment: .top, spacing: spacing) {
+                // Left: Merged cell (2x2) - Second post (index 0 in posts array)
+                if posts.count > 0 {
+                    SmallPostCell(
+                        post: posts[0],
+                        width: mergedCellWidth,
+                        height: mergedCellHeight,
+                        showingLoginPrompt: $showingLoginPrompt,
+                        isScreenshotMode: screenshotMode.isScreenshotMode
+                    )
+                }
+
+                // Right: 6 small cells (3 columns x 2 rows)
+                VStack(spacing: spacing) {
+                    // Row 1: posts 1, 2, 3
+                    HStack(spacing: spacing) {
+                        ForEach(1..<4) { index in
+                            if index < posts.count {
+                                SmallPostCell(
+                                    post: posts[index],
+                                    width: row12CellWidth,
+                                    height: row12CellHeight,
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    isScreenshotMode: screenshotMode.isScreenshotMode
+                                )
+                            } else {
+                                Color.clear.frame(width: row12CellWidth, height: row12CellHeight)
+                            }
+                        }
+                    }
+
+                    // Row 2: posts 4, 5, 6
+                    HStack(spacing: spacing) {
+                        ForEach(4..<7) { index in
+                            if index < posts.count {
+                                SmallPostCell(
+                                    post: posts[index],
+                                    width: row12CellWidth,
+                                    height: row12CellHeight,
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    isScreenshotMode: screenshotMode.isScreenshotMode
+                                )
+                            } else {
+                                Color.clear.frame(width: row12CellWidth, height: row12CellHeight)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Rows 3-4 (6 columns each)
+            ForEach(0..<2, id: \.self) { rowIndex in
+                HStack(spacing: spacing) {
+                    ForEach(0..<6) { colIndex in
+                        let index = 7 + rowIndex * 6 + colIndex
+                        if index < posts.count {
+                            SmallPostCell(
+                                post: posts[index],
+                                width: row34CellWidth,
+                                height: row34CellHeight,
+                                showingLoginPrompt: $showingLoginPrompt,
+                                isScreenshotMode: screenshotMode.isScreenshotMode
+                            )
+                        } else {
+                            Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                        }
+                    }
+                }
+            }
+
+            // Row 5+ (10 columns each)
+            let remainingStartIndex = 19
+            if posts.count > remainingStartIndex {
+                let remainingPosts = Array(posts.dropFirst(remainingStartIndex))
+                let rowCount = (remainingPosts.count + 9) / 10
+
+                ForEach(0..<rowCount, id: \.self) { rowIndex in
+                    HStack(spacing: spacing) {
+                        ForEach(0..<10) { colIndex in
+                            let index = rowIndex * 10 + colIndex
+                            if index < remainingPosts.count {
+                                SmallPostCell(
+                                    post: remainingPosts[index],
+                                    width: row5PlusCellWidth,
+                                    height: row5PlusCellHeight,
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    isScreenshotMode: screenshotMode.isScreenshotMode
+                                )
+                            } else {
+                                Color.clear.frame(width: row5PlusCellWidth, height: row5PlusCellHeight)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Featured Post Cell (Large, 2x2 merged)
+struct FeaturedPostCell: View {
+    let post: Post
+    let user: User
+    let width: CGFloat
+    let height: CGFloat
+    @Binding var showingLoginPrompt: Bool
+    @Binding var isScreenshotMode: Bool
+    let safeAreaTop: CGFloat
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var musicKit = MusicKitManager.shared
+    @StateObject private var playbackState = PlaybackStateManager.shared
+    @ObservedObject private var likeState = LikeStateManager.shared
+    @ObservedObject private var commentState = CommentStateManager.shared
+    @State private var showingActionSheet = false
+    @State private var showingReportView = false
+    @State private var showingBlockConfirmation = false
+
+    var isPlaying: Bool {
+        playbackState.isPlaying(post.id)
+    }
+
+    var likeCount: Int {
+        likeState.getLikeCount(post.id)
+    }
+
+    var commentCount: Int {
+        commentState.getCommentCount(post.id)
+    }
+
+    var isLiked: Bool {
+        likeState.isLiked(post.id)
+    }
+
+    var body: some View {
+        ZStack {
+            // Background artwork
+            AsyncImage(url: URL(string: post.artworkUrl ?? "")) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Color.gray.opacity(0.3)
+            }
+            .frame(width: width, height: height)
+            .clipped()
+
+            // Gradient overlay
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color.black.opacity(0.7),
+                    Color.black.opacity(0.3),
+                    Color.clear
+                ]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // Content overlay
+            VStack(alignment: .leading, spacing: 0) {
+                // Top: Profile image and username (hidden in screenshot mode)
+                if !isScreenshotMode {
+                    HStack(spacing: 10) {
+                        AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(user.profileImageUrl) ?? "")) { image in
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        } placeholder: {
+                            Image(systemName: "person.circle.fill")
+                                .resizable()
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+                        .frame(width: 50, height: 50)
+                        .clipShape(Circle())
+                        .shadow(color: .black.opacity(0.5), radius: 4, x: 0, y: 2)
+
+                        Text(user.displayName)
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white)
+                            .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+
+                        Spacer()
+
+                        // Menu button
+                        Button(action: {
+                            showingActionSheet = true
+                        }) {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(width: 44, height: 44)
+                                .rotationEffect(.degrees(90))
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 12)
+                }
+
+                Spacer()
+
+                // Bottom: Track info (left) and likes/comments (right)
+                HStack(alignment: .bottom, spacing: 12) {
+                    // Left: Track info
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Text(post.trackName)
+                                .font(.system(size: 20, weight: .bold))
+                                .foregroundColor(.white)
+                                .lineLimit(1)
+                                .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+
+                            // Waveform animation when playing
+                            if isPlaying {
+                                MiniWaveformView()
+                                    .frame(width: 36, height: 24)
+                            }
+                        }
+
+                        Text(post.artistName)
+                            .font(.system(size: 17.5))
+                            .foregroundColor(.white.opacity(0.95))
+                            .lineLimit(1)
+                            .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+
+                        if let comment = post.comment, !comment.isEmpty {
+                            Text(comment)
+                                .font(.system(size: 15))
+                                .foregroundColor(.white.opacity(0.9))
+                                .lineLimit(2)
+                                .padding(.top, 4)
+                                .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+                        }
+                    }
+
+                    Spacer()
+
+                    // Right: Likes and comments count (bottom right) - with tap gestures
+                    VStack(alignment: .trailing, spacing: 16) {
+                        // Like button
+                        Button(action: {
+                            Task {
+                                await toggleLike()
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: isLiked ? "heart.fill" : "heart")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(isLiked ? .red : .white.opacity(0.9))
+                                Text("\(likeCount)")
+                                    .font(.system(size: 17, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.9))
+                            }
+                            .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+                        }
+
+                        // Comment button
+                        Button(action: {
+                            // TODO: Show comments
+                            print("💬 Comments tapped for post: \(post.id)")
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "bubble.left")
+                                    .font(.system(size: 22))
+                                    .foregroundColor(.white.opacity(0.9))
+                                Text("\(commentCount)")
+                                    .font(.system(size: 17, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.9))
+                            }
+                            .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+                        }
+                    }
+                    .padding(.trailing, 4)
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+            }
+        }
+        .frame(width: width, height: height)
+        .cornerRadius(4)
+        .clipped()
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .strokeBorder(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            Color.orange.opacity(0.9),
+                            Color.red.opacity(0.7)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: isPlaying ? 3 : 0
+                )
+        )
+        .onTapGesture {
+            // Disable music playback in screenshot mode
+            if !isScreenshotMode {
+                Task {
+                    await playMusic()
+                }
+            }
+        }
+        .confirmationDialog("", isPresented: $showingActionSheet, titleVisibility: .hidden) {
+            // Apple Music link
+            if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
+                Button("Apple Musicで開く") {
+                    UIApplication.shared.open(url)
+                }
+            }
+
+            // Screenshot button
+            Button("スクリーンショット") {
+                isScreenshotMode = true
+            }
+
+            // Owner actions (delete) or visitor actions (report/block)
+            if let currentUserId = authManager.currentUser?.userId, currentUserId == user.id {
+                Button("削除", role: .destructive) {
+                    Task {
+                        await deletePost()
+                    }
+                }
+            } else {
+                Button("報告", role: .destructive) {
+                    showingReportView = true
+                }
+                Button("ブロック", role: .destructive) {
+                    showingBlockConfirmation = true
+                }
+            }
+
+            Button("キャンセル", role: .cancel) {}
+        }
+        .sheet(isPresented: $showingReportView) {
+            ReportPostView(post: post)
+        }
+        .alert("ブロック確認", isPresented: $showingBlockConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("ブロック", role: .destructive) {
+                Task {
+                    await blockUser()
+                }
+            }
+        } message: {
+            Text("\(user.displayName)さんをブロックしますか？")
+        }
+    }
+
+    private func toggleLike() async {
+        if !authManager.isAuthenticated {
+            showingLoginPrompt = true
+            return
+        }
+
+        let wasLiked = isLiked
+
+        // Optimistic update
+        likeState.toggleLike(postId: post.id)
+
+        do {
+            if wasLiked {
+                _ = try await APIClient.shared.unlikePost(postId: post.id)
+            } else {
+                _ = try await APIClient.shared.likePost(postId: post.id)
+            }
+        } catch {
+            // Revert on error
+            likeState.toggleLike(postId: post.id)
+            print("❌ Failed to toggle like: \(error)")
+        }
+    }
+
+    private func playMusic() async {
+        // Toggle play/pause if already playing
+        if isPlaying {
+            musicKit.stopPreview()
+            playbackState.stopPlayback()
+            print("⏸️ Stopped preview for: \(post.trackName)")
+            return
+        }
+
+        // Play music preview if available
+        if let previewUrl = post.previewUrl {
+            do {
+                try await musicKit.playPreviewFromURL(previewUrl, startTime: post.startTime)
+                playbackState.startPlayback(for: post.id, userId: user.id, post: post, user: user)
+                print("🎵 Playing preview for: \(post.trackName)")
+            } catch {
+                print("❌ Failed to play preview: \(error)")
+            }
+        }
+    }
+
+    private func deletePost() async {
+        do {
+            try await APIClient.shared.deletePost(postId: post.id)
+            print("🗑️ Deleted post: \(post.id)")
+            // Notify feed to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+        } catch {
+            print("❌ Failed to delete post: \(error)")
+        }
+    }
+
+    private func blockUser() async {
+        do {
+            try await APIClient.shared.blockUser(userId: user.id)
+            print("🚫 Blocked user: \(user.id)")
+            // Notify feed to refresh
+            NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+        } catch {
+            print("❌ Failed to block user: \(error)")
+        }
+    }
+}
+
+// MARK: - Small Post Cell
+struct SmallPostCell: View {
+    let post: Post
+    let width: CGFloat
+    let height: CGFloat
+    @Binding var showingLoginPrompt: Bool
+    var isScreenshotMode: Bool = false
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var musicKit = MusicKitManager.shared
+    @StateObject private var playbackState = PlaybackStateManager.shared
+
+    var isPlaying: Bool {
+        playbackState.isPlaying(post.id)
+    }
+
+    var body: some View {
+        ZStack {
+            AsyncImage(url: URL(string: post.artworkUrl ?? "")) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Color.gray.opacity(0.3)
+            }
+            .frame(width: width, height: height)
+            .clipped()
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.orange.opacity(0.9),
+                                Color.red.opacity(0.7)
+                            ]),
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: isPlaying ? 3 : 0
+                    )
+            )
+
+            // Waveform animation when playing (centered)
+            if isPlaying {
+                MiniWaveformView()
+                    .frame(width: 30, height: 20)
+            }
+        }
+        .onTapGesture {
+            // Disable music playback in screenshot mode
+            if !isScreenshotMode {
+                Task {
+                    await playMusic()
+                }
+            }
+        }
+    }
+
+    private func playMusic() async {
+        // Toggle play/pause if already playing
+        if isPlaying {
+            musicKit.stopPreview()
+            playbackState.stopPlayback()
+            print("⏸️ Stopped preview for: \(post.trackName)")
+            return
+        }
+
+        // Play music preview if available
+        if let previewUrl = post.previewUrl {
+            do {
+                try await musicKit.playPreviewFromURL(previewUrl, startTime: post.startTime)
+                playbackState.startPlayback(for: post.id, userId: post.user.id, post: post, user: post.user)
+                print("🎵 Playing preview for: \(post.trackName)")
+            } catch {
+                print("❌ Failed to play preview: \(error)")
+            }
+        }
+    }
+}
+
+// MARK: - Compact Radio Button (40x40)
+struct CompactRadioButton: View {
+    let userPosts: UserPosts
+    let currentPostIndex: Int
+    let hasUnreadPosts: Bool
+
+    var body: some View {
+        ZStack {
+            // Background
+            Circle()
+                .fill(Color.black.opacity(0.3))
+                .frame(width: 40, height: 40)
+
+            // Profile image
+            AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(userPosts.user.profileImageUrl) ?? "")) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Image(systemName: "person.circle.fill")
+                    .resizable()
+                    .foregroundColor(.white.opacity(0.5))
+            }
+            .frame(width: 36, height: 36)
+            .clipShape(Circle())
+
+            // Unread indicator
+            if hasUnreadPosts {
+                VStack {
+                    HStack {
+                        Spacer()
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 10, height: 10)
+                            .overlay(
+                                Circle()
+                                    .stroke(Color.black.opacity(0.3), lineWidth: 1)
+                            )
+                    }
+                    Spacer()
+                }
+                .frame(width: 40, height: 40)
+            }
+        }
+        .frame(width: 40, height: 40)
     }
 }

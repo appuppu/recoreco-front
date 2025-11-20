@@ -60,6 +60,9 @@ class APIClient {
         }
     }
 
+    // テストモード切り替え（本番リリース時にfalseに変更）
+    static let isTestMode = true
+
     // 環境を変更する場合はここを .dev または .prod に変更
     private let environment: Environment = .prod
 

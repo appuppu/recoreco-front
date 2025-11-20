@@ -38,7 +38,9 @@ struct UserSearchView: View {
                     .padding()
                     .background(Color.white.opacity(0.1))
                     .cornerRadius(10)
-                    .padding()
+                    .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom)
 
                     // Search results
                     if viewModel.isSearching {
@@ -115,15 +117,6 @@ struct UserSearchView: View {
                     Text("ユーザー検索")
                         .font(.headline)
                         .foregroundColor(.white)
-                }
-
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .foregroundColor(.white)
-                    }
                 }
             }
             .toolbarBackground(Color.black, for: .navigationBar)

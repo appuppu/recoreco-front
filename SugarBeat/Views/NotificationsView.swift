@@ -11,16 +11,7 @@ struct NotificationsView: View {
         NavigationView {
             ZStack {
                 // Background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.orange.opacity(0.8),
-                        Color.red.opacity(0.6),
-                        Color.black
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Color.black.ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     if viewModel.isLoading {
@@ -83,13 +74,6 @@ struct NotificationsView: View {
             .navigationTitle("通知")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("閉じる") {
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
-                }
-
                 if !viewModel.notifications.isEmpty {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         Button("すべて削除") {

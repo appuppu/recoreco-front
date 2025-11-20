@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 
 @MainActor
 class UnreadPostsManager: ObservableObject {
@@ -38,4 +39,13 @@ class UnreadPostsManager: ObservableObject {
     func hasUnreadPosts(in posts: [Post]) -> Bool {
         return posts.contains { isUnread($0.id) }
     }
+}
+
+@MainActor
+class ScreenshotModeManager: ObservableObject {
+    @Published var isScreenshotMode = false
+
+    static let shared = ScreenshotModeManager()
+
+    private init() {}
 }

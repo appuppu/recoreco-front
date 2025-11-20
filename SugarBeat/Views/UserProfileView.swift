@@ -327,7 +327,7 @@ struct UserProfileView: View {
 
             // Start playback
             try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
-            playbackStateManager.startPlayback(for: post.id, userId: post.user.id)
+            playbackStateManager.startPlayback(for: post.id, userId: post.user.id, post: post, user: post.user)
 
             // Auto-stop after duration
             let duration = post.endTime - post.startTime

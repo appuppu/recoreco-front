@@ -6,14 +6,22 @@ import AVFoundation
 class MusicKitManager: ObservableObject {
     @Published var isAuthorized = false
     @Published var authorizationStatus: MusicAuthorization.Status = .notDetermined
+    @Published var isPlaying = false
 
     static let shared = MusicKitManager()
 
     let player = ApplicationMusicPlayer.shared
     private var avPlayer: AVPlayer?
+    private var playerObserver: Any?
 
     init() {
         checkAuthorization()
+    }
+
+    deinit {
+        if let observer = playerObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     func checkAuthorization() {
@@ -73,13 +81,44 @@ class MusicKitManager: ObservableObject {
             await avPlayer?.seek(to: time)
         }
 
+        // Observe playback end
+        if let observer = playerObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        playerObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: avPlayer?.currentItem,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.stopPreview()
+                PlaybackStateManager.shared.stopPlayback()
+            }
+        }
+
         // Start playback
         avPlayer?.play()
+        isPlaying = true
     }
 
     func stopPreview() {
+        if let observer = playerObserver {
+            NotificationCenter.default.removeObserver(observer)
+            playerObserver = nil
+        }
         avPlayer?.pause()
         avPlayer = nil
+        isPlaying = false
+    }
+
+    func togglePlayPause() {
+        if isPlaying {
+            avPlayer?.pause()
+            isPlaying = false
+        } else {
+            avPlayer?.play()
+            isPlaying = true
+        }
     }
 
     var currentPlaybackTime: TimeInterval {

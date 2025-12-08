@@ -20,6 +20,42 @@ class FeedViewModel: ObservableObject {
     private var latestDiscoveryPostDate: Date?
     private var pollingTask: Task<Void, Never>?
 
+    init() {
+        // ユーザーブロック通知を監視
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name.userBlocked,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let userId = notification.userInfo?["userId"] as? Int64 {
+                print("🚫 FeedViewModel received block notification for userId: \(userId)")
+                // Remove the blocked user from allUserPosts
+                self?.allUserPosts.removeAll { $0.id == userId }
+                // Also remove from discovery posts (id: -1)
+                if let discoveryIndex = self?.allUserPosts.firstIndex(where: { $0.id == -1 }) {
+                    self?.allUserPosts[discoveryIndex].posts.removeAll { $0.user.id == userId }
+                }
+                print("🚫 FeedViewModel: Removed blocked user's posts")
+            }
+        }
+
+        // 投稿削除通知を監視
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name.postDeleted,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let postId = notification.userInfo?["postId"] as? Int64 {
+                // Remove the deleted post from all user posts
+                for i in 0..<(self?.allUserPosts.count ?? 0) {
+                    self?.allUserPosts[i].posts.removeAll { $0.id == postId }
+                }
+                // Remove users with no posts
+                self?.allUserPosts.removeAll { $0.posts.isEmpty && $0.id != -1 }
+            }
+        }
+    }
+
     func loadFeed() async {
         isLoading = true
         errorMessage = nil

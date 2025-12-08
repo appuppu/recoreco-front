@@ -118,6 +118,12 @@ struct UserSearchView: View {
                         .font(.headline)
                         .foregroundColor(.white)
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
             }
             .toolbarBackground(Color.black, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)

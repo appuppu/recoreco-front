@@ -1,305 +1,109 @@
 import SwiftUI
 
+/// ユーザープロフィール画面 - グリッドレイアウト + 左上にユーザー情報オーバーレイ
 struct UserProfileView: View {
     let userId: Int64
     @StateObject private var viewModel = UserProfileViewModel()
+    @EnvironmentObject private var authManager: AuthManager
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject private var playbackStateManager = PlaybackStateManager.shared
-    private let musicPlayer = MusicKitManager.shared
-    @State private var showingActionSheet = false
-    @State private var selectedPost: Post?
-    @State private var showingPostActionSheet = false
-    @State private var showingReportView = false
+    @State private var showingLoginPrompt = false
+    @State private var showingLoginSheet = false
+    @State private var showingFollowList = false
+    @State private var followListType: FollowListType = .following
+    @State private var showingProfileEdit = false
+
+    var isOwnProfile: Bool {
+        APIClient.shared.currentUserId == userId
+    }
 
     var body: some View {
         ZStack {
-            // Background
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.orange.opacity(0.8),
-                    Color.red.opacity(0.6),
-                    Color.black
-                ]),
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+            Color.black.ignoresSafeArea()
 
-            ScrollView {
-                if viewModel.isLoading {
-                    ProgressView()
-                        .tint(.white)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if let user = viewModel.user {
-                    VStack(spacing: 20) {
-                        // Profile Header
-                        VStack(spacing: 12) {
-                            // Profile Image
-                            AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(user.profileImageUrl) ?? "")) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            } placeholder: {
-                                Circle()
-                                    .fill(Color.gray.opacity(0.3))
-                                    .overlay(
-                                        Image(systemName: "person.fill")
-                                            .font(.system(size: 40))
-                                            .foregroundColor(.white.opacity(0.6))
-                                    )
-                            }
-                            .frame(width: 100, height: 100)
-                            .clipShape(Circle())
-
-                            // Display Name
-                            HStack(spacing: 6) {
-                                Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(.white.opacity(0.7))
-                                Text(user.displayName)
-                                    .font(.system(size: 24, weight: .bold))
-                                    .foregroundColor(.white)
-                            }
-
-                            // Follow counts
-                            FollowCountsView(user: user)
-                                .padding(.top, 8)
-
-                            // Bio
-                            if let bio = user.bio, !bio.isEmpty {
-                                Text(bio)
-                                    .font(.body)
-                                    .foregroundColor(.white.opacity(0.8))
-                                    .multilineTextAlignment(.center)
-                                    .padding(.horizontal)
-                                    .padding(.top, 4)
-                            }
-
-                            // Follow button (if not current user)
-                            if let currentUserId = APIClient.shared.currentUserId, currentUserId != user.id {
-                                if let isFollowing = user.isFollowing {
-                                    Button(action: {
-                                        Task {
-                                            if isFollowing {
-                                                await viewModel.unfollowUser(userId: userId)
-                                            } else {
-                                                await viewModel.followUser(userId: userId)
-                                            }
-                                        }
-                                    }) {
-                                        ZStack {
-                                            if isFollowing {
-                                                Color.white.opacity(0.2)
-                                            } else {
-                                                LinearGradient(
-                                                    gradient: Gradient(colors: [
-                                                        Color.purple,
-                                                        Color.blue
-                                                    ]),
-                                                    startPoint: .leading,
-                                                    endPoint: .trailing
-                                                )
-                                            }
-
-                                            Text(isFollowing ? "フォロー中" : "フォロー")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .foregroundColor(.white)
-                                        }
-                                        .frame(width: UIDevice.current.userInterfaceIdiom == .pad ? 300 : 200, height: 44)
-                                        .cornerRadius(22)
-                                    }
-                                    .padding(.top, 8)
+            if viewModel.isLoading && viewModel.user == nil && !viewModel.isBlocked {
+                ProgressView()
+                    .tint(.white)
+            } else if viewModel.isBlocked {
+                // ブロック状態（ユーザー情報がなくても表示）
+                blockedViewWithClose
+            } else if let user = viewModel.user {
+                if canViewPosts(user: user) {
+                    if viewModel.posts.isEmpty {
+                        emptyPostsView
+                    } else {
+                        // PostGridViewを使用 + ユーザー情報オーバーレイ
+                        ZStack(alignment: .topLeading) {
+                            PostGridView(
+                                posts: viewModel.posts,
+                                showingLoginPrompt: $showingLoginPrompt,
+                                showUserInfo: false,
+                                isLoading: viewModel.isLoading,
+                                onRefresh: {
+                                    await viewModel.loadUser(userId: userId)
                                 }
-                            }
-                        }
-                        .padding()
-                        .padding(.top, 20)
+                            )
 
-                        // 3x3 Grid of posts
-                        // Can view posts if:
-                        // 1. It's your own profile
-                        // 2. User is public (anyone can view)
-                        // 3. User is private and you have mutual follow
-                        let canViewPosts = (APIClient.shared.currentUserId == user.id) ||
-                                          (user.isPublic == true) ||
-                                          (user.isPublic != true && (user.isMutual ?? false))
-
-                        if viewModel.isBlocked {
-                            VStack(spacing: 12) {
-                                Image(systemName: "hand.raised.fill")
-                                    .font(.system(size: 50))
-                                    .foregroundColor(.white.opacity(0.4))
-                                Text("ブロック中のユーザーです")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                            .padding(.top, 40)
-                        } else if canViewPosts && !viewModel.posts.isEmpty {
-                            LazyVGrid(columns: [
-                                GridItem(.flexible(), spacing: 2),
-                                GridItem(.flexible(), spacing: 2),
-                                GridItem(.flexible(), spacing: 2)
-                            ], spacing: 2) {
-                                ForEach(viewModel.posts) { post in
-                                    ZStack {
-                                        if let artworkUrl = post.artworkUrl,
-                                           let url = URL(string: artworkUrl) {
-                                            AsyncImage(url: url) { phase in
-                                                switch phase {
-                                                case .empty:
-                                                    Rectangle()
-                                                        .fill(Color.gray.opacity(0.3))
-                                                        .aspectRatio(1, contentMode: .fit)
-                                                case .success(let image):
-                                                    image
-                                                        .resizable()
-                                                        .aspectRatio(1, contentMode: .fill)
-                                                case .failure:
-                                                    Rectangle()
-                                                        .fill(Color.gray.opacity(0.3))
-                                                        .aspectRatio(1, contentMode: .fit)
-                                                        .overlay(
-                                                            Image(systemName: "music.note")
-                                                                .foregroundColor(.white.opacity(0.6))
-                                                        )
-                                                @unknown default:
-                                                    Rectangle()
-                                                        .fill(Color.gray.opacity(0.3))
-                                                        .aspectRatio(1, contentMode: .fit)
-                                                }
-                                            }
-                                            .clipped()
-                                        } else {
-                                            Rectangle()
-                                                .fill(Color.gray.opacity(0.3))
-                                                .aspectRatio(1, contentMode: .fit)
-                                                .overlay(
-                                                    Image(systemName: "music.note")
-                                                        .foregroundColor(.white.opacity(0.6))
-                                                )
-                                        }
-
-                                        // Play indicator overlay
-                                        if playbackStateManager.currentlyPlayingPostId == post.id {
-                                            ZStack {
-                                                Color.black.opacity(0.3)
-
-                                                WaveformView()
-                                                    .frame(width: 40, height: 30)
-                                            }
-                                        }
-                                    }
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        Task {
-                                            await togglePlayback(for: post)
-                                        }
-                                    }
-                                    .onLongPressGesture {
-                                        selectedPost = post
-                                        showingPostActionSheet = true
-                                    }
-                                }
-                            }
-                            .padding(.top, 10)
-                        } else if !canViewPosts {
-                            VStack(spacing: 12) {
-                                Image(systemName: "lock.fill")
-                                    .font(.system(size: 50))
-                                    .foregroundColor(.white.opacity(0.4))
-                                Text(user.isPublic == true ? "フォローして紹介を見る" : "相互フォローで紹介を見ることができます")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                            .padding(.top, 40)
-                        } else {
-                            VStack(spacing: 12) {
-                                Image(systemName: "music.note")
-                                    .font(.system(size: 50))
-                                    .foregroundColor(.white.opacity(0.4))
-                                Text("紹介がありません")
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white.opacity(0.7))
-                            }
-                            .padding(.top, 40)
-                        }
-                    }
-                } else if let errorMessage = viewModel.errorMessage {
-                    VStack(spacing: 12) {
-                        Text("エラー")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        Text(errorMessage)
-                            .font(.caption)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationTitle(viewModel.user?.displayName ?? "プロフィール")
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(action: {
-                    dismiss()
-                }) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-            }
-
-            if let currentUserId = APIClient.shared.currentUserId, currentUserId != userId {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingActionSheet = true
-                    }) {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white)
-                            .rotationEffect(.degrees(90))
-                    }
-                }
-            }
-        }
-        .confirmationDialog("", isPresented: $showingActionSheet, titleVisibility: .hidden) {
-            Button("ブロック", role: .destructive) {
-                Task {
-                    await viewModel.blockUser(userId: userId)
-                    dismiss()
-                }
-            }
-            Button("キャンセル", role: .cancel) { }
-        }
-        .confirmationDialog("", isPresented: $showingPostActionSheet, titleVisibility: .hidden) {
-            if let post = selectedPost {
-                // Apple Music link (always show)
-                if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
-                    Button("Apple Musicで開く") {
-                        UIApplication.shared.open(url)
-                    }
-                }
-
-                if let currentUserId = APIClient.shared.currentUserId, post.user.id == currentUserId {
-                    Button("削除", role: .destructive) {
-                        Task {
-                            await viewModel.deletePost(postId: post.id)
+                            // 左上のユーザー情報オーバーレイ
+                            userInfoOverlay(user: user)
+                                .padding(.top, 12)
+                                .padding(.leading, 12)
                         }
                     }
                 } else {
-                    Button("報告", role: .destructive) {
-                        showingReportView = true
-                    }
+                    privateAccountView(user: user)
                 }
-                Button("キャンセル", role: .cancel) {
-                    selectedPost = nil
+            } else if let errorMessage = viewModel.errorMessage {
+                VStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 50))
+                        .foregroundColor(.red.opacity(0.7))
+                    Text(errorMessage)
+                        .foregroundColor(.white.opacity(0.7))
+                    Button("再読み込み") {
+                        Task {
+                            await viewModel.loadUser(userId: userId)
+                        }
+                    }
+                    .foregroundColor(.purple)
                 }
             }
         }
-        .sheet(isPresented: $showingReportView) {
-            if let post = selectedPost {
-                ReportPostView(post: post)
+        .navigationBarHidden(true)
+        .presentationDragIndicator(.visible)
+        .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
+            Button("はい") {
+                showingLoginSheet = true
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("この機能を使用するにはログインが必要です")
+        }
+        .sheet(isPresented: $showingLoginSheet) {
+            LoginView()
+        }
+        .sheet(isPresented: $showingFollowList) {
+            NavigationStack {
+                FollowListView(userId: userId, listType: followListType)
+            }
+        }
+        .sheet(isPresented: $showingProfileEdit) {
+            if let authUser = authManager.currentUser {
+                let user = User(
+                    id: authUser.userId,
+                    username: authUser.username,
+                    email: authUser.email,
+                    displayName: authUser.displayName,
+                    profileImageUrl: authUser.profileImageUrl,
+                    bio: nil,
+                    isPublic: authUser.isPublic,
+                    createdAt: nil,
+                    isFollowing: nil,
+                    isFollower: nil,
+                    isMutual: nil,
+                    followingCount: nil,
+                    followerCount: nil
+                )
+                ProfileEditView(currentUser: user)
             }
         }
         .task {
@@ -307,92 +111,196 @@ struct UserProfileView: View {
         }
     }
 
-    private func togglePlayback(for post: Post) async {
-        guard let previewUrl = post.previewUrl else { return }
+    // MARK: - User Info Overlay
+    @ViewBuilder
+    private func userInfoOverlay(user: User) -> some View {
+        let imageUrl = APIClient.shared.getFullImageURL(user.profileImageUrl)
 
-        // If this post is currently playing, stop it
-        if playbackStateManager.currentlyPlayingPostId == post.id {
-            musicPlayer.stopPreview()
-            playbackStateManager.stopPlayback()
-            return
-        }
+        VStack(alignment: .leading, spacing: 10) {
+            // バツボタン + プロフィール画像 + 名前
+            HStack(spacing: 8) {
+                // バツボタン
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.white.opacity(0.8))
+                }
 
-        // Otherwise, play this post
-        do {
-            // Stop any currently playing post
-            musicPlayer.stopPreview()
+                // プロフィール画像
+                AsyncImage(url: URL(string: imageUrl ?? "")) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Circle()
+                        .fill(Color.gray.opacity(0.5))
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white.opacity(0.6))
+                        )
+                }
+                .frame(width: 40, height: 40)
+                .clipShape(Circle())
 
-            // Small delay for smooth transition
-            try? await Task.sleep(nanoseconds: 100_000_000)
+                VStack(alignment: .leading, spacing: 2) {
+                    // 公開/非公開アイコン + 名前 + 設定ボタン（自分の場合）
+                    HStack(spacing: 4) {
+                        Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.7))
+                        Text(user.displayName)
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
 
-            // Start playback
-            try await musicPlayer.playPreviewFromURL(previewUrl, startTime: post.startTime)
-            playbackStateManager.startPlayback(for: post.id, userId: post.user.id, post: post, user: post.user)
-
-            // Auto-stop after duration
-            let duration = post.endTime - post.startTime
-            Task {
-                try? await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-                if playbackStateManager.currentlyPlayingPostId == post.id {
-                    musicPlayer.stopPreview()
-                    playbackStateManager.stopPlayback()
+                        // 自分のプロフィールの場合は設定ボタンを表示
+                        if isOwnProfile {
+                            Button(action: { showingProfileEdit = true }) {
+                                Image(systemName: "gearshape.fill")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white.opacity(0.8))
+                            }
+                        }
+                    }
                 }
             }
-        } catch {
-            // Silently fail
-        }
-    }
-}
 
-// Helper view for follow counts
-struct FollowCountsView: View {
-    let user: User
+            // フォロー数・フォロワー数（タップ可能、大きめ表示）
+            HStack(spacing: 16) {
+                Button(action: {
+                    showingFollowList = true
+                    followListType = .following
+                }) {
+                    HStack(spacing: 4) {
+                        Text("\(user.followingCount ?? 0)")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                        Text("フォロー")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
 
-    var body: some View {
-        HStack(spacing: 20) {
-            followingCountView
-            followerCountView
-        }
-    }
-
-    @ViewBuilder
-    private var followingCountView: some View {
-        let count = user.followingCount ?? 0
-        let isMutual = user.isMutual ?? false
-        let isOwnProfile = APIClient.shared.currentUserId == user.id
-
-        if isMutual || isOwnProfile {
-            NavigationLink(destination: FollowListView(userId: user.id, listType: .following)) {
-                countLabel(count: count, label: "フォロー")
+                Button(action: {
+                    showingFollowList = true
+                    followListType = .followers
+                }) {
+                    HStack(spacing: 4) {
+                        Text("\(user.followerCount ?? 0)")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
+                        Text("フォロワー")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.8))
+                    }
+                }
             }
-        } else {
-            countLabel(count: count, label: "フォロー")
-        }
-    }
 
-    @ViewBuilder
-    private var followerCountView: some View {
-        let count = user.followerCount ?? 0
-        let isMutual = user.isMutual ?? false
-        let isOwnProfile = APIClient.shared.currentUserId == user.id
-
-        if isMutual || isOwnProfile {
-            NavigationLink(destination: FollowListView(userId: user.id, listType: .followers)) {
-                countLabel(count: count, label: "フォロワー")
+            // フォローボタン（自分以外の場合）
+            if let currentUserId = APIClient.shared.currentUserId, currentUserId != user.id {
+                if let isFollowing = user.isFollowing {
+                    Button(action: {
+                        Task {
+                            if isFollowing {
+                                await viewModel.unfollowUser(userId: userId)
+                            } else {
+                                await viewModel.followUser(userId: userId)
+                            }
+                        }
+                    }) {
+                        Text(isFollowing ? "フォロー中" : "フォロー")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .background(
+                                Group {
+                                    if isFollowing {
+                                        Color.white.opacity(0.3)
+                                    } else {
+                                        AppTheme.horizontalGradient
+                                    }
+                                }
+                            )
+                            .cornerRadius(14)
+                    }
+                }
             }
-        } else {
-            countLabel(count: count, label: "フォロワー")
         }
+        .padding(10)
+        .background(Color.black.opacity(0.6))
+        .cornerRadius(12)
     }
 
-    private func countLabel(count: Int, label: String) -> some View {
-        VStack(spacing: 4) {
-            Text("\(count)")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundColor(.white)
-            Text(label)
-                .font(.system(size: 14))
+    // MARK: - Helper Views
+    private var blockedView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "hand.raised.fill")
+                .font(.system(size: 50))
+                .foregroundColor(.white.opacity(0.4))
+            Text("ブロック中のユーザーです")
+                .font(.system(size: 16))
                 .foregroundColor(.white.opacity(0.7))
         }
+    }
+
+    private var blockedViewWithClose: some View {
+        VStack {
+            // 閉じるボタン
+            HStack {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(.top, 12)
+                .padding(.leading, 12)
+                Spacer()
+            }
+
+            Spacer()
+
+            VStack(spacing: 12) {
+                Image(systemName: "hand.raised.fill")
+                    .font(.system(size: 50))
+                    .foregroundColor(.white.opacity(0.4))
+                Text("このユーザーは表示できません")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+
+            Spacer()
+        }
+    }
+
+    private var emptyPostsView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "music.note")
+                .font(.system(size: 50))
+                .foregroundColor(.white.opacity(0.4))
+            Text("紹介がありません")
+                .font(.system(size: 16))
+                .foregroundColor(.white.opacity(0.7))
+        }
+    }
+
+    @ViewBuilder
+    private func privateAccountView(user: User) -> some View {
+        VStack(spacing: 12) {
+            Image(systemName: "lock.fill")
+                .font(.system(size: 50))
+                .foregroundColor(.white.opacity(0.4))
+            Text(user.isPublic == true ? "フォローして紹介を見る" : "相互フォローで紹介を見ることができます")
+                .font(.system(size: 16))
+                .foregroundColor(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 32)
+    }
+
+    private func canViewPosts(user: User) -> Bool {
+        (APIClient.shared.currentUserId == user.id) ||
+        (user.isPublic == true) ||
+        (user.isPublic != true && (user.isMutual ?? false))
     }
 }

@@ -6,11 +6,17 @@ import GoogleMobileAds
 struct SugarBeatApp: App {
     @StateObject private var authManager = AuthManager()
     @ObservedObject private var musicKitManager = MusicKitManager.shared
+    @StateObject private var screenshotMode = ScreenshotModeManager.shared
     @State private var showLaunchScreen = true
 
     init() {
         // Google Mobile Ads SDKを初期化
         MobileAds.shared.start()
+    }
+
+    /// 広告を表示するかどうか（スクショモード時は非表示）
+    private var shouldShowAd: Bool {
+        AdConfig.shouldShowAds && authManager.isAuthenticated && musicKitManager.isAuthorized && !screenshotMode.isScreenshotMode
     }
 
     var body: some Scene {
@@ -34,11 +40,11 @@ struct SugarBeatApp: App {
                             .environmentObject(authManager)
                     }
 
-                    // Banner Ad at the bottom (非表示: ログイン/登録画面、MusicPermission画面、テストモード、未ログイン時)
-                    if AdConfig.shouldShowAds && authManager.isAuthenticated && musicKitManager.isAuthorized {
+                    // Banner Ad at the bottom (非表示: ログイン/登録画面、MusicPermission画面、テストモード、未ログイン時、スクショモード時)
+                    if shouldShowAd {
                         AdBannerView()
                             .frame(height: 50)
-                            .background(Color.black.opacity(0.9))
+                            .background(Color.black)
                     }
                 }
 

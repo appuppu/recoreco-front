@@ -3,98 +3,76 @@ import SwiftUI
 struct NotificationsView: View {
     @StateObject private var viewModel = NotificationsViewModel()
     @Environment(\.dismiss) private var dismiss
-    @State private var selectedUserId: Int64?
-    @State private var showingUserProfile = false
-    @State private var selectedPostId: Int64?
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background
-                Color.black.ignoresSafeArea()
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-                VStack(spacing: 0) {
-                    if viewModel.isLoading {
-                        ProgressView()
-                            .tint(.white)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if viewModel.notifications.isEmpty {
-                        VStack(spacing: 16) {
-                            Image(systemName: "bell.slash")
-                                .font(.system(size: 60))
-                                .foregroundColor(.white.opacity(0.5))
-                            Text("通知はありません")
-                                .font(.system(size: 16))
-                                .foregroundColor(.white.opacity(0.7))
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else {
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ForEach(viewModel.notifications) { notification in
-                                    NotificationRow(notification: notification) {
-                                        // Delete notification
-                                        Task {
-                                            await viewModel.deleteNotification(notificationId: notification.id)
-                                        }
+            if viewModel.isLoading {
+                ProgressView()
+                    .tint(.white)
+            } else if viewModel.notifications.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "bell.slash")
+                        .font(.system(size: 60))
+                        .foregroundColor(.white.opacity(0.5))
+                    Text("通知はありません")
+                        .font(.system(size: 16))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(viewModel.notifications) { notification in
+                            NotificationRow(notification: notification) {
+                                Task {
+                                    await viewModel.deleteNotification(notificationId: notification.id)
+                                }
 
-                                        // Handle different notification types
-                                        if notification.type == "LIKE" || notification.type == "COMMENT" {
-                                            // For LIKE and COMMENT, navigate to post
-                                            if let postId = notification.postId,
-                                               let postOwnerId = notification.postOwnerId {
-                                                // Close notifications view
-                                                dismiss()
-
-                                                // Post notification to navigate to the post
-                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                                                    NotificationCenter.default.post(
-                                                        name: NSNotification.Name("NavigateToPost"),
-                                                        object: nil,
-                                                        userInfo: ["postId": postId, "senderId": postOwnerId]
-                                                    )
-                                                }
-                                            }
-                                        } else {
-                                            // For FOLLOW, show user profile
-                                            selectedUserId = notification.sender.id
-                                            showingUserProfile = true
+                                if notification.type == "LIKE" || notification.type == "COMMENT" {
+                                    if let postId = notification.postId {
+                                        dismiss()
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                            NotificationCenter.default.post(
+                                                name: NSNotification.Name("PlayPostInMyProfile"),
+                                                object: nil,
+                                                userInfo: ["postId": postId]
+                                            )
                                         }
                                     }
-
-                                    Divider()
-                                        .background(Color.white.opacity(0.1))
+                                } else {
+                                    dismiss()
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                        NotificationCenter.default.post(
+                                            name: NSNotification.Name("ShowUserProfile"),
+                                            object: nil,
+                                            userInfo: ["userId": notification.sender.id]
+                                        )
+                                    }
                                 }
                             }
-                            .padding(.top, 8)
+
+                            Divider()
+                                .background(Color.white.opacity(0.1))
                         }
                     }
                 }
             }
-            .navigationTitle("通知")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if !viewModel.notifications.isEmpty {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("すべて削除") {
-                            Task {
-                                await viewModel.deleteAllNotifications()
-                            }
+        }
+        .toolbar {
+            if !viewModel.notifications.isEmpty {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("すべて削除") {
+                        Task {
+                            await viewModel.deleteAllNotifications()
                         }
-                        .foregroundColor(.white)
                     }
+                    .foregroundColor(.red)
                 }
             }
         }
         .task {
             await viewModel.loadNotifications()
-        }
-        .sheet(isPresented: $showingUserProfile) {
-            if let userId = selectedUserId {
-                NavigationView {
-                    UserProfileView(userId: userId)
-                }
-            }
         }
     }
 }
@@ -106,7 +84,6 @@ struct NotificationRow: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                // Image - artwork for LIKE/COMMENT, profile for FOLLOW
                 AsyncImage(url: URL(string: imageUrl)) { image in
                     image
                         .resizable()
@@ -123,7 +100,6 @@ struct NotificationRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: isPostNotification ? 8 : 25))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    // Notification text
                     Text(notificationText)
                         .font(.system(size: 15))
                         .foregroundColor(.white)
@@ -131,7 +107,6 @@ struct NotificationRow: View {
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    // Time
                     Text(timeAgoString(from: notification.createdAt))
                         .font(.system(size: 13))
                         .foregroundColor(.white.opacity(0.6))
@@ -139,29 +114,21 @@ struct NotificationRow: View {
 
                 Spacer()
 
-                // Unread indicator - show "NEW" text
                 if !notification.isRead {
                     Text("NEW")
                         .font(.system(size: 8, weight: .bold))
                         .foregroundStyle(
                             LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.orange,
-                                    Color.red
-                                ]),
+                                gradient: Gradient(colors: [Color.orange, Color.red]),
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )
                         )
                         .padding(.horizontal, 4)
                         .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(Color.black.opacity(0.6))
-                        )
+                        .background(Capsule().fill(Color.black.opacity(0.6)))
                 }
 
-                // Icon based on type
                 Image(systemName: notificationIcon)
                     .font(.system(size: 18))
                     .foregroundColor(.white.opacity(0.7))
@@ -248,11 +215,7 @@ class NotificationsViewModel: ObservableObject {
     func deleteNotification(notificationId: Int64) async {
         do {
             try await APIClient.shared.deleteNotification(notificationId: notificationId)
-
-            // Remove from local state
             notifications.removeAll { $0.id == notificationId }
-
-            // Notify to refresh badge
             NotificationCenter.default.post(name: NSNotification.Name("RefreshNotificationBadge"), object: nil)
         } catch {
             errorMessage = "Failed to delete notification: \(error.localizedDescription)"
@@ -262,11 +225,7 @@ class NotificationsViewModel: ObservableObject {
     func deleteAllNotifications() async {
         do {
             try await APIClient.shared.deleteAllNotifications()
-
-            // Clear local state
             notifications.removeAll()
-
-            // Notify to refresh badge
             NotificationCenter.default.post(name: NSNotification.Name("RefreshNotificationBadge"), object: nil)
         } catch {
             errorMessage = "Failed to delete all notifications: \(error.localizedDescription)"

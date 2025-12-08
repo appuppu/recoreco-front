@@ -1,6 +1,80 @@
 import SwiftUI
 import MusicKit
 
+// MARK: - アプリ全体のテーマカラー設定
+/// ここを変更するだけで、アプリ全体の色が変わります
+enum AppTheme {
+    // MARK: - グラデーションカラー設定（6桁のHEXコードで指定）
+    // 色を変えたい場合はここの値を変更してください
+
+    /// グラデーション開始色（明るい方）
+    static let gradientStartHex = "cc208e"  // ワインレッド（明）
+
+    /// グラデーション終了色（暗い方）
+    static let gradientEndHex = "6713d2"    // ワインレッド（暗）
+
+    // MARK: - 計算プロパティ（変更不要）
+
+    /// グラデーション開始色
+    static var gradientStartColor: Color {
+        Color(hex: gradientStartHex)
+    }
+
+    /// グラデーション終了色
+    static var gradientEndColor: Color {
+        Color(hex: gradientEndHex)
+    }
+
+    /// 横方向のグラデーション
+    static var horizontalGradient: LinearGradient {
+        LinearGradient(
+            gradient: Gradient(colors: [gradientStartColor, gradientEndColor]),
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    /// 縦方向のグラデーション
+    static var verticalGradient: LinearGradient {
+        LinearGradient(
+            gradient: Gradient(colors: [gradientStartColor, gradientEndColor]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// リフレッシュインジケーター用の色
+    static var tintColor: Color {
+        gradientStartColor
+    }
+}
+
+// MARK: - Color Extension for Hex Support
+
+extension Color {
+    /// 6桁のHEXコードからColorを生成
+    /// 例: Color(hex: "FF5733")
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+
+        let r, g, b: UInt64
+        switch hex.count {
+        case 6: // RGB (24-bit)
+            (r, g, b) = ((int >> 16) & 0xFF, (int >> 8) & 0xFF, int & 0xFF)
+        default:
+            (r, g, b) = (0, 0, 0)
+        }
+
+        self.init(
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255
+        )
+    }
+}
+
 struct ContentView: View {
     var body: some View {
         MainTabView()
@@ -10,123 +84,377 @@ struct ContentView: View {
 struct MainTabView: View {
     @EnvironmentObject private var authManager: AuthManager
     @StateObject private var screenshotMode = ScreenshotModeManager.shared
-    @State private var selectedTab = 0
+    @State private var selectedTab = 1 // 実際のタブは1から始まる（0と4はダミー）
     @State private var refreshTrigger = false
     @State private var showingCreatePost = false
-    @State private var showingLoginPrompt = false
+    @State private var showingLoginPrompt = false  // ログイン必要アラート
+    @State private var showingLoginSheet = false   // ログイン画面シート
+    @State private var showingUserSearch = false
+    @State private var showingNotifications = false
     @State private var postCreated = false
-    @State private var tutorialStep: TutorialStep = .welcome
-    @State private var showingInteractiveTutorial = false
+    @State private var showingScreenshotTip = false
+    @State private var unreadNotificationCount = 0
+    @State private var showingSettings = false
+    @State private var pendingPlayPostId: Int64? = nil
+    @State private var showingUserProfileFromNotification = false
+    @State private var userIdForProfile: Int64? = nil
+    @State private var lastNotificationFetchTime: Date?
+
+    // グラデーション紫
+    private let purpleGradient = LinearGradient(
+        gradient: Gradient(colors: [Color.blue, Color.purple]),
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+
+    // グラデーション（AppThemeから取得）
+    private var orangeGradient: LinearGradient {
+        AppTheme.horizontalGradient
+    }
+
+    // タブ情報（実際のタブ）- 通知を削除、フォロー中の後にプロフィール
+    private let tabs: [(name: String, icon: String)] = [
+        ("音楽の発見", "sparkles"),
+        ("フォロー中の投稿", "person.2.fill"),
+        ("自分の投稿", "person.fill")
+    ]
+
+    // 表示用のタブインデックス（0-2）
+    private var displayTabIndex: Int {
+        switch selectedTab {
+        case 0: return 2  // ダミー（プロフィール）
+        case 4: return 0  // ダミー（発見）
+        default: return selectedTab - 1
+        }
+    }
 
     var body: some View {
         ZStack {
-            // Main tab view
+            // スワイプ可能なページビュー（循環用にダミーページを追加）
             TabView(selection: $selectedTab) {
-                // Tab 1: Home (自分の投稿)
-                FeedView(refreshTrigger: $refreshTrigger)
-                    .tabItem {
-                        Image(systemName: "house.fill")
-                        Text("ホーム")
-                    }
+                // ダミー: プロフィール（左端からさらに左へスワイプ用）
+                MyProfileView(pendingPlayPostId: $pendingPlayPostId)
                     .tag(0)
 
-                // Tab 2: Following (フォロー中)
-                FollowingFeedView()
-                    .tabItem {
-                        Image(systemName: "person.2.fill")
-                        Text("フォロー中")
-                    }
+                // 実際のページ
+                DiscoveryView()
                     .tag(1)
 
-                // Tab 3: Create Post (中央の+ボタン)
-                Color.clear
-                    .tabItem {
-                        Image(systemName: "plus.circle.fill")
-                        Text("")
-                    }
+                FollowingFeedView()
                     .tag(2)
 
-                // Tab 4: Notifications
-                NotificationsView()
-                    .tabItem {
-                        Image(systemName: "bell.fill")
-                        Text("通知")
-                    }
+                MyProfileView(pendingPlayPostId: $pendingPlayPostId)
                     .tag(3)
 
-                // Tab 5: User Search
-                UserSearchView()
-                    .tabItem {
-                        Image(systemName: "magnifyingglass")
-                        Text("検索")
-                    }
+                // ダミー: 発見（右端からさらに右へスワイプ用）
+                DiscoveryView()
                     .tag(4)
             }
-            .accentColor(.purple)
-            .opacity(screenshotMode.isScreenshotMode ? 0 : 1) // Hide tab bar in screenshot mode
-            .onAppear {
-                UITabBar.appearance().unselectedItemTintColor = .white
-            }
+            .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+            .ignoresSafeArea()
             .onChange(of: selectedTab) { newValue in
-                // When center tab is tapped, show create post
-                if newValue == 2 {
-                    if !authManager.isAuthenticated {
-                        showingLoginPrompt = true
-                    } else {
-                        showingCreatePost = true
+                // ダミーページに到達したら実際のページにジャンプ
+                if newValue == 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        withAnimation(.none) {
+                            selectedTab = 3 // プロフィール
+                        }
                     }
-                    // Reset to previous tab
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        selectedTab = 0
+                } else if newValue == 4 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        withAnimation(.none) {
+                            selectedTab = 1 // 発見
+                        }
                     }
                 }
             }
 
-            // Ad banner above tab bar (hidden in screenshot mode and test mode)
-            if !screenshotMode.isScreenshotMode && !APIClient.isTestMode {
+            // 上部: タブ名インジケーター（スクショモード以外で表示）- 左上配置
+            if !screenshotMode.isScreenshotMode {
+                VStack {
+                    HStack {
+                        HStack(spacing: 6) {
+                            Image(systemName: tabs[displayTabIndex].icon)
+                                .font(.system(size: 14, weight: .semibold))
+                            Text(tabs[displayTabIndex].name)
+                                .font(.system(size: 14, weight: .bold))
+
+                            // 自分の投稿タブの場合は設定ボタンを表示
+                            if displayTabIndex == 2 && authManager.isAuthenticated {
+                                Button(action: {
+                                    showingSettings = true
+                                }) {
+                                    Image(systemName: "gearshape.fill")
+                                        .font(.system(size: 14, weight: .semibold))
+                                }
+                            }
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(
+                            orangeGradient
+                                .opacity(0.9)
+                        )
+                        .cornerRadius(20)
+                        .shadow(color: .black.opacity(0.5), radius: 8, x: 0, y: 4)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8) // アプリ上部に配置
+
+                    Spacer()
+                }
+            }
+
+            // スクショモードのヒントモーダル
+            if showingScreenshotTip {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        showingScreenshotTip = false
+                        // 音楽を停止してスクショモードに入る
+                        PlaybackStateManager.shared.stopPlayback()
+                        MusicKitManager.shared.stopPreview()
+                        screenshotMode.isScreenshotMode = true
+                        print("📸 Screenshot mode enabled (tap on overlay)")
+                    }
+
+                VStack(spacing: 16) {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            showingScreenshotTip = false
+                            // 音楽を停止してスクショモードに入る
+                            PlaybackStateManager.shared.stopPlayback()
+                            MusicKitManager.shared.stopPreview()
+                            screenshotMode.isScreenshotMode = true
+                            print("📸 Screenshot mode enabled (X button)")
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 50))
+                        .foregroundColor(.white)
+
+                    Text("スクショを撮って\nSNSに投稿しよう！")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(24)
+                .background(
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.black.opacity(0.9))
+                )
+                .padding(.horizontal, 40)
+            }
+
+            // 下部のインジケーターとボタン
+            // 下部バー（スクショモード以外で表示）
+            if !screenshotMode.isScreenshotMode {
                 VStack {
                     Spacer()
-                    AdBannerView()
-                        .frame(height: 50)
-                        .background(Color.black.opacity(0.9))
+
+                    // カスタムインジケーター（ボタン群のみ、タブ名は上部に移動）
+                    VStack(spacing: 6) {
+                        // ボタン群とインジケーター
+                        HStack(spacing: 0) {
+                            // 左側: 投稿ボタン + スクショボタン
+                            HStack(spacing: 12) {
+                                Button(action: {
+                                    if !authManager.isAuthenticated {
+                                        showingLoginPrompt = true
+                                    } else {
+                                        showingCreatePost = true
+                                    }
+                                }) {
+                                    Image(systemName: "plus.circle.fill")
+                                        .font(.system(size: 26))
+                                        .foregroundStyle(orangeGradient)
+                                }
+
+                                Button(action: {
+                                    showingScreenshotTip = true
+                                }) {
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .padding(.leading, 16)
+
+                            Spacer()
+
+                            // 中央: ドットインジケーター
+                            HStack(spacing: 8) {
+                                ForEach(0..<tabs.count, id: \.self) { index in
+                                    Circle()
+                                        .fill(displayTabIndex == index ? orangeGradient : LinearGradient(colors: [Color.white.opacity(0.4)], startPoint: .leading, endPoint: .trailing))
+                                        .frame(width: 8, height: 8)
+                                        .onTapGesture {
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                selectedTab = index + 1
+                                            }
+                                        }
+                                }
+                            }
+
+                            Spacer()
+
+                            // 右側: ユーザー検索ボタン + 通知ボタン
+                            HStack(spacing: 12) {
+                                Button(action: {
+                                    if !authManager.isAuthenticated {
+                                        showingLoginPrompt = true
+                                    } else {
+                                        showingUserSearch = true
+                                    }
+                                }) {
+                                    Image(systemName: "magnifyingglass")
+                                        .font(.system(size: 18))
+                                        .foregroundColor(.white)
+                                }
+
+                                Button(action: {
+                                    if !authManager.isAuthenticated {
+                                        showingLoginPrompt = true
+                                    } else {
+                                        showingNotifications = true
+                                    }
+                                }) {
+                                    ZStack(alignment: .topTrailing) {
+                                        Image(systemName: "bell.fill")
+                                            .font(.system(size: 18))
+                                            .foregroundColor(.white)
+
+                                        // 通知バッジ
+                                        if unreadNotificationCount > 0 {
+                                            Text(unreadNotificationCount > 99 ? "99+" : "\(unreadNotificationCount)")
+                                                .font(.system(size: 10, weight: .bold))
+                                                .foregroundColor(.white)
+                                                .padding(.horizontal, 4)
+                                                .padding(.vertical, 1)
+                                                .background(Color.red)
+                                                .clipShape(Capsule())
+                                                .offset(x: 8, y: -8)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.trailing, 16)
+                        }
+                    }
+                    .frame(height: 50)
+                    .background(Color.black.opacity(0.7))
                 }
-                .ignoresSafeArea(edges: .bottom)
-                .padding(.bottom, 49) // Tab bar height
-                .allowsHitTesting(false)
             }
         }
         .sheet(isPresented: $showingCreatePost) {
             refreshTrigger.toggle()
         } content: {
-            CreatePostView(
-                postCreated: $postCreated,
-                tutorialStep: $tutorialStep,
-                showingInteractiveTutorial: $showingInteractiveTutorial
-            )
+            CreatePostView(postCreated: $postCreated)
         }
-        .sheet(isPresented: $showingLoginPrompt) {
+        .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
+            Button("はい") {
+                showingLoginSheet = true
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("この機能を使用するにはログインが必要です")
+        }
+        .sheet(isPresented: $showingLoginSheet) {
             LoginView()
         }
-    }
-}
-
-// Placeholder for Following Feed
-struct FollowingFeedView: View {
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            VStack {
-                Text("フォロー中")
-                    .font(.title)
-                    .foregroundColor(.white)
-                Text("デザインは後から実装")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.7))
+        .sheet(isPresented: $showingUserSearch) {
+            UserSearchView()
+        }
+        .sheet(isPresented: $showingNotifications, onDismiss: {
+            // 通知を閉じたら未読カウントをリセット
+            Task {
+                await loadUnreadNotificationCount(forceRefresh: true)
+            }
+        }) {
+            NavigationStack {
+                NotificationsView()
+                    .navigationTitle("通知")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("閉じる") {
+                                showingNotifications = false
+                            }
+                        }
+                    }
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            ProfileView()
+                .environmentObject(authManager)
+        }
+        .task {
+            await loadUnreadNotificationCount(forceRefresh: true)
+        }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+            Task {
+                await loadUnreadNotificationCount()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Foundation.Notification.Name("ReloadUnreadCounts"))) { _ in
+            Task {
+                await loadUnreadNotificationCount(forceRefresh: true)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PlayPostInMyProfile"))) { notification in
+            if let postId = notification.userInfo?["postId"] as? Int64 {
+                // Switch to MyProfile tab (tab index 3)
+                selectedTab = 3
+                // Store the postId to play
+                pendingPlayPostId = postId
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowUserProfile"))) { notification in
+            if let userId = notification.userInfo?["userId"] as? Int64 {
+                userIdForProfile = userId
+                showingUserProfileFromNotification = true
+            }
+        }
+        .sheet(isPresented: $showingUserProfileFromNotification) {
+            if let userId = userIdForProfile {
+                UserProfileView(userId: userId)
+                    .environmentObject(authManager)
             }
         }
     }
+
+    private func loadUnreadNotificationCount(forceRefresh: Bool = false) async {
+        guard authManager.isAuthenticated else {
+            unreadNotificationCount = 0
+            return
+        }
+
+        // キャッシュが有効な場合はスキップ（30秒以内）
+        if !forceRefresh, let lastFetch = lastNotificationFetchTime {
+            let elapsed = Date().timeIntervalSince(lastFetch)
+            if elapsed < 30 {
+                return
+            }
+        }
+
+        do {
+            unreadNotificationCount = try await APIClient.shared.getUnreadNotificationCount()
+            lastNotificationFetchTime = Date()
+        } catch {
+            print("Failed to load unread notification count: \(error)")
+        }
+    }
 }
+
 
 struct CreatePostView: View {
     @Environment(\.dismiss) var dismiss
@@ -134,8 +462,6 @@ struct CreatePostView: View {
     @FocusState private var isCommentFocused: Bool
     @FocusState private var isSearchFocused: Bool
     @Binding var postCreated: Bool
-    @Binding var tutorialStep: TutorialStep
-    @Binding var showingInteractiveTutorial: Bool
 
     var body: some View {
         NavigationStack {
@@ -186,18 +512,6 @@ struct CreatePostView: View {
                                 .onSubmit {
                                     Task {
                                         await viewModel.performSearch()
-                                        // チュートリアルステップを進める
-                                        if tutorialStep == .searchSong && !viewModel.searchResults.isEmpty {
-                                            tutorialStep = .selectSong
-                                        }
-                                    }
-                                }
-                                .onChange(of: isSearchFocused) { focused in
-                                    print("⌨️ Search focus changed: \(focused), tutorialStep: \(tutorialStep)")
-                                    // キーボードが表示されたらチュートリアルモーダルを消す
-                                    if focused && tutorialStep == .searchSong {
-                                        showingInteractiveTutorial = false
-                                        print("⌨️ Hiding tutorial modal because keyboard is shown")
                                     }
                                 }
                             if !viewModel.searchQuery.isEmpty {
@@ -213,22 +527,9 @@ struct CreatePostView: View {
 
                         // 検索ボタン
                         Button(action: {
-                            print("🔍🔍🔍 SEARCH BUTTON TAPPED - query: '\(viewModel.searchQuery)', tutorialStep: \(tutorialStep)")
-                            // キーボードを閉じる
                             isSearchFocused = false
-
                             Task {
-                                print("🔍 Starting search...")
                                 await viewModel.performSearch()
-                                print("🔍 Search finished - results count: \(viewModel.searchResults.count)")
-                                // チュートリアルステップを進める
-                                if tutorialStep == .searchSong && !viewModel.searchResults.isEmpty {
-                                    tutorialStep = .selectSong
-                                    showingInteractiveTutorial = true
-                                    print("🔍 Search completed - moving to selectSong step, showing tutorial: \(showingInteractiveTutorial)")
-                                } else {
-                                    print("🔍 Not moving to next step - tutorialStep: \(tutorialStep), results: \(viewModel.searchResults.count)")
-                                }
                             }
                         }) {
                             Text("検索")
@@ -270,12 +571,6 @@ struct CreatePostView: View {
                                 Button(action: {
                                     Task {
                                         await viewModel.selectSong(song)
-                                        // チュートリアルステップを進める
-                                        if tutorialStep == .selectSong {
-                                            tutorialStep = .tapPostButton
-                                            showingInteractiveTutorial = true
-                                            print("🎵 Song selected - moving to tapPostButton step, showing tutorial: \(showingInteractiveTutorial)")
-                                        }
                                     }
                                 }) {
                                     MusicKitSearchRow(song: song)
@@ -427,18 +722,10 @@ struct CreatePostView: View {
 
                         // Post button
                         Button(action: {
-                            print("📝 Post button tapped - current tutorialStep: \(tutorialStep)")
-                            let wasTutorial = tutorialStep == .tapPostButton
-                            print("📝 wasTutorial: \(wasTutorial)")
-
                             Task {
                                 await viewModel.createPost()
                                 if viewModel.postCreated {
                                     postCreated = true
-                                    print("📝 Post created successfully, dismissing CreatePostView")
-
-                                    // チュートリアル中でも通常でも、すぐに閉じる
-                                    // 完了モーダルはFeedViewで表示される
                                     dismiss()
                                 }
                             }
@@ -495,23 +782,10 @@ struct CreatePostView: View {
                 }
             }
 
-            // Interactive Tutorial Overlay (completedステップはFeedViewで表示される)
-            if showingInteractiveTutorial && (tutorialStep == .searchSong || tutorialStep == .selectSong || tutorialStep == .tapPostButton) {
-                InteractiveTutorialView(
-                    isPresented: $showingInteractiveTutorial,
-                    currentStep: $tutorialStep,
-                    targetFrame: nil,
-                    onNext: {
-                        // このビューでは.completedステップは表示しない
-                    }
-                )
-            }
         }
         .navigationBarHidden(true)
         }
         .onAppear {
-            print("🎨 CreatePostView appeared - tutorialStep: \(tutorialStep), showingInteractiveTutorial: \(showingInteractiveTutorial)")
-            // Warmup search to initialize MusicKit and API connections
             Task {
                 await viewModel.warmupSearch()
             }

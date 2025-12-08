@@ -61,7 +61,7 @@ class APIClient {
     }
 
     // テストモード切り替え（本番リリース時にfalseに変更）
-    static let isTestMode = true
+    static let isTestMode = false
 
     // 環境を変更する場合はここを .dev または .prod に変更
     private let environment: Environment = .prod
@@ -73,6 +73,9 @@ class APIClient {
 
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
+
+        // snake_case to camelCase conversion
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
 
         // Custom date decoding to handle LocalDateTime format from Spring Boot
         decoder.dateDecodingStrategy = .custom { decoder in
@@ -134,7 +137,12 @@ class APIClient {
             return imageURL
         }
 
-        // If relative path, prepend server base URL
+        // If relative path, prepend server base URL with /api context path
+        // サーバーのcontext-pathが/apiなので、静的リソースも/api/uploads/...になる
+        if imageURL.starts(with: "/uploads/") {
+            return serverBaseURL + "/api" + imageURL
+        }
+
         return serverBaseURL + imageURL
     }
 

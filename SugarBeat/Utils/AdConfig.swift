@@ -21,4 +21,11 @@ struct AdConfig {
 
     /// バナー広告の高さ
     static let bannerHeight: CGFloat = 50
+
+    // MARK: - Ad Display Control
+
+    /// 広告を表示するかどうか
+    static var shouldShowAds: Bool {
+        return true
+    }
 }

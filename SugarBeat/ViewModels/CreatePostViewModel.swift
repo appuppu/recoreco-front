@@ -271,6 +271,9 @@ class CreatePostViewModel: ObservableObject {
             postCreated = true
             errorMessage = nil
 
+            // フィード更新通知を発行
+            NotificationCenter.default.post(name: Foundation.Notification.Name.postCreated, object: nil)
+
             // Reset form
             selectedSong = nil
             comment = ""
@@ -286,6 +289,9 @@ class CreatePostViewModel: ObservableObject {
             errorMessage = "紹介は成功しましたが、表示に問題があります"
             // Still mark as created since post was likely successful
             postCreated = true
+
+            // フィード更新通知を発行
+            NotificationCenter.default.post(name: Foundation.Notification.Name.postCreated, object: nil)
 
             // Reset form
             stopPreview()

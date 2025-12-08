@@ -69,10 +69,6 @@ struct FeedView: View {
     @State private var skipNextAutoPlay = false
     @State private var currentDisplayedUserIndex = 0
     @State private var showingOnboarding = false
-    @State private var showingInteractiveTutorial = false
-    @State private var tutorialStep: TutorialStep = .welcome
-    @State private var createButtonFrame: CGRect = .zero
-    @State private var wasTutorialPost = false // チュートリアル中の投稿かどうかを記録
     @State private var isInitialLoad = true // アプリ起動時の初回のみ自動再生をスキップ
     @State private var lastInteractionTime = Date()
     @State private var showSwipeHint = false
@@ -296,26 +292,6 @@ struct FeedView: View {
             }
             */
 
-            // Interactive Tutorial Overlay
-            if showingInteractiveTutorial && tutorialStep != .searchSong {
-                InteractiveTutorialView(
-                    isPresented: $showingInteractiveTutorial,
-                    currentStep: $tutorialStep,
-                    targetFrame: tutorialStep == .tapCreateButton ? createButtonFrame : nil,
-                    onNext: {
-                        if tutorialStep == .welcome {
-                            tutorialStep = .tapCreateButton
-                            // Warmup search in background for faster first search
-                            Task {
-                                await MusicKitManager.shared.warmupSearch()
-                            }
-                        } else if tutorialStep == .completed {
-                            showingInteractiveTutorial = false
-                            UserDefaults.standard.set(true, forKey: "hasCompletedTutorial")
-                        }
-                    }
-                )
-            }
         }
         .refreshable {
             await viewModel.refreshFeed()
@@ -392,33 +368,12 @@ struct FeedView: View {
                     }
                 }
 
-                // チュートリアル中の投稿だった場合、フィード更新後に完了モーダルを表示
-                if wasTutorialPost {
-                    print("🎉 Tutorial post detected, will show completion modal after feed refresh")
-                    // フィードの更新を待つ
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                        print("🎉 Showing tutorial completion modal")
-                        tutorialStep = .completed
-                        showingInteractiveTutorial = true
-                        wasTutorialPost = false // リセット
-                        // UserDefaultsの設定は完了ボタンを押した時に行う
-                    }
-                }
-
                 postCreated = false
             }
         }) {
-            CreatePostView(postCreated: $postCreated, tutorialStep: $tutorialStep, showingInteractiveTutorial: $showingInteractiveTutorial)
+            CreatePostView(postCreated: $postCreated)
         }
-        .fullScreenCover(isPresented: $showingOnboarding, onDismiss: {
-            // After onboarding is dismissed, check if we should show interactive tutorial
-            if !UserDefaults.standard.bool(forKey: "hasCompletedTutorial") {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    showingInteractiveTutorial = true
-                    tutorialStep = .welcome
-                }
-            }
-        }) {
+        .fullScreenCover(isPresented: $showingOnboarding) {
             OnboardingView(isPresented: $showingOnboarding)
         }
         .task {
@@ -437,21 +392,13 @@ struct FeedView: View {
 
             startSwipeHintTimer()
 
-            // Only show onboarding/tutorial for authenticated users
+            // Only show onboarding for authenticated users
             if authManager.isAuthenticated {
                 // Check if user has seen onboarding
                 if !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
                     // Small delay to let the view load first
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         showingOnboarding = true
-                    }
-                }
-                // Check if user has completed interactive tutorial
-                else if !UserDefaults.standard.bool(forKey: "hasCompletedTutorial") {
-                    // Start interactive tutorial after onboarding
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                        showingInteractiveTutorial = true
-                        tutorialStep = .welcome
                     }
                 }
             }
@@ -1448,14 +1395,7 @@ struct PostCardView: View {
                                     }
                                     .foregroundStyle(
                                         APIClient.shared.currentUserId == post.user.id ?
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color.orange,
-                                                Color.red
-                                            ]),
-                                            startPoint: .leading,
-                                            endPoint: .trailing
-                                        ) :
+                                        AppTheme.horizontalGradient :
                                         LinearGradient(
                                             gradient: Gradient(colors: [
                                                 Color.white,
@@ -1896,12 +1836,14 @@ struct PostCardView: View {
             try await APIClient.shared.blockUser(userId: post.user.id)
             print("🚫 Blocked user: \(post.user.id)")
 
-            // Notify FeedView to remove this user's posts
-            NotificationCenter.default.post(
-                name: NSNotification.Name("UserBlocked"),
-                object: nil,
-                userInfo: ["blockedUserId": post.user.id]
-            )
+            // Notify all feeds to remove this user's posts
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: Foundation.Notification.Name.userBlocked,
+                    object: nil,
+                    userInfo: ["userId": post.user.id]
+                )
+            }
         } catch {
             print("❌ Failed to block user: \(error)")
         }
@@ -1945,14 +1887,7 @@ struct WaveformView: View {
             ForEach(0..<5, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 2)
                     .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.orange.opacity(0.9),
-                                Color.red.opacity(0.7)
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+                        AppTheme.verticalGradient
                     )
                     .frame(width: 4, height: animationValues[index] * 50)
                     .animation(.easeInOut(duration: 0.3), value: animationValues[index])
@@ -2371,14 +2306,7 @@ struct CommentRowView: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(
                             APIClient.shared.currentUserId == comment.user.id ?
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color.orange,
-                                    Color.red
-                                ]),
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            ) :
+                            AppTheme.horizontalGradient :
                             LinearGradient(
                                 gradient: Gradient(colors: [
                                     Color.primary,
@@ -2679,14 +2607,7 @@ struct UserRadioButton: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(
                         APIClient.shared.currentUserId == userPosts.user.id ?
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.orange,
-                                Color.red
-                            ]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        ) :
+                        AppTheme.horizontalGradient :
                         LinearGradient(
                             gradient: Gradient(colors: [
                                 Color.white.opacity(0.8),
@@ -2738,14 +2659,7 @@ struct UserRadioButton: View {
                             Image(systemName: "music.note.list")
                                 .font(.system(size: 24))
                                 .foregroundStyle(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.orange,
-                                            Color.red
-                                        ]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
+                                    AppTheme.horizontalGradient
                                 )
                         }
                     }
@@ -2797,13 +2711,13 @@ struct UserRadioButton: View {
                     }
                 }
 
-                // Border with gradient - orange when playing, white otherwise
+                // Border with gradient - theme color when playing, white otherwise
                 Circle()
                     .strokeBorder(
                         LinearGradient(
                             gradient: Gradient(colors: isPlaying ? [
-                                Color.orange.opacity(0.9),
-                                Color.red.opacity(0.7)
+                                AppTheme.gradientStartColor.opacity(0.9),
+                                AppTheme.gradientEndColor.opacity(0.7)
                             ] : [
                                 Color.white.opacity(0.6),
                                 Color.white.opacity(0.2)
@@ -2830,14 +2744,7 @@ struct UserRadioButton: View {
                             Text("NEW")
                                 .font(.system(size: 8, weight: .bold))
                                 .foregroundStyle(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.orange,
-                                            Color.red
-                                        ]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
+                                    AppTheme.horizontalGradient
                                 )
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 2)
@@ -2881,14 +2788,7 @@ struct MiniWaveformView: View {
             ForEach(0..<3, id: \.self) { index in
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.orange.opacity(0.9),
-                                Color.red.opacity(0.7)
-                            ]),
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
+                        AppTheme.verticalGradient
                     )
                     .frame(width: 3, height: animationValues[index] * 20)
                     .animation(.easeInOut(duration: 0.3), value: animationValues[index])
@@ -2957,30 +2857,12 @@ struct SwipeHintView: View {
                     Image(systemName: "arrow.down")
                         .font(.system(size: 24, weight: .bold))
                 }
-                .foregroundStyle(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            Color.orange,
-                            Color.red
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .foregroundStyle(AppTheme.horizontalGradient)
 
                 // Text
                 Text("上下左右のスライドで\n投稿を切り替えよう！")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            gradient: Gradient(colors: [
-                                Color.orange,
-                                Color.red
-                            ]),
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
+                    .foregroundStyle(AppTheme.horizontalGradient)
                     .multilineTextAlignment(.center)
             }
             .padding(.horizontal, 24)
@@ -2993,8 +2875,8 @@ struct SwipeHintView: View {
                             .stroke(
                                 LinearGradient(
                                     gradient: Gradient(colors: [
-                                        Color.orange.opacity(0.8),
-                                        Color.red.opacity(0.8)
+                                        AppTheme.gradientStartColor.opacity(0.8),
+                                        AppTheme.gradientEndColor.opacity(0.8)
                                     ]),
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
@@ -3058,6 +2940,8 @@ struct UserPostsGridView: View {
             let safeAreaTop = geometry.safeAreaInsets.top
 
             ZStack {
+                Color.black.ignoresSafeArea()
+
                 ScrollView {
                     VStack(spacing: 0) {
                         // Top: Currently playing post or latest post
@@ -3105,6 +2989,7 @@ struct UserPostsGridView: View {
                 }
             }
         }
+        .toolbar(screenshotMode.isScreenshotMode ? .hidden : .visible, for: .tabBar)
     }
 
     // Original grid layout: 2 rows of 5 cols (with 4-cell merge), then 2 rows of 6 cols, then 10 cols
@@ -3129,12 +3014,95 @@ struct UserPostsGridView: View {
         let mergedCellHeight = row12CellHeight * 2 + spacing
 
         VStack(spacing: spacing) {
-            // Rows 1-2 (5 columns with merged cell)
+            // Rows 1-2 (6 columns with merged cell at 4th-5th column) - 9 posts total
+            let mergedCellWidth34 = row34CellWidth * 2 + spacing
+            let mergedCellHeight34 = row34CellHeight * 2 + spacing
+
             HStack(alignment: .top, spacing: spacing) {
-                // Left: Merged cell (2x2) - Second post (index 0 in posts array)
-                if posts.count > 0 {
+                // Columns 1-3 (rows 1-2)
+                VStack(spacing: spacing) {
+                    // Row 1: posts 0, 1, 2
+                    HStack(spacing: spacing) {
+                        ForEach(0..<3) { index in
+                            if index < posts.count {
+                                SmallPostCell(
+                                    post: posts[index],
+                                    width: row34CellWidth,
+                                    height: row34CellHeight,
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    isScreenshotMode: screenshotMode.isScreenshotMode
+                                )
+                            } else {
+                                Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                            }
+                        }
+                    }
+
+                    // Row 2: posts 5, 6, 7
+                    HStack(spacing: spacing) {
+                        ForEach(5..<8) { index in
+                            if index < posts.count {
+                                SmallPostCell(
+                                    post: posts[index],
+                                    width: row34CellWidth,
+                                    height: row34CellHeight,
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    isScreenshotMode: screenshotMode.isScreenshotMode
+                                )
+                            } else {
+                                Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                            }
+                        }
+                    }
+                }
+
+                // Column 4-5 merged cell (2x2): post 3
+                if posts.count > 3 {
                     SmallPostCell(
-                        post: posts[0],
+                        post: posts[3],
+                        width: mergedCellWidth34,
+                        height: mergedCellHeight34,
+                        showingLoginPrompt: $showingLoginPrompt,
+                        isScreenshotMode: screenshotMode.isScreenshotMode
+                    )
+                }
+
+                // Column 6 (rows 1-2)
+                VStack(spacing: spacing) {
+                    // Row 1: post 4
+                    if posts.count > 4 {
+                        SmallPostCell(
+                            post: posts[4],
+                            width: row34CellWidth,
+                            height: row34CellHeight,
+                            showingLoginPrompt: $showingLoginPrompt,
+                            isScreenshotMode: screenshotMode.isScreenshotMode
+                        )
+                    } else {
+                        Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                    }
+
+                    // Row 2: post 8
+                    if posts.count > 8 {
+                        SmallPostCell(
+                            post: posts[8],
+                            width: row34CellWidth,
+                            height: row34CellHeight,
+                            showingLoginPrompt: $showingLoginPrompt,
+                            isScreenshotMode: screenshotMode.isScreenshotMode
+                        )
+                    } else {
+                        Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                    }
+                }
+            }
+
+            // Rows 3-4 (5 columns with merged cell) - 7 posts total
+            HStack(alignment: .top, spacing: spacing) {
+                // Left: Merged cell (2x2) - post 9
+                if posts.count > 9 {
+                    SmallPostCell(
+                        post: posts[9],
                         width: mergedCellWidth,
                         height: mergedCellHeight,
                         showingLoginPrompt: $showingLoginPrompt,
@@ -3144,9 +3112,9 @@ struct UserPostsGridView: View {
 
                 // Right: 6 small cells (3 columns x 2 rows)
                 VStack(spacing: spacing) {
-                    // Row 1: posts 1, 2, 3
+                    // Row 1: posts 10, 11, 12
                     HStack(spacing: spacing) {
-                        ForEach(1..<4) { index in
+                        ForEach(10..<13) { index in
                             if index < posts.count {
                                 SmallPostCell(
                                     post: posts[index],
@@ -3161,9 +3129,9 @@ struct UserPostsGridView: View {
                         }
                     }
 
-                    // Row 2: posts 4, 5, 6
+                    // Row 2: posts 13, 14, 15
                     HStack(spacing: spacing) {
-                        ForEach(4..<7) { index in
+                        ForEach(13..<16) { index in
                             if index < posts.count {
                                 SmallPostCell(
                                     post: posts[index],
@@ -3180,46 +3148,186 @@ struct UserPostsGridView: View {
                 }
             }
 
-            // Rows 3-4 (6 columns each)
-            ForEach(0..<2, id: \.self) { rowIndex in
-                HStack(spacing: spacing) {
-                    ForEach(0..<6) { colIndex in
-                        let index = 7 + rowIndex * 6 + colIndex
-                        if index < posts.count {
+            // Row 5 (6 columns single row) - 6 posts total
+            HStack(spacing: spacing) {
+                ForEach(16..<22) { index in
+                    if index < posts.count {
+                        SmallPostCell(
+                            post: posts[index],
+                            width: row34CellWidth,
+                            height: row34CellHeight,
+                            showingLoginPrompt: $showingLoginPrompt,
+                            isScreenshotMode: screenshotMode.isScreenshotMode
+                        )
+                    } else {
+                        Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                    }
+                }
+            }
+
+            // Row 6+ (repeating pattern: 6 cols merge, 5 cols merge, 6 cols single row)
+            let remainingStartIndex = 22
+            if posts.count > remainingStartIndex {
+                let remainingPosts = Array(posts.dropFirst(remainingStartIndex))
+                let blockSize = 22 // 6cols with merge (9) + 5cols with merge (7) + 6cols single row (6)
+                let blockCount = (remainingPosts.count + blockSize - 1) / blockSize
+
+                ForEach(0..<blockCount, id: \.self) { blockIndex in
+                    let blockStartIndex = blockIndex * blockSize
+
+                    // First part: 6 columns x 2 rows with merged cell (9 posts)
+                    HStack(alignment: .top, spacing: spacing) {
+                        // Columns 1-3 (rows 1-2)
+                        VStack(spacing: spacing) {
+                            // Row 1: posts 0, 1, 2
+                            HStack(spacing: spacing) {
+                                ForEach(0..<3) { offset in
+                                    let index = blockStartIndex + offset
+                                    if index < remainingPosts.count {
+                                        SmallPostCell(
+                                            post: remainingPosts[index],
+                                            width: row34CellWidth,
+                                            height: row34CellHeight,
+                                            showingLoginPrompt: $showingLoginPrompt,
+                                            isScreenshotMode: screenshotMode.isScreenshotMode
+                                        )
+                                    } else {
+                                        Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                                    }
+                                }
+                            }
+
+                            // Row 2: posts 5, 6, 7
+                            HStack(spacing: spacing) {
+                                ForEach(5..<8) { offset in
+                                    let index = blockStartIndex + offset
+                                    if index < remainingPosts.count {
+                                        SmallPostCell(
+                                            post: remainingPosts[index],
+                                            width: row34CellWidth,
+                                            height: row34CellHeight,
+                                            showingLoginPrompt: $showingLoginPrompt,
+                                            isScreenshotMode: screenshotMode.isScreenshotMode
+                                        )
+                                    } else {
+                                        Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                                    }
+                                }
+                            }
+                        }
+
+                        // Column 4-5 merged cell (2x2): post 3
+                        let index3 = blockStartIndex + 3
+                        if index3 < remainingPosts.count {
                             SmallPostCell(
-                                post: posts[index],
-                                width: row34CellWidth,
-                                height: row34CellHeight,
+                                post: remainingPosts[index3],
+                                width: mergedCellWidth34,
+                                height: mergedCellHeight34,
                                 showingLoginPrompt: $showingLoginPrompt,
                                 isScreenshotMode: screenshotMode.isScreenshotMode
                             )
-                        } else {
-                            Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
                         }
-                    }
-                }
-            }
 
-            // Row 5+ (10 columns each)
-            let remainingStartIndex = 19
-            if posts.count > remainingStartIndex {
-                let remainingPosts = Array(posts.dropFirst(remainingStartIndex))
-                let rowCount = (remainingPosts.count + 9) / 10
-
-                ForEach(0..<rowCount, id: \.self) { rowIndex in
-                    HStack(spacing: spacing) {
-                        ForEach(0..<10) { colIndex in
-                            let index = rowIndex * 10 + colIndex
-                            if index < remainingPosts.count {
+                        // Column 6 (rows 1-2)
+                        VStack(spacing: spacing) {
+                            // Row 1: post 4
+                            let index4 = blockStartIndex + 4
+                            if index4 < remainingPosts.count {
                                 SmallPostCell(
-                                    post: remainingPosts[index],
-                                    width: row5PlusCellWidth,
-                                    height: row5PlusCellHeight,
+                                    post: remainingPosts[index4],
+                                    width: row34CellWidth,
+                                    height: row34CellHeight,
                                     showingLoginPrompt: $showingLoginPrompt,
                                     isScreenshotMode: screenshotMode.isScreenshotMode
                                 )
                             } else {
-                                Color.clear.frame(width: row5PlusCellWidth, height: row5PlusCellHeight)
+                                Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                            }
+
+                            // Row 2: post 8
+                            let index8 = blockStartIndex + 8
+                            if index8 < remainingPosts.count {
+                                SmallPostCell(
+                                    post: remainingPosts[index8],
+                                    width: row34CellWidth,
+                                    height: row34CellHeight,
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    isScreenshotMode: screenshotMode.isScreenshotMode
+                                )
+                            } else {
+                                Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
+                            }
+                        }
+                    }
+
+                    // Second part: 5 columns x 2 rows with merged cell (7 posts)
+                    HStack(alignment: .top, spacing: spacing) {
+                        // Left: Merged cell (2x2): post 9
+                        let index9 = blockStartIndex + 9
+                        if index9 < remainingPosts.count {
+                            SmallPostCell(
+                                post: remainingPosts[index9],
+                                width: mergedCellWidth,
+                                height: mergedCellHeight,
+                                showingLoginPrompt: $showingLoginPrompt,
+                                isScreenshotMode: screenshotMode.isScreenshotMode
+                            )
+                        }
+
+                        // Right: 6 small cells (3 columns x 2 rows)
+                        VStack(spacing: spacing) {
+                            // Row 1: posts 10, 11, 12
+                            HStack(spacing: spacing) {
+                                ForEach(10..<13) { offset in
+                                    let index = blockStartIndex + offset
+                                    if index < remainingPosts.count {
+                                        SmallPostCell(
+                                            post: remainingPosts[index],
+                                            width: row12CellWidth,
+                                            height: row12CellHeight,
+                                            showingLoginPrompt: $showingLoginPrompt,
+                                            isScreenshotMode: screenshotMode.isScreenshotMode
+                                        )
+                                    } else {
+                                        Color.clear.frame(width: row12CellWidth, height: row12CellHeight)
+                                    }
+                                }
+                            }
+
+                            // Row 2: posts 13, 14, 15
+                            HStack(spacing: spacing) {
+                                ForEach(13..<16) { offset in
+                                    let index = blockStartIndex + offset
+                                    if index < remainingPosts.count {
+                                        SmallPostCell(
+                                            post: remainingPosts[index],
+                                            width: row12CellWidth,
+                                            height: row12CellHeight,
+                                            showingLoginPrompt: $showingLoginPrompt,
+                                            isScreenshotMode: screenshotMode.isScreenshotMode
+                                        )
+                                    } else {
+                                        Color.clear.frame(width: row12CellWidth, height: row12CellHeight)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Third part: 6 columns x 1 row (6 posts)
+                    HStack(spacing: spacing) {
+                        ForEach(16..<22) { offset in
+                            let index = blockStartIndex + offset
+                            if index < remainingPosts.count {
+                                SmallPostCell(
+                                    post: remainingPosts[index],
+                                    width: row34CellWidth,
+                                    height: row34CellHeight,
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    isScreenshotMode: screenshotMode.isScreenshotMode
+                                )
+                            } else {
+                                Color.clear.frame(width: row34CellWidth, height: row34CellHeight)
                             }
                         }
                     }
@@ -3276,17 +3384,6 @@ struct FeaturedPostCell: View {
             .frame(width: width, height: height)
             .clipped()
 
-            // Gradient overlay
-            LinearGradient(
-                gradient: Gradient(colors: [
-                    Color.black.opacity(0.7),
-                    Color.black.opacity(0.3),
-                    Color.clear
-                ]),
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
             // Content overlay
             VStack(alignment: .leading, spacing: 0) {
                 // Top: Profile image and username (hidden in screenshot mode)
@@ -3329,81 +3426,83 @@ struct FeaturedPostCell: View {
 
                 Spacer()
 
-                // Bottom: Track info (left) and likes/comments (right)
-                HStack(alignment: .bottom, spacing: 12) {
-                    // Left: Track info
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Text(post.trackName)
-                                .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.white)
+                // Bottom: Track info (left) and likes/comments (right) (hidden in screenshot mode)
+                if !isScreenshotMode {
+                    HStack(alignment: .bottom, spacing: 12) {
+                        // Left: Track info
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack(spacing: 8) {
+                                Text(post.trackName)
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .lineLimit(1)
+                                    .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+
+                                // Waveform animation when playing
+                                if isPlaying {
+                                    MiniWaveformView()
+                                        .frame(width: 36, height: 24)
+                                }
+                            }
+
+                            Text(post.artistName)
+                                .font(.system(size: 17.5))
+                                .foregroundColor(.white.opacity(0.95))
                                 .lineLimit(1)
                                 .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
 
-                            // Waveform animation when playing
-                            if isPlaying {
-                                MiniWaveformView()
-                                    .frame(width: 36, height: 24)
+                            if let comment = post.comment, !comment.isEmpty {
+                                Text(comment)
+                                    .font(.system(size: 15))
+                                    .foregroundColor(.white.opacity(0.9))
+                                    .lineLimit(2)
+                                    .padding(.top, 4)
+                                    .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
                             }
                         }
 
-                        Text(post.artistName)
-                            .font(.system(size: 17.5))
-                            .foregroundColor(.white.opacity(0.95))
-                            .lineLimit(1)
-                            .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+                        Spacer()
 
-                        if let comment = post.comment, !comment.isEmpty {
-                            Text(comment)
-                                .font(.system(size: 15))
-                                .foregroundColor(.white.opacity(0.9))
-                                .lineLimit(2)
-                                .padding(.top, 4)
+                        // Right: Likes and comments count (bottom right) - with tap gestures
+                        VStack(alignment: .trailing, spacing: 16) {
+                            // Like button
+                            Button(action: {
+                                Task {
+                                    await toggleLike()
+                                }
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: isLiked ? "heart.fill" : "heart")
+                                        .font(.system(size: 22))
+                                        .foregroundColor(isLiked ? .red : .white.opacity(0.9))
+                                    Text("\(likeCount)")
+                                        .font(.system(size: 17, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.9))
+                                }
                                 .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+                            }
+
+                            // Comment button
+                            Button(action: {
+                                // TODO: Show comments
+                                print("💬 Comments tapped for post: \(post.id)")
+                            }) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "bubble.left")
+                                        .font(.system(size: 22))
+                                        .foregroundColor(.white.opacity(0.9))
+                                    Text("\(commentCount)")
+                                        .font(.system(size: 17, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.9))
+                                }
+                                .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
+                            }
                         }
+                        .padding(.trailing, 4)
                     }
-
-                    Spacer()
-
-                    // Right: Likes and comments count (bottom right) - with tap gestures
-                    VStack(alignment: .trailing, spacing: 16) {
-                        // Like button
-                        Button(action: {
-                            Task {
-                                await toggleLike()
-                            }
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: isLiked ? "heart.fill" : "heart")
-                                    .font(.system(size: 22))
-                                    .foregroundColor(isLiked ? .red : .white.opacity(0.9))
-                                Text("\(likeCount)")
-                                    .font(.system(size: 17, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
-                            .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
-                        }
-
-                        // Comment button
-                        Button(action: {
-                            // TODO: Show comments
-                            print("💬 Comments tapped for post: \(post.id)")
-                        }) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "bubble.left")
-                                    .font(.system(size: 22))
-                                    .foregroundColor(.white.opacity(0.9))
-                                Text("\(commentCount)")
-                                    .font(.system(size: 17, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
-                            .shadow(color: .black.opacity(0.7), radius: 4, x: 0, y: 2)
-                        }
-                    }
-                    .padding(.trailing, 4)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 12)
                 }
-                .padding(.horizontal, 12)
-                .padding(.bottom, 12)
             }
         }
         .frame(width: width, height: height)
@@ -3414,8 +3513,8 @@ struct FeaturedPostCell: View {
                 .strokeBorder(
                     LinearGradient(
                         gradient: Gradient(colors: [
-                            Color.orange.opacity(0.9),
-                            Color.red.opacity(0.7)
+                            AppTheme.gradientStartColor.opacity(0.9),
+                            AppTheme.gradientEndColor.opacity(0.7)
                         ]),
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
@@ -3437,11 +3536,6 @@ struct FeaturedPostCell: View {
                 Button("Apple Musicで開く") {
                     UIApplication.shared.open(url)
                 }
-            }
-
-            // Screenshot button
-            Button("スクリーンショット") {
-                isScreenshotMode = true
             }
 
             // Owner actions (delete) or visitor actions (report/block)
@@ -3537,8 +3631,14 @@ struct FeaturedPostCell: View {
         do {
             try await APIClient.shared.blockUser(userId: user.id)
             print("🚫 Blocked user: \(user.id)")
-            // Notify feed to refresh
-            NotificationCenter.default.post(name: NSNotification.Name("RefreshFeed"), object: nil)
+            // Notify all feeds to remove this user's posts
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: Foundation.Notification.Name.userBlocked,
+                    object: nil,
+                    userInfo: ["userId": user.id]
+                )
+            }
         } catch {
             print("❌ Failed to block user: \(error)")
         }
@@ -3556,8 +3656,19 @@ struct SmallPostCell: View {
     @StateObject private var musicKit = MusicKitManager.shared
     @StateObject private var playbackState = PlaybackStateManager.shared
 
+    // Long press state
+    @State private var showingActionSheet = false
+    @State private var showingBlockConfirmation = false
+    @State private var showingReportSheet = false
+    @State private var showingUserProfile = false
+    @State private var cellScale: CGFloat = 1.0
+
     var isPlaying: Bool {
         playbackState.isPlaying(post.id)
+    }
+
+    var isOwnPost: Bool {
+        authManager.currentUser?.userId == post.user.id
     }
 
     var body: some View {
@@ -3577,8 +3688,8 @@ struct SmallPostCell: View {
                     .strokeBorder(
                         LinearGradient(
                             gradient: Gradient(colors: [
-                                Color.orange.opacity(0.9),
-                                Color.red.opacity(0.7)
+                                AppTheme.gradientStartColor.opacity(0.9),
+                                AppTheme.gradientEndColor.opacity(0.7)
                             ]),
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -3593,6 +3704,7 @@ struct SmallPostCell: View {
                     .frame(width: 30, height: 20)
             }
         }
+        .scaleEffect(cellScale)
         .onTapGesture {
             // Disable music playback in screenshot mode
             if !isScreenshotMode {
@@ -3600,6 +3712,67 @@ struct SmallPostCell: View {
                     await playMusic()
                 }
             }
+        }
+        .onLongPressGesture(minimumDuration: 0.3, pressing: { isPressing in
+            // Scale animation on press
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                cellScale = isPressing ? 1.15 : 1.0
+            }
+        }) {
+            // Trigger haptic feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+            // 未ログインの場合はログインを促す
+            if !authManager.isAuthenticated {
+                showingLoginPrompt = true
+            } else {
+                showingActionSheet = true
+            }
+        }
+        .confirmationDialog("", isPresented: $showingActionSheet, titleVisibility: .hidden) {
+            if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
+                Button("Apple Musicで開く") {
+                    UIApplication.shared.open(url)
+                }
+            }
+
+            Button("プロフィールを見る") {
+                showingUserProfile = true
+            }
+
+            if isOwnPost {
+                Button("削除", role: .destructive) {
+                    Task {
+                        await deletePost()
+                    }
+                }
+            } else {
+                Button("報告") {
+                    showingReportSheet = true
+                }
+                Button("ブロック", role: .destructive) {
+                    showingBlockConfirmation = true
+                }
+            }
+
+            Button("キャンセル", role: .cancel) {}
+        }
+        .tint(.primary)
+        .sheet(isPresented: $showingUserProfile) {
+            UserProfileView(userId: post.user.id)
+        }
+        .sheet(isPresented: $showingReportSheet) {
+            ReportPostView(post: post)
+        }
+        .alert("ブロック確認", isPresented: $showingBlockConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("ブロック", role: .destructive) {
+                Task {
+                    await blockUser()
+                }
+            }
+        } message: {
+            Text("\(post.user.displayName)さんをブロックしますか？")
         }
     }
 
@@ -3621,6 +3794,36 @@ struct SmallPostCell: View {
             } catch {
                 print("❌ Failed to play preview: \(error)")
             }
+        }
+    }
+
+    private func deletePost() async {
+        do {
+            try await APIClient.shared.deletePost(postId: post.id)
+            NotificationCenter.default.post(
+                name: Foundation.Notification.Name.postDeleted,
+                object: nil,
+                userInfo: ["postId": post.id]
+            )
+        } catch {
+            print("Failed to delete post: \(error)")
+        }
+    }
+
+    private func blockUser() async {
+        do {
+            try await APIClient.shared.blockUser(userId: post.user.id)
+            print("🚫 Block succeeded for userId: \(post.user.id), posting notification...")
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: Foundation.Notification.Name.userBlocked,
+                    object: nil,
+                    userInfo: ["userId": post.user.id]
+                )
+            }
+            print("🚫 Block notification posted for userId: \(post.user.id)")
+        } catch {
+            print("❌ Failed to block user: \(error)")
         }
     }
 }

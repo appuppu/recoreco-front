@@ -179,6 +179,7 @@
 		D2982798B19A2ED82053F9D1 /* ReportCommentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCommentView.swift; sourceTree = "<group>"; };
 		D2CC4517F9FF4FD6B5BE9FCD /* CreateCommentRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateCommentRequest.swift; sourceTree = "<group>"; };
 		D34F631468D04C8497FC7263 /* FirestoreNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreNotificationManager.swift; sourceTree = "<group>"; };
+		D46DAA9E2F22662E00122C0E /* SugarBeatRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SugarBeatRelease.entitlements; sourceTree = "<group>"; };
 		D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LikeStateManager.swift; sourceTree = "<group>"; };
 		D7B4E6C4D8014EB3BF04BBAC /* FirestoreLikeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreLikeManager.swift; sourceTree = "<group>"; };
 		DC45BE2338DF44DDAF75CC2B /* ReportChannelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportChannelView.swift; sourceTree = "<group>"; };
@@ -222,6 +223,7 @@
 		5458C0FA3C92516BC65321D6 /* SugarBeat */ = {
 			isa = PBXGroup;
 			children = (
+				D46DAA9E2F22662E00122C0E /* SugarBeatRelease.entitlements */,
 				2C11195FE0D38EC0C1838891 /* Assets.xcassets */,
 				94B0F86266FA462086693956 /* GoogleService-Info.plist */,
 				4FE9F9756265FB4681327DAF /* Info.plist */,
@@ -630,7 +632,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CODE_SIGN_ENTITLEMENTS = SugarBeat/SugarBeat.entitlements;
+				CODE_SIGN_ENTITLEMENTS = SugarBeat/SugarBeatRelease.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = M86QCKBHW8;

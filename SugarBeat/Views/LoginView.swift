@@ -225,7 +225,26 @@ struct LoginView: View {
                     throw error
                 }
             } catch {
-                errorMessage = "Appleログインに失敗しました"
+                // Check if user canceled
+                if let authError = error as? ASAuthorizationError {
+                    switch authError.code {
+                    case .canceled:
+                        // Don't show error message for user cancellation
+                        return
+                    case .unknown:
+                        errorMessage = "Appleログインの設定に問題があります。アプリの設定を確認してください。"
+                    case .invalidResponse:
+                        errorMessage = "Appleからの応答が無効です。"
+                    case .notHandled:
+                        errorMessage = "Appleログインが処理されませんでした。"
+                    case .failed:
+                        errorMessage = "Appleログインに失敗しました。設定を確認してください。"
+                    @unknown default:
+                        errorMessage = "Appleログインに失敗しました。"
+                    }
+                } else {
+                    errorMessage = "Appleログインに失敗しました。"
+                }
             }
             isLoading = false
         }

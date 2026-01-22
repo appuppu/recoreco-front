@@ -375,7 +375,26 @@ struct SignUpView: View {
                     throw error
                 }
             } catch {
-                errorMessage = "Apple登録に失敗しました"
+                // Check if user canceled
+                if let authError = error as? ASAuthorizationError {
+                    switch authError.code {
+                    case .canceled:
+                        // Don't show error message for user cancellation
+                        return
+                    case .unknown:
+                        errorMessage = "Apple登録の設定に問題があります。アプリの設定を確認してください。"
+                    case .invalidResponse:
+                        errorMessage = "Appleからの応答が無効です。"
+                    case .notHandled:
+                        errorMessage = "Apple登録が処理されませんでした。"
+                    case .failed:
+                        errorMessage = "Apple登録に失敗しました。設定を確認してください。"
+                    @unknown default:
+                        errorMessage = "Apple登録に失敗しました。"
+                    }
+                } else {
+                    errorMessage = "Apple登録に失敗しました。"
+                }
             }
             isLoading = false
         }

@@ -29,10 +29,7 @@ struct MyProfileView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if isArtworkOnlyMode {
-            // アルバムアートのみのグリッド表示
-            artworkOnlyGrid
-        } else if !authManager.isAuthenticated {
+        if !authManager.isAuthenticated {
             // 未ログイン状態
             VStack(spacing: 20) {
                 Image(systemName: "person.circle")
@@ -119,9 +116,10 @@ struct MyProfileView: View {
         GeometryReader { geometry in
             let columns = 3
             let spacing: CGFloat = 2
-            let itemWidth = (geometry.size.width - spacing * CGFloat(columns - 1)) / CGFloat(columns)
+            let totalWidth = geometry.size.width
+            let itemWidth = (totalWidth - spacing * CGFloat(columns - 1)) / CGFloat(columns)
 
-            ScrollView {
+            ScrollView(showsIndicators: false) {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns), spacing: spacing) {
                     // 最初のセル: ユーザー情報
                     if let currentUser = authManager.currentUser {
@@ -170,18 +168,20 @@ struct MyProfileView: View {
                         }
                     }
                 }
-                .padding(.bottom, 100) // タブバーの高さ分の余白
-            }
-            .persistentSystemOverlays(.hidden) // ホームインジケーターを非表示
-            .onTapGesture {
-                // スクショモードを終了して共有画面を表示
-                withAnimation {
-                    isArtworkOnlyMode = false
-                    screenshotMode.isScreenshotMode = false
-                }
-                showingShareScreen = true
+                .padding(.bottom, 100) // 下部に余白を追加（Safe Area分）
             }
         }
+        .contentShape(Rectangle()) // タップ可能な領域を全体に拡張
+        .onTapGesture {
+            // スクショモードを終了して共有画面を表示
+            withAnimation {
+                isArtworkOnlyMode = false
+                screenshotMode.isScreenshotMode = false
+            }
+            showingShareScreen = true
+        }
+        .ignoresSafeArea(edges: .bottom) // 下部のSafe Areaを無視（上部は時計が見えるように残す）
+        .persistentSystemOverlays(.hidden) // ホームインジケーターを非表示
     }
 
 
@@ -189,14 +189,22 @@ struct MyProfileView: View {
         let _ = Self._printChanges()
 
         return NavigationStack {
-            ZStack(alignment: .bottomTrailing) {
-                Color.black
-                    .ignoresSafeArea()
-                mainContent
+            Group {
+                if isArtworkOnlyMode {
+                    // スクショモード: ZStackを使わず全画面表示
+                    artworkOnlyGrid
+                } else {
+                    ZStack(alignment: .bottomTrailing) {
+                        Color.black
+                            .ignoresSafeArea()
+                        mainContent
+                    }
+                }
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(isArtworkOnlyMode ? .hidden : .visible, for: .navigationBar)
             .toolbarBackground(Color.black.opacity(0.9), for: .navigationBar)
+            .toolbar(isArtworkOnlyMode ? .hidden : .visible, for: .tabBar)
             .toolbar {
                 if !isArtworkOnlyMode {
                     ToolbarItem(placement: .navigationBarLeading) {

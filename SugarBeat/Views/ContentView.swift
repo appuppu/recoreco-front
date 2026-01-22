@@ -115,6 +115,7 @@ struct ContentView: View {
                 }
             }
             .tint(.white)
+            .toolbar(screenshotMode.isScreenshotMode ? .hidden : .visible, for: .tabBar)
             .toolbarBackground(.black, for: .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .toolbarColorScheme(.dark, for: .tabBar)
@@ -144,16 +145,6 @@ struct ContentView: View {
                     selectedTab = 1
                     // フラグをリセット
                     postCreated = false
-                }
-            }
-
-            // スクショモード時：タブバーを隠すための黒い覆い
-            if screenshotMode.isScreenshotMode {
-                VStack {
-                    Spacer()
-                    Color.black
-                        .frame(height: 83) // タブバーの高さ + セーフエリア
-                        .ignoresSafeArea(edges: .bottom)
                 }
             }
         }

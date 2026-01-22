@@ -293,8 +293,8 @@ struct FollowingPostCard: View {
                     showingChannelDetail = true
                 }) {
                     HStack(spacing: 12) {
-                        // Channel thumbnail
-                        if let artworkUrl = channel.latestPostArtworkUrl,
+                        // Channel thumbnail - use first post's artwork (updates dynamically when posts are deleted)
+                        if let artworkUrl = viewModel.posts.first?.artworkUrl,
                            let url = URL(string: artworkUrl) {
                             AsyncImage(url: url) { phase in
                                 if let image = phase.image {

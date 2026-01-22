@@ -768,7 +768,8 @@ struct ChannelDiscoveryCard: View {
                                 ChannelPostCardGrid(
                                     post: post,
                                     channelName: channel.name,
-                                    showingLoginPrompt: $showingLoginPrompt
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    viewModel: viewModel
                                 )
                                 .environmentObject(authManager)
                                 .frame(width: geometry.size.width, height: cardHeight)
@@ -895,8 +896,8 @@ struct ChannelDiscoveryCard: View {
     @ViewBuilder
     private var channelThumbnailView: some View {
         ZStack(alignment: .bottomTrailing) {
-            // Channel artwork - try channel's artworkUrl first, fallback to first post's artwork
-            let artworkUrl = channel.latestPostArtworkUrl ?? viewModel.posts.first?.artworkUrl
+            // Channel artwork - use first post's artwork (updates dynamically when posts are deleted)
+            let artworkUrl = viewModel.posts.first?.artworkUrl
 
             if let artworkUrlString = artworkUrl,
                let url = URL(string: artworkUrlString) {
@@ -1686,6 +1687,19 @@ class ChannelDetailViewModel: ObservableObject {
                 }
             }
         }
+
+        // 投稿削除通知を監視
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name.postDeleted,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let postId = notification.userInfo?["postId"] as? String {
+                Task { @MainActor in
+                    self?.posts.removeAll { $0.id == postId }
+                }
+            }
+        }
     }
 
     func loadChannel(channelId: String) async {
@@ -1739,6 +1753,7 @@ struct ChannelPostCardGrid: View {
     let post: Post
     let channelName: String
     @Binding var showingLoginPrompt: Bool
+    @ObservedObject var viewModel: ChannelPostsViewModel
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var playbackState = PlaybackStateManager.shared
     @StateObject private var likeState = LikeStateManager.shared
@@ -2148,6 +2163,12 @@ struct ChannelPostCardGrid: View {
 
         do {
             try await FirestorePostManager.shared.deletePost(postId: postId)
+
+            // 即座にUIから削除
+            await MainActor.run {
+                viewModel.removePost(postId: postId)
+            }
+
             NotificationCenter.default.post(
                 name: Foundation.Notification.Name.postDeleted,
                 object: nil,
@@ -2173,6 +2194,21 @@ class ChannelPostsViewModel: ObservableObject {
     @Published var posts: [Post] = []
     @Published var isLoading = false
 
+    init() {
+        // 投稿削除通知を監視
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name.postDeleted,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let postId = notification.userInfo?["postId"] as? String {
+                Task { @MainActor in
+                    self?.removePost(postId: postId)
+                }
+            }
+        }
+    }
+
     func loadChannelPosts(channelId: String, latestPostId: String, forceRefresh: Bool = false) async {
         isLoading = true
         defer { isLoading = false }
@@ -2191,6 +2227,10 @@ class ChannelPostsViewModel: ObservableObject {
         } catch {
             print("❌ Failed to load channel posts: \(error)")
         }
+    }
+
+    func removePost(postId: String) {
+        posts.removeAll { $0.id == postId }
     }
 }
 

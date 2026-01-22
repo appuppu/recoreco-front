@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 struct ReportCommentView: View {
     let comment: Comment
@@ -85,8 +86,13 @@ struct ReportCommentView: View {
         isSubmitting = true
 
         do {
-            try await APIClient.shared.reportComment(
-                commentId: comment.id,
+            guard let commentId = comment.id else {
+                errorMessage = "Invalid comment ID"
+                isSubmitting = false
+                return
+            }
+            try await FirestoreReportManager.shared.reportComment(
+                commentId: commentId,
                 reason: selectedReason,
                 description: description.isEmpty ? nil : description
             )

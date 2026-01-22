@@ -1,4 +1,6 @@
 import SwiftUI
+import AuthenticationServices
+import FirebaseAuth
 
 struct SignUpView: View {
     @EnvironmentObject var authManager: AuthManager
@@ -19,60 +21,78 @@ struct SignUpView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Background gradient
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.orange.opacity(0.8),
-                        Color.red.opacity(0.6),
-                        Color.black
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                // Background - simple black
+                Color.black
+                    .ignoresSafeArea()
 
-                ScrollView {
+                ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
                         // Logo
                         VStack(spacing: 16) {
-                            ZStack {
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            gradient: Gradient(colors: [
-                                                Color.orange.opacity(0.4),
-                                                Color.red.opacity(0.3)
-                                            ]),
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .frame(width: 100, height: 100)
-                                    .blur(radius: 20)
-
-                                Image("DiscoveryIcon")
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: 70, height: 70)
-                                    .clipShape(Circle())
-                            }
-
                             Text("アカウント作成")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
 
-                            Text("おすすめの音楽を紹介しよう！")
+                            Text("おすすめの音楽を投稿しよう")
                                 .font(.subheadline)
                                 .foregroundColor(.white.opacity(0.7))
                         }
                         .padding(.top, 60)
-                        .padding(.bottom, 40)
+                        .padding(.bottom, 30)
 
                         // Sign Up Form
                         VStack(spacing: 20) {
-                            VStack(spacing: 16) {
-                                // Username field with validation indicator
-                                HStack(spacing: 8) {
+                            // Agreement checkbox (moved to top)
+                            VStack(spacing: 12) {
+                                HStack(spacing: 12) {
+                                    Button(action: {
+                                        agreedToTerms.toggle()
+                                    }) {
+                                        Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
+                                            .font(.system(size: 24))
+                                            .foregroundColor(agreedToTerms ? .orange : .white.opacity(0.6))
+                                    }
+
+                                    Text("利用規約とプライバシーポリシーに同意する")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.white.opacity(0.8))
+                                }
+
+                                // Terms and Privacy links
+                                HStack(spacing: 20) {
+                                    Button(action: {
+                                        urlTitle = "利用規約"
+                                        urlToOpen = URL(string: "https://appuppu.github.io/docs/terms.html")
+                                        showingUrlConfirmation = true
+                                    }) {
+                                        Text("利用規約")
+                                            .font(.system(size: 13))
+                                            .foregroundColor(.white.opacity(0.8))
+                                            .underline()
+                                    }
+
+                                    Text("・")
+                                        .foregroundColor(.white.opacity(0.5))
+
+                                    Button(action: {
+                                        urlTitle = "プライバシーポリシー"
+                                        urlToOpen = URL(string: "https://appuppu.github.io/docs/privacy.html")
+                                        showingUrlConfirmation = true
+                                    }) {
+                                        Text("プライバシーポリシー")
+                                            .font(.system(size: 13))
+                                            .foregroundColor(.white.opacity(0.8))
+                                            .underline()
+                                    }
+                                }
+                            }
+                            .padding(.bottom, 20)
+
+                            // Show form only after agreeing to terms
+                            if agreedToTerms {
+                                VStack(spacing: 16) {
+                                    // Username field with validation indicator
+                                    HStack(spacing: 8) {
                                     TextField("", text: $username, prompt: Text("ユーザー名（英数字._ 10文字以内）").foregroundColor(.white.opacity(0.5)))
                                         .textFieldStyle(GlassTextFieldStyle())
                                         .autocapitalization(.none)
@@ -146,63 +166,67 @@ struct SignUpView: View {
                                 .background(
                                     LinearGradient(
                                         gradient: Gradient(colors: [
-                                            Color.orange,
-                                            Color.red
+                                            Color.purple,
+                                            Color.blue
                                         ]),
                                         startPoint: .leading,
                                         endPoint: .trailing
                                     )
                                 )
                                 .cornerRadius(16)
-                                .shadow(color: Color.orange.opacity(0.5), radius: 10, x: 0, y: 5)
+                                .shadow(color: Color.purple.opacity(0.5), radius: 10, x: 0, y: 5)
                             }
-                            .disabled(isLoading || !isFormValid)
-                            .opacity((isLoading || !isFormValid) ? 0.6 : 1.0)
+                                .disabled(isLoading || !isFormValid)
+                                .opacity((isLoading || !isFormValid) ? 0.6 : 1.0)
 
-                            // Agreement checkbox
-                            HStack(spacing: 12) {
-                                Button(action: {
-                                    agreedToTerms.toggle()
-                                }) {
-                                    Image(systemName: agreedToTerms ? "checkmark.square.fill" : "square")
-                                        .font(.system(size: 24))
-                                        .foregroundColor(agreedToTerms ? .orange : .white.opacity(0.6))
+                                    // Divider
+                                    HStack {
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.3))
+                                        .frame(height: 1)
+                                    Text("または")
+                                        .font(.caption)
+                                        .foregroundColor(.white.opacity(0.6))
+                                        .padding(.horizontal, 12)
+                                    Rectangle()
+                                        .fill(Color.white.opacity(0.3))
+                                        .frame(height: 1)
                                 }
+                                .padding(.vertical, 20)
 
-                                Text("利用規約とプライバシーポリシーに同意する")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white.opacity(0.8))
+                                // Google Sign In Button
+                                Button(action: signInWithGoogle) {
+                                    HStack {
+                                        Image(systemName: "globe")
+                                            .font(.system(size: 20))
+                                        Text("Googleで登録")
+                                            .font(.headline)
+                                            .fontWeight(.semibold)
+                                    }
+                                    .foregroundColor(.black)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 56)
+                                    .background(Color.white)
+                                    .cornerRadius(16)
+                                }
+                                .disabled(isLoading)
+                                .opacity(isLoading ? 0.6 : 1.0)
+
+                                // Apple Sign In Button
+                                SignInWithAppleButton(
+                                    onRequest: { request in
+                                        request.requestedScopes = [.fullName, .email]
+                                        let appleRequest = authManager.signInWithApple()
+                                        request.nonce = appleRequest.nonce
+                                    },
+                                    onCompletion: { result in
+                                        handleAppleSignIn(result)
+                                    }
+                                )
+                                .signInWithAppleButtonStyle(.white)
+                                .frame(height: 56)
+                                .cornerRadius(16)
                             }
-                            .padding(.top, 8)
-
-                            // Terms and Privacy links
-                            HStack(spacing: 20) {
-                                Button(action: {
-                                    urlTitle = "利用規約"
-                                    urlToOpen = URL(string: "https://appuppu.github.io/docs/terms.html")
-                                    showingUrlConfirmation = true
-                                }) {
-                                    Text("利用規約")
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.8))
-                                        .underline()
-                                }
-
-                                Text("・")
-                                    .foregroundColor(.white.opacity(0.5))
-
-                                Button(action: {
-                                    urlTitle = "プライバシーポリシー"
-                                    urlToOpen = URL(string: "https://appuppu.github.io/docs/privacy.html")
-                                    showingUrlConfirmation = true
-                                }) {
-                                    Text("プライバシーポリシー")
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.8))
-                                        .underline()
-                                }
-                            }
-                            .padding(.top, 20)
                         }
                         .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 32)
                         .padding(.bottom, 40)
@@ -280,11 +304,13 @@ struct SignUpView: View {
                 )
                 dismiss()
             } catch {
-                // Parse error message from backend if available
-                if let apiError = error as? APIError {
+                // Parse Firebase Auth errors
+                if let authError = error as NSError?, authError.domain == "FIRAuthErrorDomain" {
+                    errorMessage = translateFirebaseAuthError(authError)
+                } else if let apiError = error as? APIError {
                     errorMessage = apiError.localizedDescription
                 } else {
-                    errorMessage = error.localizedDescription
+                    errorMessage = "登録に失敗しました"
                 }
             }
             isLoading = false
@@ -303,7 +329,7 @@ struct SignUpView: View {
         defer { isCheckingUsername = false }
 
         do {
-            let available = try await APIClient.shared.checkUsernameAvailability(username: username)
+            let available = try await FirestoreUserManager.shared.checkUsernameAvailability(username: username)
             await MainActor.run {
                 usernameAvailable = available
             }
@@ -311,6 +337,68 @@ struct SignUpView: View {
             await MainActor.run {
                 usernameAvailable = nil
             }
+        }
+    }
+
+    private func signInWithGoogle() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let viewController = windowScene.windows.first?.rootViewController else {
+            errorMessage = "エラーが発生しました"
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await authManager.signInWithGoogle(presenting: viewController)
+                dismiss()
+            } catch {
+                errorMessage = "Google登録に失敗しました"
+            }
+            isLoading = false
+        }
+    }
+
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                switch result {
+                case .success(let authorization):
+                    try await authManager.handleAppleSignInCompletion(authorization)
+                    dismiss()
+                case .failure(let error):
+                    throw error
+                }
+            } catch {
+                errorMessage = "Apple登録に失敗しました"
+            }
+            isLoading = false
+        }
+    }
+
+    private func translateFirebaseAuthError(_ error: NSError) -> String {
+        guard let errorCode = AuthErrorCode(_bridgedNSError: error) else {
+            return "登録に失敗しました"
+        }
+
+        switch errorCode.code {
+        case .emailAlreadyInUse:
+            return "このメールアドレスは既に使用されています"
+        case .invalidEmail:
+            return "無効なメールアドレスです"
+        case .weakPassword:
+            return "パスワードが弱すぎます。8文字以上で入力してください"
+        case .networkError:
+            return "ネットワークエラーが発生しました"
+        case .operationNotAllowed:
+            return "この操作は許可されていません"
+        default:
+            return "登録に失敗しました"
         }
     }
 }

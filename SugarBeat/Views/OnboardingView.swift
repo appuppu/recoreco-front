@@ -1,32 +1,32 @@
 import SwiftUI
 
 struct OnboardingView: View {
-    @Binding var isPresented: Bool
+    @Environment(\.dismiss) private var dismiss
     @State private var currentPage = 0
 
     private let pages: [OnboardingPage] = [
         OnboardingPage(
-            icon: "music.note.list",
-            title: "おすすめの音楽を紹介しよう",
-            description: "おすすめの音楽の30秒プレビューを紹介できます。\nお気に入りの曲をシェアして楽しみましょう。",
+            icon: "music.note.house.fill",
+            title: "チャンネルで音楽を紹介",
+            description: "チャンネルを作成して、テーマに沿った音楽を投稿できます。\n好きなジャンルやムードのチャンネルを作りましょう。",
             gradient: [Color.purple, Color.blue]
         ),
         OnboardingPage(
             icon: "person.2.fill",
-            title: "相互フォローで楽しむ",
-            description: "他のユーザーと相互フォローすることで、お互いの音楽紹介を見ることができます。\n一方的なフォローでは紹介は表示されません。",
+            title: "チャンネルをフォロー",
+            description: "気になるチャンネルをフォローすると、「フォロー中」タブで最新の投稿をチェックできます。\n自分のチャンネルも作成して投稿しましょう。",
             gradient: [Color.blue, Color.cyan]
         ),
         OnboardingPage(
-            icon: "hand.draw.fill",
-            title: "縦横スクロールで探索",
-            description: "横スワイプ：他のユーザーの紹介を見る\n縦スワイプ：同じユーザーの他の紹介を見る\n\n上部のアイコンをタップで直接ユーザーを選択できます。",
+            icon: "safari",
+            title: "すべてのチャンネルを探索",
+            description: "「すべて」タブでは、全ユーザーのチャンネルを探索できます。\n投稿が新しい順に表示されるので、トレンドをチェック！",
             gradient: [Color.cyan, Color.green]
         ),
         OnboardingPage(
-            icon: "magnifyingglass",
-            title: "ユーザーを検索",
-            description: "右下のメニューから「ユーザー検索」を選んで、新しい音楽好きの仲間を見つけましょう。\n\nフォローしたいユーザーを見つけたら、相互フォローを目指しましょう！",
+            icon: "music.note",
+            title: "音楽を投稿して楽しむ",
+            description: "チャンネルに音楽を投稿して、おすすめの曲をシェアしましょう。\n30秒のプレビューと一緒にコメントを添えられます。",
             gradient: [Color.green, Color.yellow]
         )
     ]
@@ -46,7 +46,7 @@ struct OnboardingView: View {
                 HStack {
                     Spacer()
                     Button(action: {
-                        isPresented = false
+                        dismiss()
                         UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
                     }) {
                         Text("スキップ")
@@ -77,7 +77,7 @@ struct OnboardingView: View {
                 if currentPage == pages.count - 1 {
                     Button(action: {
                         withAnimation {
-                            isPresented = false
+                            dismiss()
                             UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
                         }
                     }) {
@@ -191,5 +191,5 @@ struct OnboardingPageView: View {
 }
 
 #Preview {
-    OnboardingView(isPresented: .constant(true))
+    OnboardingView()
 }

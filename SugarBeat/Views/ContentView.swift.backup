@@ -1,0 +1,841 @@
+import SwiftUI
+import MusicKit
+import FirebaseAuth
+
+// MARK: - アプリ全体のテーマカラー設定
+/// ここを変更するだけで、アプリ全体の色が変わります
+enum AppTheme {
+    // MARK: - グラデーションカラー設定（6桁のHEXコードで指定）
+    // 色を変えたい場合はここの値を変更してください
+
+    /// グラデーション開始色（明るい方）
+    static let gradientStartHex = "cc208e"  // ワインレッド（明）
+
+    /// グラデーション終了色（暗い方）
+    static let gradientEndHex = "6713d2"    // ワインレッド（暗）
+
+    // MARK: - 計算プロパティ（変更不要）
+
+    /// グラデーション開始色
+    static var gradientStartColor: Color {
+        Color(hex: gradientStartHex)
+    }
+
+    /// グラデーション終了色
+    static var gradientEndColor: Color {
+        Color(hex: gradientEndHex)
+    }
+
+    /// 横方向のグラデーション
+    static var horizontalGradient: LinearGradient {
+        LinearGradient(
+            gradient: Gradient(colors: [gradientStartColor, gradientEndColor]),
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    /// 縦方向のグラデーション
+    static var verticalGradient: LinearGradient {
+        LinearGradient(
+            gradient: Gradient(colors: [gradientStartColor, gradientEndColor]),
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
+    /// リフレッシュインジケーター用の色
+    static var tintColor: Color {
+        gradientStartColor
+    }
+}
+
+// MARK: - Color Extension for Hex Support
+
+extension Color {
+    /// 6桁のHEXコードからColorを生成
+    /// 例: Color(hex: "FF5733")
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+
+        let r, g, b: UInt64
+        switch hex.count {
+        case 6: // RGB (24-bit)
+            (r, g, b) = ((int >> 16) & 0xFF, (int >> 8) & 0xFF, int & 0xFF)
+        default:
+            (r, g, b) = (0, 0, 0)
+        }
+
+        self.init(
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue: Double(b) / 255
+        )
+    }
+}
+
+struct ContentView: View {
+    var body: some View {
+        MainTabView()
+    }
+}
+
+struct MainTabView: View {
+    @EnvironmentObject private var authManager: AuthManager
+    @StateObject private var screenshotMode = ScreenshotModeManager.shared
+    @State private var selectedTab = 1 // 0: My Profile, 1: Discovery, 2: Following, 3: Post, 4: Notifications
+    @State private var showingLoginPrompt = false  // ログイン必要アラート
+    @State private var showingLoginSheet = false   // ログイン画面シート
+    @State private var postCreated = false
+    @State private var unreadNotificationCount = 0
+    @State private var pendingPlayPostId: String? = nil
+    @State private var showingUserProfileFromNotification = false
+    @State private var userIdForProfile: String? = nil
+    @State private var lastNotificationFetchTime: Date?
+
+    // グラデーション（AppThemeから取得）
+    private var orangeGradient: LinearGradient {
+        AppTheme.horizontalGradient
+    }
+
+    /// 広告を表示するかどうか
+    private var shouldShowAd: Bool {
+        AdConfig.shouldShowAds && authManager.isAuthenticated && MusicKitManager.shared.isAuthorized && !screenshotMode.isScreenshotMode
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black
+
+            TabView(selection: $selectedTab) {
+                // Page 0: My Profile (自分)
+                MyProfileView(pendingPlayPostId: $pendingPlayPostId)
+                    .ignoresSafeArea()
+                    .tag(0)
+
+                // Page 1: Discovery (音楽の発見)
+                DiscoveryView()
+                    .ignoresSafeArea()
+                    .tag(1)
+
+                // Page 2: Following Feed (フォロー中)
+                FollowingFeedView()
+                    .ignoresSafeArea()
+                    .tag(2)
+
+                // Page 3: Create Post (投稿)
+                CreatePostView(postCreated: $postCreated, selectedTab: $selectedTab)
+                    .ignoresSafeArea()
+                    .tag(3)
+
+                // Page 4: Notifications (通知)
+                NotificationsView()
+                    .ignoresSafeArea()
+                    .tag(4)
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+
+            // Ad banner at bottom
+            if shouldShowAd {
+                VStack(spacing: 0) {
+                    Divider()
+                        .background(Color.gray.opacity(0.3))
+
+                    AdBannerView()
+                        .frame(height: 50)
+                        .background(Color.black)
+                }
+            }
+        }
+        .ignoresSafeArea()
+        .onChange(of: postCreated) { created in
+            if created {
+                // Navigate away from post creation page after successful post
+                selectedTab = 1 // Go to Discovery
+                postCreated = false
+            }
+        }
+        .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
+            Button("はい") {
+                showingLoginSheet = true
+            }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("この機能を使用するにはログインが必要です")
+        }
+        .sheet(isPresented: $showingLoginSheet) {
+            LoginView()
+        }
+        .task {
+            await loadUnreadNotificationCount(forceRefresh: true)
+        }
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { _ in
+            Task {
+                await loadUnreadNotificationCount()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Foundation.Notification.Name("ReloadUnreadCounts"))) { _ in
+            Task {
+                await loadUnreadNotificationCount(forceRefresh: true)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("PlayPostInMyProfile"))) { notification in
+            if let postId = notification.userInfo?["postId"] as? String {
+                // Switch to MyProfile tab (tab index 4)
+                selectedTab = 4
+                // Store the postId to play
+                pendingPlayPostId = postId
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("ShowUserProfile"))) { notification in
+            if let userId = notification.userInfo?["userId"] as? String {
+                userIdForProfile = userId
+                showingUserProfileFromNotification = true
+            }
+        }
+        .sheet(isPresented: $showingUserProfileFromNotification) {
+            if let userId = userIdForProfile {
+                UserProfileView(userId: userId)
+                    .environmentObject(authManager)
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { authManager.needsUsernameSetup },
+            set: { _ in }
+        )) {
+            UsernameSetupView(email: authManager.pendingUserEmail)
+                .environmentObject(authManager)
+        }
+    }
+
+    private func loadUnreadNotificationCount(forceRefresh: Bool = false) async {
+        guard authManager.isAuthenticated,
+              let userId = Auth.auth().currentUser?.uid else {
+            unreadNotificationCount = 0
+            return
+        }
+
+        // キャッシュが有効な場合はスキップ（30秒以内）
+        if !forceRefresh, let lastFetch = lastNotificationFetchTime {
+            let elapsed = Date().timeIntervalSince(lastFetch)
+            if elapsed < 30 {
+                return
+            }
+        }
+
+        do {
+            unreadNotificationCount = try await FirestoreNotificationManager.shared.getUnreadCount(userId: userId)
+            lastNotificationFetchTime = Date()
+        } catch {
+            print("Failed to load unread notification count: \(error)")
+        }
+    }
+}
+
+struct CreatePostView: View {
+    @StateObject private var viewModel = CreatePostViewModel()
+    @FocusState private var isCommentFocused: Bool
+    @FocusState private var isSearchFocused: Bool
+    @Binding var postCreated: Bool
+    @Binding var selectedTab: Int
+
+    var body: some View {
+        NavigationStack {
+        ZStack {
+            // Background gradient
+            LinearGradient(
+                gradient: Gradient(colors: [
+                    Color(red: 0.1, green: 0.1, blue: 0.2),
+                    Color(red: 0.2, green: 0.1, blue: 0.3)
+                ]),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(spacing: 0) {
+                // Fixed header with close button and search bar
+                VStack(spacing: 12) {
+                    // Close button
+                    HStack {
+                        Button(action: {
+                            selectedTab = 1 // Navigate to Discovery
+                        }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        Spacer()
+                        Text("新規音楽紹介")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+                        Spacer()
+                        // Placeholder for symmetry
+                        Color.clear.frame(width: 28, height: 28)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top)
+
+                    // Content type picker
+                    Picker("コンテンツタイプ", selection: $viewModel.contentType) {
+                        Text("音楽").tag(ContentType.music)
+                        Text("URL").tag(ContentType.youtube)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .onChange(of: viewModel.contentType) { _ in
+                        viewModel.errorMessage = nil
+                    }
+
+                    // Music search bar or URL input based on content type
+                    if viewModel.contentType == .music {
+                        HStack(spacing: 8) {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.white.opacity(0.6))
+                            TextField("曲名、アーティスト名で検索", text: $viewModel.searchQuery)
+                                .foregroundColor(.white)
+                                .autocorrectionDisabled()
+                                .submitLabel(.search)
+                                .focused($isSearchFocused)
+                                .onSubmit {
+                                    Task {
+                                        await viewModel.performSearch()
+                                    }
+                                }
+                            if !viewModel.searchQuery.isEmpty {
+                                Button(action: { viewModel.searchQuery = "" }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color.white.opacity(0.15))
+                        .cornerRadius(12)
+
+                        // 検索ボタン
+                        Button(action: {
+                            isSearchFocused = false
+                            Task {
+                                await viewModel.performSearch()
+                            }
+                        }) {
+                            Text("検索")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                        }
+                        .disabled(viewModel.searchQuery.isEmpty || viewModel.isSearching)
+                        }
+                        .padding(.horizontal)
+                    } else {
+                        // URL input
+                        HStack(spacing: 8) {
+                            HStack {
+                                Image(systemName: "link")
+                                    .foregroundColor(.white.opacity(0.6))
+                                TextField("URLを貼り付け (YouTube, ウェブサイト)", text: $viewModel.urlInput)
+                                    .foregroundColor(.white)
+                                    .autocorrectionDisabled()
+                                    .submitLabel(.done)
+                                    .onSubmit {
+                                        Task {
+                                            await viewModel.processUrl()
+                                        }
+                                    }
+                                if !viewModel.urlInput.isEmpty {
+                                    Button(action: { viewModel.urlInput = "" }) {
+                                        Image(systemName: "xmark.circle.fill")
+                                            .foregroundColor(.white.opacity(0.6))
+                                    }
+                                }
+                            }
+                            .padding()
+                            .background(Color.white.opacity(0.15))
+                            .cornerRadius(12)
+
+                            Button(action: {
+                                Task {
+                                    await viewModel.processUrl()
+                                }
+                            }) {
+                                Text("確認")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 12)
+                                    .background(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .cornerRadius(12)
+                            }
+                            .disabled(viewModel.urlInput.isEmpty || viewModel.isLoadingUrlPreview)
+                        }
+                        .padding(.horizontal)
+                    }
+                }
+                .background(Color.clear)
+                .padding(.bottom, 8)
+
+                // Scrollable content area
+                if viewModel.isSearching {
+                    VStack {
+                        Spacer()
+                        ProgressView()
+                            .tint(.white)
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.black)
+                } else if !viewModel.searchResults.isEmpty {
+                    // Search results
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(viewModel.searchResults, id: \.id) { song in
+                                Button(action: {
+                                    Task {
+                                        await viewModel.selectSong(song)
+                                    }
+                                }) {
+                                    MusicKitSearchRow(song: song)
+                                }
+                            }
+                        }
+                        .padding()
+                    }
+                } else if let selectedSong = viewModel.selectedSong {
+                    // Selected song and post creation
+                    ScrollView {
+                    VStack(spacing: 16) {
+                        // Album artwork and song info
+                        HStack(spacing: 12) {
+                            if let artwork = selectedSong.artwork {
+                                AsyncImage(url: artwork.url(width: 80, height: 80)) { phase in
+                                    switch phase {
+                                    case .empty:
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.3))
+                                            .frame(width: 80, height: 80)
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                            .frame(width: 80, height: 80)
+                                            .clipped()
+                                    case .failure:
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.3))
+                                            .frame(width: 80, height: 80)
+                                    @unknown default:
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.3))
+                                            .frame(width: 80, height: 80)
+                                    }
+                                }
+                                .frame(width: 80, height: 80)
+                                .cornerRadius(8)
+                            }
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(selectedSong.title)
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .lineLimit(2)
+                                Text(selectedSong.artistName)
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.7))
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+
+                        // Preview loading indicator
+                        if viewModel.isFetchingPreview {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .tint(.white)
+                                Text("プレビューを取得中...")
+                                    .font(.subheadline)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                            .padding(.vertical, 8)
+                        }
+
+                        // Play/Stop button
+                        Button(action: {
+                            if viewModel.isPlaying {
+                                viewModel.stopPreview()
+                            } else {
+                                Task {
+                                    await viewModel.playPreview()
+                                }
+                            }
+                        }) {
+                            HStack(spacing: 12) {
+                                Image(systemName: viewModel.isPlaying ? "stop.circle.fill" : "play.circle.fill")
+                                    .font(.system(size: 20))
+                                Text(viewModel.isPlaying ? "停止" : "30秒プレビュー再生")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(
+                                LinearGradient(
+                                    gradient: Gradient(colors: viewModel.isPlaying ?
+                                        [Color.red, Color.orange] :
+                                        [Color.green, Color.blue]
+                                    ),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(10)
+                        }
+                        .disabled(viewModel.isFetchingPreview)
+                        .opacity(viewModel.isFetchingPreview ? 0.5 : 1.0)
+                        .padding(.horizontal)
+
+                        // Comment field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("コメント")
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                            ZStack(alignment: .topLeading) {
+                                Color(.systemGray6)
+                                    .cornerRadius(8)
+
+                                if viewModel.comment.isEmpty {
+                                    Text("最低一文字必要です")
+                                        .font(.body)
+                                        .foregroundColor(Color(.systemGray3))
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 16)
+                                }
+
+                                TextEditor(text: $viewModel.comment)
+                                    .frame(height: 80)
+                                    .padding(8)
+                                    .background(Color.clear)
+                                    .cornerRadius(8)
+                                    .focused($isCommentFocused)
+                                    .scrollContentBackground(.hidden)
+                                    .toolbar {
+                                        ToolbarItemGroup(placement: .keyboard) {
+                                            Spacer()
+                                            Button("完了") {
+                                                isCommentFocused = false
+                                            }
+                                        }
+                                    }
+                            }
+                            .frame(height: 80)
+                        }
+                        .padding(.horizontal)
+
+                        // Post button
+                        Button(action: {
+                            Task {
+                                await viewModel.createPost()
+                                if viewModel.postCreated {
+                                    postCreated = true
+                                    // Navigation handled by onChange in MainTabView
+                                }
+                            }
+                        }) {
+                            if viewModel.isPosting {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                            } else {
+                                Text("この内容で紹介する")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(
+                                        LinearGradient(
+                                            gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                            startPoint: .leading,
+                                            endPoint: .trailing
+                                        )
+                                    )
+                                    .cornerRadius(12)
+                            }
+                        }
+                        .disabled(viewModel.isPosting || viewModel.isFetchingPreview || viewModel.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .opacity((viewModel.isPosting || viewModel.isFetchingPreview || viewModel.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1.0)
+                        .padding(.horizontal)
+                        .padding(.bottom, 20)
+
+                        // Extra space for scrolling
+                        Spacer()
+                            .frame(height: 150)
+                    }
+                    .padding(.top)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                    .onTapGesture {
+                        // Dismiss keyboard when tapping outside
+                        isCommentFocused = false
+                        isSearchFocused = false
+                    }
+                } else if viewModel.youtubeVideoId != nil || viewModel.websiteTitle != nil {
+                    // URL content preview and post creation
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // YouTube or Website preview
+                            if let videoId = viewModel.youtubeVideoId {
+                                // YouTube thumbnail
+                                AsyncImage(url: URL(string: viewModel.youtubeThumbnailUrl ?? "")) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image
+                                            .resizable()
+                                            .aspectRatio(16/9, contentMode: .fit)
+                                            .cornerRadius(12)
+                                    default:
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.3))
+                                            .aspectRatio(16/9, contentMode: .fit)
+                                            .cornerRadius(12)
+                                    }
+                                }
+                                .padding(.horizontal)
+
+                                Text("YouTube Video")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal)
+                            } else if let websiteTitle = viewModel.websiteTitle {
+                                // Website preview
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(websiteTitle)
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+
+                                    if let description = viewModel.websiteDescription {
+                                        Text(description)
+                                            .font(.subheadline)
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                }
+                                .padding()
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(12)
+                                .padding(.horizontal)
+                            }
+
+                            // Comment field
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("コメント")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                                ZStack(alignment: .topLeading) {
+                                    Color(.systemGray6)
+                                        .cornerRadius(8)
+
+                                    if viewModel.comment.isEmpty {
+                                        Text("最低一文字必要です")
+                                            .font(.body)
+                                            .foregroundColor(Color(.systemGray3))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 16)
+                                    }
+
+                                    TextEditor(text: $viewModel.comment)
+                                        .frame(height: 80)
+                                        .padding(8)
+                                        .background(Color.clear)
+                                        .cornerRadius(8)
+                                        .focused($isCommentFocused)
+                                        .scrollContentBackground(.hidden)
+                                        .toolbar {
+                                            ToolbarItemGroup(placement: .keyboard) {
+                                                Spacer()
+                                                Button("完了") {
+                                                    isCommentFocused = false
+                                                }
+                                            }
+                                        }
+                                }
+                                .frame(height: 80)
+                            }
+                            .padding(.horizontal)
+
+                            // Post button
+                            Button(action: {
+                                Task {
+                                    await viewModel.createPost()
+                                    if viewModel.postCreated {
+                                        postCreated = true
+                                    }
+                                }
+                            }) {
+                                if viewModel.isPosting {
+                                    ProgressView()
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                } else {
+                                    Text("この内容で紹介する")
+                                        .font(.headline)
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(
+                                            LinearGradient(
+                                                gradient: Gradient(colors: [Color.blue, Color.purple]),
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            )
+                                        )
+                                        .cornerRadius(12)
+                                }
+                            }
+                            .disabled(viewModel.isPosting || viewModel.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .opacity((viewModel.isPosting || viewModel.comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1.0)
+                            .padding(.horizontal)
+                            .padding(.bottom, 20)
+
+                            // Extra space for scrolling
+                            Spacer()
+                                .frame(height: 150)
+                        }
+                        .padding(.top)
+                    }
+                    .scrollDismissesKeyboard(.interactively)
+                    .onTapGesture {
+                        // Dismiss keyboard when tapping outside
+                        isCommentFocused = false
+                    }
+                } else {
+                    VStack(spacing: 20) {
+                        if viewModel.contentType == .music {
+                            Image(systemName: "music.note.list")
+                                .font(.system(size: 60))
+                                .foregroundColor(.white.opacity(0.5))
+                            Text("曲を検索して紹介")
+                                .font(.headline)
+                                .foregroundColor(.white.opacity(0.7))
+                        } else {
+                            Image(systemName: "link")
+                                .font(.system(size: 60))
+                                .foregroundColor(.white.opacity(0.5))
+                            Text("URLを入力して紹介")
+                                .font(.headline)
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+                    .frame(maxHeight: .infinity)
+                }
+
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage)
+                        .font(.subheadline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(8)
+                        .padding(.horizontal)
+                }
+            }
+
+        }
+        .navigationBarHidden(true)
+        }
+        .ignoresSafeArea()
+        .onAppear {
+            Task {
+                await viewModel.warmupSearch()
+            }
+        }
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        let minutes = Int(seconds) / 60
+        let secs = Int(seconds) % 60
+        return String(format: "%d:%02d", minutes, secs)
+    }
+}
+
+struct MusicKitSearchRow: View {
+    let song: Song
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let artwork = song.artwork {
+                AsyncImage(url: artwork.url(width: 50, height: 50)) { phase in
+                    switch phase {
+                    case .empty:
+                        Rectangle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 50, height: 50)
+                            .clipped()
+                    case .failure:
+                        Rectangle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                    @unknown default:
+                        Rectangle()
+                            .fill(Color.white.opacity(0.2))
+                            .frame(width: 50, height: 50)
+                    }
+                }
+                .frame(width: 50, height: 50)
+                .cornerRadius(6)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(song.title)
+                    .font(.body)
+                    .foregroundColor(.white)
+                Text(song.artistName)
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.7))
+                if let albumTitle = song.albumTitle {
+                    Text(albumTitle)
+                        .font(.caption2)
+                        .foregroundColor(.white.opacity(0.5))
+                }
+            }
+
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(10)
+    }
+}
+
+#Preview {
+    ContentView()
+        .environmentObject(AuthManager())
+}

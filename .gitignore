@@ -91,3 +91,12 @@ iOSInjectionProject/
 
 ## macOS
 .DS_Store
+
+# Firebase configuration
+GoogleService-Info.plist
+.firebaserc
+
+# Environment files
+.env
+.env.local
+.env.*.local

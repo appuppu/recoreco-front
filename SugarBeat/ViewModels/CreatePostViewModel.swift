@@ -1,25 +1,60 @@
 import Foundation
 import MusicKit
+import FirebaseAuth
 
 @MainActor
 class CreatePostViewModel: ObservableObject {
+    // Music-specific fields
     @Published var searchQuery = ""
     @Published var searchResults: [Song] = []
     @Published var selectedSong: Song?
-    @Published var comment = ""
     @Published var isSearching = false
-    @Published var isPosting = false
     @Published var isPlaying = false
+    @Published var isFetchingPreview = false
+    private var previewURL: String?
+
+    // Channel fields
+    @Published var channels: [Channel] = []
+    @Published var selectedChannel: Channel?
+    @Published var isLoadingChannels = false
+    @Published var showingCreateChannelSheet = false
+    @Published var newChannelName = ""
+
+    // Common fields
+    @Published var comment = ""
+    @Published var isPosting = false
     @Published var postCreated = false
     @Published var errorMessage: String?
-    @Published var isFetchingPreview = false
 
     private let musicKitManager = MusicKitManager.shared
-    private var previewURL: String?
     private var searchTask: Task<Void, Never>?
 
     init() {
-        // No automatic search - user must press search button
+        // Load user's channels on init
+        Task {
+            await loadUserChannels()
+        }
+
+        // チャンネル作成/削除通知を監視
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name("ChannelCreated"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.loadUserChannels()
+            }
+        }
+
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name("ChannelDeleted"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.loadUserChannels()
+            }
+        }
     }
 
     func requestMusicAuthorization() async {
@@ -196,40 +231,57 @@ class CreatePostViewModel: ObservableObject {
         isPlaying = false
     }
 
-    func createPost() async {
-        guard let song = selectedSong else {
-            errorMessage = "曲が選択されていません"
-            return
+
+    func loadUserChannels() async {
+        isLoadingChannels = true
+
+        do {
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
+                isLoadingChannels = false
+                return
+            }
+
+            channels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+
+            // Auto-select first channel if available
+            if !channels.isEmpty && selectedChannel == nil {
+                selectedChannel = channels[0]
+            }
+        } catch {
+            print("❌ Failed to load user channels: \(error)")
+            errorMessage = "チャンネルの読み込みに失敗しました"
         }
 
+        isLoadingChannels = false
+    }
+
+    func createChannelAndPost() async {
         isPosting = true
         errorMessage = nil
 
         do {
-            // Validate required fields
-            let trackId = song.id.rawValue
-            let trackName = song.title
-            let artistName = song.artistName
-
-            guard !trackId.isEmpty else {
-                errorMessage = "トラックIDが無効です"
+            // Get current user ID
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
+                errorMessage = "認証エラー"
                 isPosting = false
                 return
             }
 
-            guard !trackName.isEmpty else {
-                errorMessage = "曲名が無効です"
+            // Validate channel name
+            let trimmedChannelName = newChannelName.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedChannelName.isEmpty {
+                errorMessage = "チャンネル名を入力してください"
                 isPosting = false
                 return
             }
 
-            guard !artistName.isEmpty else {
-                errorMessage = "アーティスト名が無効です"
+            if trimmedChannelName.count > 30 {
+                errorMessage = "チャンネル名は30文字以内で入力してください"
                 isPosting = false
                 return
             }
 
-            // Validate comment is not empty
+            // Validate comment
             let trimmedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmedComment.isEmpty {
                 errorMessage = "紹介文を入力してください"
@@ -237,9 +289,137 @@ class CreatePostViewModel: ObservableObject {
                 return
             }
 
-            // Validate comment length
             if trimmedComment.count > 50 {
                 errorMessage = "紹介文は50文字以内で入力してください"
+                isPosting = false
+                return
+            }
+
+            // Validate song selection
+            guard let song = selectedSong else {
+                errorMessage = "曲が選択されていません"
+                isPosting = false
+                return
+            }
+
+            // Create channel first
+            let newChannel = try await FirestoreChannelManager.shared.createChannel(name: trimmedChannelName)
+
+            // Get artwork URL
+            let artworkUrl = song.artwork?.url(width: 600, height: 600)?.absoluteString
+
+            // Get artist image URL
+            var artistImageUrl: String? = nil
+            if let artist = song.artists?.first {
+                do {
+                    let artistRequest = MusicCatalogResourceRequest<Artist>(matching: \.id, equalTo: artist.id)
+                    let artistResponse = try await artistRequest.response()
+                    if let fetchedArtist = artistResponse.items.first {
+                        artistImageUrl = fetchedArtist.artwork?.url(width: 1000, height: 1000)?.absoluteString
+                    }
+                } catch {
+                    print("⚠️ Failed to fetch artist artwork: \(error)")
+                }
+            }
+
+            // Create music post with channel info (only IDs, no denormalized data)
+            let post = Post(
+                userId: currentUserId,
+                channelId: newChannel.id,
+                appleMusicTrackId: song.id.rawValue,
+                trackName: song.title,
+                artistName: song.artistName,
+                albumName: song.albumTitle,
+                artworkUrl: artworkUrl,
+                artistImageUrl: artistImageUrl,
+                previewUrl: previewURL,
+                appleMusicUrl: song.url?.absoluteString,
+                comment: trimmedComment,
+                startTime: 0,
+                endTime: 30
+            )
+
+            // Create post in Firestore
+            let createdPostId = try await FirestorePostManager.shared.createPost(post)
+
+            // Update channel's latest post info
+            try await FirestoreChannelManager.shared.updateChannelLatestPost(
+                channelId: newChannel.id ?? "",
+                postId: createdPostId,
+                artworkUrl: artworkUrl
+            )
+
+            // Clear state and mark as created
+            stopPreview()
+            postCreated = true
+            errorMessage = nil
+            newChannelName = ""
+            showingCreateChannelSheet = false
+
+            // フィード更新通知を発行
+            NotificationCenter.default.post(name: Foundation.Notification.Name.postCreated, object: nil)
+
+            // チャンネル作成通知を発行
+            NotificationCenter.default.post(name: Foundation.Notification.Name("ChannelCreated"), object: nil)
+
+            // Reload channels
+            await loadUserChannels()
+
+            // Reset form
+            resetForm()
+        } catch {
+            errorMessage = "作成に失敗しました: \(error.localizedDescription)"
+            postCreated = false
+        }
+
+        isPosting = false
+    }
+
+    func createPost() async {
+        isPosting = true
+        errorMessage = nil
+
+        do {
+            // Get current user ID
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
+                errorMessage = "認証エラー"
+                isPosting = false
+                return
+            }
+
+            // Validate channel selection
+            guard let channel = selectedChannel else {
+                errorMessage = "チャンネルを選択してください"
+                isPosting = false
+                return
+            }
+
+            // Validate channel ID
+            guard let channelId = channel.id, !channelId.isEmpty else {
+                errorMessage = "無効なチャンネルです。チャンネルリストを更新してください。"
+                isPosting = false
+                // Reload channels to fix inconsistency
+                await loadUserChannels()
+                return
+            }
+
+            // Validate comment
+            let trimmedComment = comment.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmedComment.isEmpty {
+                errorMessage = "紹介文を入力してください"
+                isPosting = false
+                return
+            }
+
+            if trimmedComment.count > 50 {
+                errorMessage = "紹介文は50文字以内で入力してください"
+                isPosting = false
+                return
+            }
+
+            // Validate song selection
+            guard let song = selectedSong else {
+                errorMessage = "曲が選択されていません"
                 isPosting = false
                 return
             }
@@ -247,24 +427,48 @@ class CreatePostViewModel: ObservableObject {
             // Get artwork URL
             let artworkUrl = song.artwork?.url(width: 600, height: 600)?.absoluteString
 
-            // Fixed 30-second preview (0 to 30 seconds)
-            let startTime: Double = 0
-            let endTime: Double = 30
+            // Get artist image URL
+            var artistImageUrl: String? = nil
+            if let artist = song.artists?.first {
+                do {
+                    let artistRequest = MusicCatalogResourceRequest<Artist>(matching: \.id, equalTo: artist.id)
+                    let artistResponse = try await artistRequest.response()
+                    if let fetchedArtist = artistResponse.items.first {
+                        artistImageUrl = fetchedArtist.artwork?.url(width: 1000, height: 1000)?.absoluteString
+                    }
+                } catch {
+                    print("⚠️ Failed to fetch artist artwork: \(error)")
+                }
+            }
 
-            let request = CreatePostRequest(
-                appleMusicTrackId: trackId,
-                trackName: trackName,
-                artistName: artistName,
+            // Create music post with channel info (only IDs, no denormalized data)
+            let post = Post(
+                userId: currentUserId,
+                channelId: channel.id,
+                appleMusicTrackId: song.id.rawValue,
+                trackName: song.title,
+                artistName: song.artistName,
                 albumName: song.albumTitle,
                 artworkUrl: artworkUrl,
+                artistImageUrl: artistImageUrl,
                 previewUrl: previewURL,
                 appleMusicUrl: song.url?.absoluteString,
                 comment: trimmedComment,
-                startTime: startTime,
-                endTime: endTime
+                startTime: 0,
+                endTime: 30
             )
 
-            _ = try await APIClient.shared.createPost(request: request)
+            // Create post in Firestore
+            let createdPostId = try await FirestorePostManager.shared.createPost(post)
+
+            // Update channel's latest post info
+            if let channelId = channel.id {
+                try await FirestoreChannelManager.shared.updateChannelLatestPost(
+                    channelId: channelId,
+                    postId: createdPostId,
+                    artworkUrl: artworkUrl
+                )
+            }
 
             // Clear state and mark as created
             stopPreview()
@@ -275,35 +479,21 @@ class CreatePostViewModel: ObservableObject {
             NotificationCenter.default.post(name: Foundation.Notification.Name.postCreated, object: nil)
 
             // Reset form
-            selectedSong = nil
-            comment = ""
-            searchQuery = ""
-            searchResults = []
-        } catch APIError.unauthorized {
-            errorMessage = "認証エラー"
-            postCreated = false
-        } catch APIError.invalidResponse {
-            errorMessage = "サーバーエラー"
-            postCreated = false
-        } catch APIError.decodingFailed {
-            errorMessage = "紹介は成功しましたが、表示に問題があります"
-            // Still mark as created since post was likely successful
-            postCreated = true
-
-            // フィード更新通知を発行
-            NotificationCenter.default.post(name: Foundation.Notification.Name.postCreated, object: nil)
-
-            // Reset form
-            stopPreview()
-            selectedSong = nil
-            comment = ""
-            searchQuery = ""
-            searchResults = []
+            resetForm()
         } catch {
-            errorMessage = "紹介に失敗しました"
+            errorMessage = "紹介に失敗しました: \(error.localizedDescription)"
             postCreated = false
         }
 
         isPosting = false
+    }
+
+    private func resetForm() {
+        selectedSong = nil
+        comment = ""
+        searchQuery = ""
+        searchResults = []
+        newChannelName = ""
+        selectedChannel = nil
     }
 }

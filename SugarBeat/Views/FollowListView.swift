@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 enum FollowListType {
     case following
@@ -6,7 +7,7 @@ enum FollowListType {
 }
 
 struct FollowListView: View {
-    let userId: Int64
+    let userId: String
     let listType: FollowListType
     @StateObject private var viewModel = FollowListViewModel()
     @Environment(\.dismiss) private var dismiss
@@ -45,8 +46,10 @@ struct FollowListView: View {
                 ScrollView {
                     LazyVStack(spacing: 12) {
                         ForEach(viewModel.users) { user in
-                            NavigationLink(destination: UserProfileView(userId: user.id)) {
-                                FollowListRow(user: user)
+                            if let userId = user.id {
+                                NavigationLink(destination: UserProfileView(userId: userId)) {
+                                    FollowListRow(user: user)
+                                }
                             }
                         }
                     }
@@ -68,18 +71,14 @@ struct FollowListRow: View {
     var body: some View {
         HStack(spacing: 12) {
             // Profile image
-            AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(user.profileImageUrl) ?? "")) { image in
+            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
                 image
                     .resizable()
                     .scaledToFill()
             } placeholder: {
-                Circle()
-                    .fill(Color.gray.opacity(0.3))
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .font(.system(size: 20))
-                            .foregroundColor(.white.opacity(0.6))
-                    )
+                Image("recoreco")
+                    .resizable()
+                    .scaledToFill()
             }
             .frame(width: 50, height: 50)
             .clipShape(Circle())
@@ -87,10 +86,10 @@ struct FollowListRow: View {
             // User info
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                    Image(systemName: "network")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.6))
-                    Text(user.displayName)
+                    Text(user.username)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                 }
@@ -126,16 +125,16 @@ class FollowListViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    func loadUsers(userId: Int64, listType: FollowListType) async {
+    func loadUsers(userId: String, listType: FollowListType) async {
         isLoading = true
         errorMessage = nil
 
         do {
             switch listType {
             case .following:
-                users = try await APIClient.shared.getFollowing(userId: userId)
+                users = try await FirestoreFollowManager.shared.getFollowing(userId: userId)
             case .followers:
-                users = try await APIClient.shared.getFollowers(userId: userId)
+                users = try await FirestoreFollowManager.shared.getFollowers(userId: userId)
             }
         } catch {
             errorMessage = error.localizedDescription

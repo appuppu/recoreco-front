@@ -1,280 +1,496 @@
 import SwiftUI
+import FirebaseAuth
 
 struct ProfileView: View {
     @StateObject private var viewModel = ProfileViewModel()
-    @State private var showingEditProfile = false
-    @State private var showingBlockedUsers = false
-    @State private var showingOnboarding = false
-    @State private var showingDeleteConfirmation = false
-    @State private var showingUrlConfirmation = false
-    @State private var urlToOpen: URL?
-    @State private var urlTitle: String = ""
-    @Environment(\.dismiss) private var dismiss
+    @State private var showingSettings = false
+    @State private var editingChannel: Channel?
+    @State private var selectedChannelId: String?
     @EnvironmentObject var authManager: AuthManager
+    @Binding var selectedTab: Int
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.orange.opacity(0.8),
-                        Color.red.opacity(0.6),
-                        Color.black
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+        ZStack {
+            // Background
+            Color.black
                 .ignoresSafeArea()
 
-                if viewModel.isLoading {
-                    ProgressView()
-                        .tint(.white)
-                } else if let user = viewModel.currentUser {
-                    ScrollView {
-                        VStack(spacing: 24) {
+            if viewModel.isLoading {
+                ProgressView()
+                    .tint(.white)
+            } else if let user = viewModel.currentUser {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Profile Header
+                        VStack(spacing: 12) {
                             // Profile Image
                             if let imageUrl = user.profileImageUrl {
-                                AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(imageUrl) ?? "")) { image in
+                                AsyncImage(url: URL(string: imageUrl)) { image in
                                     image
                                         .resizable()
                                         .scaledToFill()
                                 } placeholder: {
-                                    Circle()
-                                        .fill(Color.white.opacity(0.2))
-                                        .overlay(
-                                            Image(systemName: "person.fill")
-                                                .font(.system(size: 40))
-                                                .foregroundColor(.white.opacity(0.5))
-                                        )
+                                    Image("recoreco")
+                                        .resizable()
+                                        .scaledToFill()
                                 }
-                                .frame(width: 120, height: 120)
+                                .frame(width: 80, height: 80)
                                 .clipShape(Circle())
                             } else {
-                                Circle()
-                                    .fill(Color.white.opacity(0.2))
-                                    .frame(width: 120, height: 120)
-                                    .overlay(
-                                        Image(systemName: "person.fill")
-                                            .font(.system(size: 40))
-                                            .foregroundColor(.white.opacity(0.5))
-                                    )
+                                Image("recoreco")
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 80, height: 80)
+                                    .clipShape(Circle())
                             }
 
                             // Display Name
-                            Text(user.displayName)
-                                .font(.system(size: 24, weight: .bold))
+                            Text(user.username)
+                                .font(.system(size: 20, weight: .bold))
                                 .foregroundColor(.white)
 
                             // Bio
                             if let bio = user.bio, !bio.isEmpty {
                                 Text(bio)
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.white.opacity(0.8))
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white.opacity(0.7))
                                     .multilineTextAlignment(.center)
                                     .padding(.horizontal, 32)
                             }
+                        }
+                        .padding(.top, 16)
 
-                            // Edit Profile Button
-                            Button(action: {
-                                showingEditProfile = true
-                            }) {
-                                Text("プロフィールを編集")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.white.opacity(0.2))
-                                    .cornerRadius(10)
-                            }
-                            .padding(.horizontal, 32)
-                            .padding(.top, 16)
-
-                            // Public/Private Toggle
+                        // Channels Section
+                        VStack(alignment: .leading, spacing: 16) {
                             HStack {
-                                Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
-                                    .font(.system(size: 20))
+                                Text("マイチャンネル")
+                                    .font(.system(size: 20, weight: .bold))
                                     .foregroundColor(.white)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("\(user.isPublic == true ? "公開アカウント" : "非公開アカウント")（現在）")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.white)
-                                    Text(user.isPublic == true ? "すべてのユーザーがあなたの投稿を閲覧できます" : "相互フォローのユーザーのみ閲覧できます")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.white.opacity(0.6))
-                                }
                                 Spacer()
-                                Toggle("", isOn: Binding(
-                                    get: { user.isPublic ?? false },
-                                    set: { newValue in
-                                        Task {
-                                            await viewModel.updatePublicStatus(isPublic: newValue)
-                                        }
+                            }
+                            .padding(.horizontal)
+
+                            if viewModel.isLoadingChannels {
+                                HStack {
+                                    ProgressView()
+                                        .tint(.white)
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                            } else if viewModel.channels.isEmpty {
+                                VStack(spacing: 12) {
+                                    Image(systemName: "music.note.house")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.white.opacity(0.4))
+                                    Text("まだチャンネルがありません")
+                                        .font(.subheadline)
+                                        .foregroundColor(.white.opacity(0.6))
+                                    Button(action: {
+                                        selectedTab = 2
+                                    }) {
+                                        Text("投稿する")
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 24)
+                                            .padding(.vertical, 10)
+                                            .background(Color.blue)
+                                            .cornerRadius(8)
                                     }
-                                ))
-                                .labelsHidden()
-                            }
-                            .padding()
-                            .background(Color.white.opacity(0.1))
-                            .cornerRadius(10)
-                            .padding(.horizontal, 32)
-
-                            // Blocked Users Button
-                            Button(action: {
-                                showingBlockedUsers = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "hand.raised.fill")
-                                        .font(.system(size: 16))
-                                    Text("ブロックしたユーザー")
-                                        .font(.system(size: 16, weight: .medium))
                                 }
-                                .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(10)
-                            }
-                            .padding(.horizontal, 32)
-
-                            // Tutorial Button
-                            Button(action: {
-                                showingOnboarding = true
-                            }) {
-                                HStack {
-                                    Image(systemName: "questionmark.circle.fill")
-                                        .font(.system(size: 16))
-                                    Text("使い方を見る")
-                                        .font(.system(size: 16, weight: .medium))
+                                .padding(.vertical, 24)
+                            } else {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(viewModel.channels) { channel in
+                                        ChannelListRow(
+                                            channel: channel,
+                                            onTap: {
+                                                selectedChannelId = channel.id
+                                            },
+                                            onEdit: {
+                                                editingChannel = channel
+                                            },
+                                            onDelete: {
+                                                Task {
+                                                    if let channelId = channel.id {
+                                                        await viewModel.deleteChannel(channelId: channelId)
+                                                    }
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(10)
+                                .padding(.horizontal)
                             }
-                            .padding(.horizontal, 32)
-
-                            // Logout Button
-                            Button(action: {
-                                authManager.logout()
-                            }) {
-                                Text("ログアウト")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.white.opacity(0.1))
-                                    .cornerRadius(10)
-                            }
-                            .padding(.horizontal, 32)
-
-                            // Delete Account Button
-                            Button(action: {
-                                showingDeleteConfirmation = true
-                            }) {
-                                Text("アカウントを削除")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.red)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.white.opacity(0.1))
-                                    .cornerRadius(10)
-                            }
-                            .padding(.horizontal, 32)
-
-                            // Terms and Privacy links
-                            HStack(spacing: 20) {
-                                Button(action: {
-                                    urlTitle = "利用規約"
-                                    urlToOpen = URL(string: "https://appuppu.github.io/docs/terms.html")
-                                    showingUrlConfirmation = true
-                                }) {
-                                    Text("利用規約")
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.7))
-                                        .underline()
-                                }
-
-                                Text("・")
-                                    .foregroundColor(.white.opacity(0.5))
-
-                                Button(action: {
-                                    urlTitle = "プライバシーポリシー"
-                                    urlToOpen = URL(string: "https://appuppu.github.io/docs/privacy.html")
-                                    showingUrlConfirmation = true
-                                }) {
-                                    Text("プライバシーポリシー")
-                                        .font(.system(size: 13))
-                                        .foregroundColor(.white.opacity(0.7))
-                                        .underline()
-                                }
-                            }
-                            .padding(.top, 10)
-                            .padding(.bottom, 32)
                         }
                         .padding(.top, 32)
                     }
-                } else {
-                    Text("プロフィールの読み込みに失敗しました")
+                }
+            } else {
+                Text("プロフィールの読み込みに失敗しました")
+                    .foregroundColor(.white)
+            }
+        }
+        .navigationTitle("プロフィール")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    showingSettings = true
+                }) {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 20))
                         .foregroundColor(.white)
                 }
             }
-            .navigationTitle("プロフィール")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar(content: {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("閉じる") {
-                        dismiss()
+        }
+        .sheet(isPresented: $showingSettings) {
+            if #available(iOS 16.4, *) {
+                SettingsView()
+                    .presentationBackground(Color.clear)
+                    .background(Color.black)
+            } else {
+                SettingsView()
+                    .background(Color.black)
+            }
+        }
+        .sheet(item: $editingChannel) { channel in
+            if #available(iOS 16.4, *) {
+                EditChannelView(channel: channel, onUpdate: {
+                    Task {
+                        await viewModel.loadChannels()
                     }
-                    .foregroundColor(.white)
-                }
-            })
-        }
-        .sheet(isPresented: $showingEditProfile, onDismiss: {
-            Task {
-                await viewModel.loadCurrentUser()
-            }
-        }) {
-            if let user = viewModel.currentUser {
-                ProfileEditView(currentUser: user)
-            }
-        }
-        .sheet(isPresented: $showingBlockedUsers) {
-            BlockedUsersView()
-        }
-        .fullScreenCover(isPresented: $showingOnboarding) {
-            OnboardingView(isPresented: $showingOnboarding)
-        }
-        .alert("アカウントの削除", isPresented: $showingDeleteConfirmation) {
-            Button("キャンセル", role: .cancel) {}
-            Button("削除", role: .destructive) {
-                Task {
-                    do {
-                        try await authManager.deleteAccount()
-                    } catch {
-                        print("❌ Failed to delete account: \(error)")
+                })
+                .presentationBackground(Color.clear)
+                .background(Color.black)
+            } else {
+                EditChannelView(channel: channel, onUpdate: {
+                    Task {
+                        await viewModel.loadChannels()
                     }
-                }
+                })
+                .background(Color.black)
             }
-        } message: {
-            Text("本当にアカウントを削除しますか？この操作は取り消せません。")
         }
-        .alert("外部サイトへ移動", isPresented: $showingUrlConfirmation) {
-            Button("キャンセル", role: .cancel) {}
-            Button("移動する") {
-                if let url = urlToOpen {
-                    UIApplication.shared.open(url)
+        .sheet(isPresented: Binding(
+            get: { selectedChannelId != nil },
+            set: { if !$0 { selectedChannelId = nil } }
+        )) {
+            if let channelId = selectedChannelId {
+                if #available(iOS 16.4, *) {
+                    ChannelDetailView(channelId: channelId)
+                        .presentationBackground(Color.clear)
+                        .background(Color.black)
+                } else {
+                    ChannelDetailView(channelId: channelId)
+                        .background(Color.black)
                 }
-            }
-        } message: {
-            if let url = urlToOpen {
-                Text("\(urlTitle)のページに移動します。\n\n\(url.absoluteString)")
             }
         }
         .task {
             await viewModel.loadCurrentUser()
+            await viewModel.loadChannels()
         }
+    }
+}
+
+// MARK: - Channel Card
+struct ChannelCard: View {
+    let channel: Channel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Channel thumbnail
+            if let artworkUrl = channel.latestPostArtworkUrl,
+               let url = URL(string: artworkUrl) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 140, height: 140)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                    } else {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(LinearGradient(
+                                gradient: Gradient(colors: [Color.purple.opacity(0.3), Color.pink.opacity(0.3)]),
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                            .frame(width: 140, height: 140)
+                            .overlay(
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 40))
+                                    .foregroundColor(.white.opacity(0.5))
+                            )
+                    }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(LinearGradient(
+                        gradient: Gradient(colors: [Color.purple.opacity(0.3), Color.pink.opacity(0.3)]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ))
+                    .frame(width: 140, height: 140)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .font(.system(size: 40))
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
+
+            // Channel info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "music.note.house.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.7))
+                    Text(channel.name)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2.fill")
+                        .font(.caption2)
+                    Text("\(channel.followerCount ?? 0)")
+                        .font(.caption)
+                }
+                .foregroundColor(.white.opacity(0.6))
+            }
+        }
+        .frame(width: 140)
+    }
+}
+
+// MARK: - Channel List Row
+struct ChannelListRow: View {
+    let channel: Channel
+    let onTap: () -> Void
+    let onEdit: () -> Void
+    let onDelete: () -> Void
+    @State private var showingDeleteConfirmation = false
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+            // Channel artwork
+            if let artworkUrl = channel.latestPostArtworkUrl,
+               let url = URL(string: artworkUrl) {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 60, height: 60)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                    } else {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.white.opacity(0.2))
+                            .frame(width: 60, height: 60)
+                            .overlay(
+                                Image(systemName: "music.note")
+                                    .font(.system(size: 24))
+                                    .foregroundColor(.white.opacity(0.5))
+                            )
+                    }
+                }
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.white.opacity(0.2))
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
+
+            // Channel info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "music.note.house.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.7))
+                    Text(channel.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2.fill")
+                        .font(.caption2)
+                    Text("\(channel.followerCount ?? 0)")
+                        .font(.caption)
+                }
+                .foregroundColor(.white.opacity(0.6))
+            }
+
+            Spacer()
+
+            // Edit button
+            Button(action: onEdit) {
+                Image(systemName: "pencil.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            // Delete button
+            Button(action: {
+                showingDeleteConfirmation = true
+            }) {
+                Image(systemName: "trash.circle.fill")
+                    .font(.system(size: 28))
+                    .foregroundColor(.red.opacity(0.7))
+            }
+            .buttonStyle(PlainButtonStyle())
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .padding()
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(12)
+        .alert("チャンネルを削除", isPresented: $showingDeleteConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("削除", role: .destructive) {
+                onDelete()
+            }
+        } message: {
+            Text("このチャンネルを削除してもよろしいですか？チャンネル内のすべての投稿も削除されます。この操作は取り消せません。")
+        }
+    }
+}
+
+// MARK: - Edit Channel View
+struct EditChannelView: View {
+    let channel: Channel
+    let onUpdate: () -> Void
+    @Environment(\.dismiss) var dismiss
+    @StateObject private var viewModel: EditChannelViewModel
+
+    init(channel: Channel, onUpdate: @escaping () -> Void) {
+        self.channel = channel
+        self.onUpdate = onUpdate
+        _viewModel = StateObject(wrappedValue: EditChannelViewModel(channel: channel))
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                VStack(spacing: 24) {
+                    Text("チャンネル名を編集")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.top, 32)
+
+                    TextField("チャンネル名", text: $viewModel.channelName)
+                        .font(.system(size: 16))
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                        .padding(.horizontal, 24)
+
+                    if let errorMessage = viewModel.errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 24)
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        Task {
+                            await viewModel.updateChannel()
+                            if viewModel.channelUpdated {
+                                onUpdate()
+                                dismiss()
+                            }
+                        }
+                    }) {
+                        if viewModel.isUpdating {
+                            ProgressView()
+                                .tint(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                        } else {
+                            Text("保存")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.white.opacity(0.2))
+                                .cornerRadius(12)
+                        }
+                    }
+                    .disabled(viewModel.isUpdating || viewModel.channelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity((viewModel.isUpdating || viewModel.channelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) ? 0.5 : 1.0)
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 40)
+                }
+            }
+            .navigationTitle("チャンネル編集")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("キャンセル") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Edit Channel ViewModel
+@MainActor
+class EditChannelViewModel: ObservableObject {
+    @Published var channelName: String
+    @Published var isUpdating = false
+    @Published var channelUpdated = false
+    @Published var errorMessage: String?
+
+    private let channel: Channel
+
+    init(channel: Channel) {
+        self.channel = channel
+        self.channelName = channel.name
+    }
+
+    func updateChannel() async {
+        let trimmedName = channelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty else {
+            errorMessage = "チャンネル名を入力してください"
+            return
+        }
+
+        guard let channelId = channel.id else {
+            errorMessage = "チャンネルIDが見つかりません"
+            return
+        }
+
+        isUpdating = true
+        errorMessage = nil
+
+        do {
+            try await FirestoreChannelManager.shared.updateChannel(channelId: channelId, name: trimmedName)
+            channelUpdated = true
+            print("✅ Channel updated successfully")
+        } catch {
+            print("❌ Failed to update channel: \(error)")
+            errorMessage = "チャンネルの更新に失敗しました"
+        }
+
+        isUpdating = false
     }
 }
 
@@ -282,19 +498,21 @@ struct ProfileView: View {
 class ProfileViewModel: ObservableObject {
     @Published var currentUser: User?
     @Published var isLoading = false
+    @Published var channels: [Channel] = []
+    @Published var isLoadingChannels = false
 
     func loadCurrentUser() async {
         isLoading = true
 
         do {
-            guard let currentUserId = APIClient.shared.currentUserId else {
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
                 print("❌ No current user ID")
                 isLoading = false
                 return
             }
 
-            currentUser = try await APIClient.shared.getUser(id: currentUserId)
-            print("✅ Loaded current user: \(currentUser?.displayName ?? "")")
+            currentUser = try await FirestoreUserManager.shared.getUser(userId: currentUserId)
+            print("✅ Loaded current user: \(currentUser?.username ?? "")")
         } catch {
             print("❌ Failed to load current user: \(error)")
         }
@@ -302,24 +520,30 @@ class ProfileViewModel: ObservableObject {
         isLoading = false
     }
 
-    func updatePublicStatus(isPublic: Bool) async {
-        guard let user = currentUser else { return }
+    func loadChannels() async {
+        isLoadingChannels = true
 
         do {
-            let request = APIClient.UpdateProfileRequest(
-                displayName: user.displayName,
-                profileImageUrl: user.profileImageUrl,
-                bio: user.bio,
-                isPublic: isPublic
-            )
-            currentUser = try await APIClient.shared.updateProfile(request: request)
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
+                isLoadingChannels = false
+                return
+            }
 
-            // Notify FeedView to refresh after public status change
-            NotificationCenter.default.post(name: NSNotification.Name("PublicStatusChanged"), object: nil)
+            channels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+            print("✅ Loaded \(channels.count) channels")
         } catch {
-            print("❌ Failed to update public status: \(error)")
-            // Reload to revert the toggle
-            await loadCurrentUser()
+            print("❌ Failed to load channels: \(error)")
+        }
+
+        isLoadingChannels = false
+    }
+
+    func deleteChannel(channelId: String) async {
+        do {
+            try await FirestoreChannelManager.shared.deleteChannel(channelId: channelId)
+            await loadChannels() // Reload channels
+        } catch {
+            print("❌ Failed to delete channel: \(error)")
         }
     }
 }

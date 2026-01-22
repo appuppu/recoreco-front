@@ -1,4 +1,5 @@
 import SwiftUI
+import AuthenticationServices
 
 struct LoginView: View {
     @EnvironmentObject var authManager: AuthManager
@@ -10,65 +11,19 @@ struct LoginView: View {
     @State private var showSignUp = false
 
     var body: some View {
-        NavigationView {
-            ZStack {
-                // Background gradient
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.orange.opacity(0.8),
-                        Color.red.opacity(0.6),
-                        Color.black
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+        ZStack {
+                // Background - simple black
+                Color.black
+                    .ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     Spacer()
 
-                    // Logo and App Name
-                    VStack(spacing: 16) {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [
-                                            Color.orange.opacity(0.4),
-                                            Color.red.opacity(0.3)
-                                        ]),
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 120, height: 120)
-                                .blur(radius: 20)
-
-                            Image("DiscoveryIcon")
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(width: 80, height: 80)
-                                .clipShape(Circle())
-                        }
-
-                        Text("レコレコ")
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    gradient: Gradient(colors: [
-                                        Color.white,
-                                        Color.white.opacity(0.9)
-                                    ]),
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-
-                        Text("おすすめの音楽を紹介しよう！")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                    .padding(.bottom, 60)
+                    // Title
+                    Text("ログイン")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.bottom, 40)
 
                     // Login Form
                     VStack(spacing: 20) {
@@ -108,15 +63,15 @@ struct LoginView: View {
                             .background(
                                 LinearGradient(
                                     gradient: Gradient(colors: [
-                                        Color.orange,
-                                        Color.red
+                                        Color.purple,
+                                        Color.blue
                                     ]),
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )
                             )
                             .cornerRadius(16)
-                            .shadow(color: Color.orange.opacity(0.5), radius: 10, x: 0, y: 5)
+                            .shadow(color: Color.purple.opacity(0.5), radius: 10, x: 0, y: 5)
                         }
                         .disabled(isLoading || email.isEmpty || password.isEmpty)
                         .opacity((isLoading || email.isEmpty || password.isEmpty) ? 0.6 : 1.0)
@@ -130,6 +85,54 @@ struct LoginView: View {
                                 .foregroundColor(.white.opacity(0.8))
                         }
                         .padding(.top, 8)
+
+                        // Divider
+                        HStack {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.3))
+                                .frame(height: 1)
+                            Text("または")
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                                .padding(.horizontal, 12)
+                            Rectangle()
+                                .fill(Color.white.opacity(0.3))
+                                .frame(height: 1)
+                        }
+                        .padding(.vertical, 20)
+
+                        // Google Sign In Button
+                        Button(action: signInWithGoogle) {
+                            HStack {
+                                Image(systemName: "globe")
+                                    .font(.system(size: 20))
+                                Text("Googleでログイン")
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundColor(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 56)
+                            .background(Color.white)
+                            .cornerRadius(16)
+                        }
+                        .disabled(isLoading)
+                        .opacity(isLoading ? 0.6 : 1.0)
+
+                        // Apple Sign In Button
+                        SignInWithAppleButton(
+                            onRequest: { request in
+                                request.requestedScopes = [.fullName, .email]
+                                let appleRequest = authManager.signInWithApple()
+                                request.nonce = appleRequest.nonce
+                            },
+                            onCompletion: { result in
+                                handleAppleSignIn(result)
+                            }
+                        )
+                        .signInWithAppleButtonStyle(.white)
+                        .frame(height: 56)
+                        .cornerRadius(16)
                     }
                     .padding(.horizontal, UIDevice.current.userInterfaceIdiom == .pad ? 80 : 32)
 
@@ -163,11 +166,14 @@ struct LoginView: View {
                 }
             }
             .navigationBarHidden(true)
-            .sheet(isPresented: $showSignUp) {
+            .fullScreenCover(isPresented: $showSignUp) {
                 SignUpView()
             }
-        }
-        .navigationViewStyle(.stack)
+            .onChange(of: authManager.isAuthenticated) { authenticated in
+                if authenticated && !authManager.needsUsernameSetup {
+                    dismiss()
+                }
+            }
     }
 
     private func login() {
@@ -179,6 +185,47 @@ struct LoginView: View {
                 try await authManager.login(email: email, password: password)
             } catch {
                 errorMessage = "ログインに失敗しました"
+            }
+            isLoading = false
+        }
+    }
+
+    private func signInWithGoogle() {
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let viewController = windowScene.windows.first?.rootViewController else {
+            errorMessage = "エラーが発生しました"
+            return
+        }
+
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                try await authManager.signInWithGoogle(presenting: viewController)
+                // Don't dismiss here - onChange will handle it
+            } catch {
+                errorMessage = "Googleログインに失敗しました"
+            }
+            isLoading = false
+        }
+    }
+
+    private func handleAppleSignIn(_ result: Result<ASAuthorization, Error>) {
+        isLoading = true
+        errorMessage = nil
+
+        Task {
+            do {
+                switch result {
+                case .success(let authorization):
+                    try await authManager.handleAppleSignInCompletion(authorization)
+                    // Don't dismiss here - onChange will handle it
+                case .failure(let error):
+                    throw error
+                }
+            } catch {
+                errorMessage = "Appleログインに失敗しました"
             }
             isLoading = false
         }

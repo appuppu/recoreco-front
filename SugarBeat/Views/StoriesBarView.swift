@@ -85,7 +85,7 @@ struct StoryThumbnailView: View {
                 }
             }
 
-            Text(userPosts.user.displayName)
+            Text(userPosts.user.username)
                 .font(.caption2)
                 .foregroundColor(.white)
                 .lineLimit(1)

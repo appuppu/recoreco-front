@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct UserPostsView: View {
-    let userId: Int64
+    let userId: String
     let userName: String
     @StateObject private var viewModel = UserProfileViewModel()
     @Environment(\.dismiss) private var dismiss
@@ -63,11 +63,11 @@ struct UserPostRow: View {
             .cornerRadius(8)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(post.trackName)
+                Text(post.contentTitle ?? post.trackName ?? "")
                     .font(.headline)
                     .lineLimit(1)
 
-                Text(post.artistName)
+                Text(post.contentDescription ?? post.artistName ?? "")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                     .lineLimit(1)

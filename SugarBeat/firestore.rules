@@ -1,0 +1,316 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ========================================
+    // Helper Functions
+    // ========================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser() {
+      return isAuthenticated() &&
+             request.resource.data.keys().hasAll(['username', 'email', 'displayName', 'isPublic', 'createdAt', 'updatedAt', 'followingCount', 'followerCount', 'postCount']);
+    }
+
+    function isValidPost() {
+      return isAuthenticated() &&
+             request.resource.data.keys().hasAll(['userId', 'appleMusicTrackId', 'trackName', 'artistName', 'createdAt', 'updatedAt']);
+    }
+
+    // ========================================
+    // Users Collection
+    // ========================================
+
+    match /users/{userId} {
+      // Anyone can read user profiles (including unauthenticated users)
+      allow read: if true;
+
+      // Users can create their own profile
+      allow create: if isOwner(userId) && isValidUser();
+
+      // Users can update their own profile
+      allow update: if isOwner(userId) &&
+                       // Can only update specific fields
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['displayName', 'profileImageUrl', 'bio', 'isPublic', 'updatedAt', 'followingCount', 'followerCount', 'postCount']);
+
+      // Users can delete their own profile
+      allow delete: if isOwner(userId);
+
+      // ========================================
+      // Followers Subcollection
+      // ========================================
+      match /followers/{followerId} {
+        // Anyone can read followers list
+        allow read: if isAuthenticated();
+
+        // Anyone can add/remove followers (managed by app logic)
+        allow write: if isAuthenticated();
+      }
+
+      // ========================================
+      // Following Subcollection (users)
+      // ========================================
+      match /following/{followingId} {
+        // Anyone can read following list
+        allow read: if isAuthenticated();
+
+        // Anyone can add/remove following (managed by app logic)
+        allow write: if isAuthenticated();
+      }
+
+      // ========================================
+      // Following Channels Subcollection
+      // ========================================
+      match /followingChannels/{channelId} {
+        // Anyone can read following channels list
+        allow read: if isAuthenticated();
+
+        // Anyone can add/remove following channels (managed by app logic)
+        allow write: if isAuthenticated();
+      }
+
+      // ========================================
+      // Read Posts Subcollection (for unread tracking)
+      // ========================================
+      match /readPosts/{postId} {
+        // Users can read their own read posts
+        allow read: if isOwner(userId);
+
+        // Users can mark posts as read
+        allow create: if isOwner(userId);
+
+        // No update or delete (create only)
+        allow update, delete: if false;
+      }
+    }
+
+    // ========================================
+    // Posts Collection
+    // ========================================
+
+    match /posts/{postId} {
+      // Anyone can read posts (including unauthenticated users for discovery feed)
+      allow read: if true;
+
+      // Users can create posts
+      allow create: if isAuthenticated() &&
+                       isValidPost() &&
+                       request.resource.data.userId == request.auth.uid;
+
+      // Users can update their own posts (comment only)
+      // Also allow updating commentCount and likeCount (for automated counters)
+      allow update: if isAuthenticated() &&
+                       (isOwner(resource.data.userId) &&
+                        request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly(['comment', 'updatedAt'])) ||
+                       (request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly(['commentCount']) ||
+                        request.resource.data.diff(resource.data).affectedKeys()
+                          .hasOnly(['likeCount']));
+
+      // Users can delete their own posts
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+
+      // ========================================
+      // Likes Subcollection
+      // ========================================
+      match /likes/{userId} {
+        // Anyone can read likes
+        allow read: if isAuthenticated();
+
+        // Users can like posts (their own userId)
+        allow create: if isAuthenticated() && isOwner(userId);
+
+        // Users can unlike posts (their own userId)
+        allow delete: if isAuthenticated() && isOwner(userId);
+
+        // No update
+        allow update: if false;
+      }
+
+      // ========================================
+      // Comments Subcollection
+      // ========================================
+      match /comments/{commentId} {
+        // Anyone can read comments
+        allow read: if isAuthenticated();
+
+        // Users can create comments
+        allow create: if isAuthenticated() &&
+                         request.resource.data.userId == request.auth.uid;
+
+        // Users can update their own comments
+        allow update: if isAuthenticated() &&
+                         isOwner(resource.data.userId) &&
+                         request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['content', 'updatedAt']);
+
+        // Users can delete their own comments OR post owner can delete any comment
+        allow delete: if isAuthenticated() &&
+                         (isOwner(resource.data.userId) ||
+                          isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.userId));
+
+        // ========================================
+        // Comment Likes Subcollection
+        // ========================================
+        match /likes/{userId} {
+          // Anyone can read comment likes
+          allow read: if isAuthenticated();
+
+          // Users can like comments (their own userId)
+          allow create: if isAuthenticated() && isOwner(userId);
+
+          // Users can unlike comments (their own userId)
+          allow delete: if isAuthenticated() && isOwner(userId);
+
+          // No update
+          allow update: if false;
+        }
+      }
+    }
+
+    // ========================================
+    // Notifications Collection
+    // ========================================
+
+    match /notifications/{notificationId} {
+      // Users can only read their own notifications
+      allow read: if isAuthenticated() && isOwner(resource.data.recipientId);
+
+      // Anyone can create notifications (managed by app logic)
+      allow create: if isAuthenticated();
+
+      // Users can update their own notifications (mark as read)
+      allow update: if isAuthenticated() &&
+                       isOwner(resource.data.recipientId) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['isRead']);
+
+      // Users can delete their own notifications
+      allow delete: if isAuthenticated() && isOwner(resource.data.recipientId);
+    }
+
+    // ========================================
+    // Blocks Collection
+    // ========================================
+
+    match /blocks/{blockId} {
+      // Users can read their own blocks
+      allow read: if isAuthenticated() &&
+                     (isOwner(resource.data.blockerId) || isOwner(resource.data.blockedId));
+
+      // Users can block other users
+      allow create: if isAuthenticated() &&
+                       request.resource.data.blockerId == request.auth.uid;
+
+      // Users can unblock (delete their own blocks)
+      allow delete: if isAuthenticated() && isOwner(resource.data.blockerId);
+
+      // No update
+      allow update: if false;
+    }
+
+    // ========================================
+    // Reports Collection (Admin only in production)
+    // ========================================
+
+    match /reports/{reportId} {
+      // No read access for regular users (admin only)
+      allow read: if false;
+
+      // Users can create reports
+      allow create: if isAuthenticated() &&
+                       request.resource.data.reporterId == request.auth.uid &&
+                       request.resource.data.status == 'pending';
+
+      // No update or delete for regular users (admin only)
+      allow update, delete: if false;
+    }
+
+    // ========================================
+    // Channels Collection
+    // ========================================
+
+    match /channels/{channelId} {
+      // Anyone can read channels (including unauthenticated users for discovery)
+      allow read: if true;
+
+      // Users can create their own channels
+      allow create: if isAuthenticated() &&
+                       request.resource.data.userId == request.auth.uid &&
+                       request.resource.data.keys().hasAll(['userId', 'name', 'createdAt', 'updatedAt']);
+
+      // Users can update their own channels
+      allow update: if isAuthenticated() &&
+                       isOwner(resource.data.userId) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['name', 'updatedAt', 'latestPostId', 'latestPostAt', 'latestPostArtworkUrl']);
+
+      // Users can delete their own channels
+      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+
+      // ========================================
+      // Channel Followers Subcollection
+      // ========================================
+      match /followers/{followerId} {
+        // Anyone can read channel followers
+        allow read: if isAuthenticated();
+
+        // Users can follow channels
+        allow create: if isAuthenticated();
+
+        // Channel owner can delete followers when deleting channel
+        allow delete: if isAuthenticated() &&
+                         (isOwner(followerId) ||
+                          isOwner(get(/databases/$(database)/documents/channels/$(channelId)).data.userId));
+
+        // No update
+        allow update: if false;
+      }
+    }
+
+    // ========================================
+    // Channel Follows Collection
+    // ========================================
+
+    match /channelFollows/{channelId} {
+      // Anyone can read channel follows
+      allow read: if isAuthenticated();
+
+      // Allow creating/deleting the channel follows document
+      allow create, delete: if isAuthenticated();
+
+      // No update
+      allow update: if false;
+
+      // ========================================
+      // Followers Subcollection (under channelFollows)
+      // ========================================
+      match /followers/{followerId} {
+        // Anyone can read followers
+        allow read: if isAuthenticated();
+
+        // Users can follow/unfollow
+        allow create, delete: if isAuthenticated();
+
+        // No update
+        allow update: if false;
+      }
+    }
+
+    // ========================================
+    // Default: Deny all other access
+    // ========================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

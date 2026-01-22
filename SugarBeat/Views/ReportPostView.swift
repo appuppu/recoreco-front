@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 struct ReportPostView: View {
     let post: Post
@@ -85,8 +86,13 @@ struct ReportPostView: View {
         isSubmitting = true
 
         do {
-            try await APIClient.shared.reportPost(
-                postId: post.id,
+            guard let postId = post.id else {
+                errorMessage = "Invalid post ID"
+                isSubmitting = false
+                return
+            }
+            try await FirestoreReportManager.shared.reportPost(
+                postId: postId,
                 reason: selectedReason,
                 description: description.isEmpty ? nil : description
             )

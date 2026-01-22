@@ -1,5 +1,6 @@
 import SwiftUI
 import Photos
+import FirebaseAuth
 
 struct ProfileEditView: View {
     @Environment(\.dismiss) private var dismiss
@@ -7,14 +8,12 @@ struct ProfileEditView: View {
     @State private var selectedImage: UIImage?
     @State private var pendingImage: UIImage?
     @State private var showingPicker = false
-    @State private var displayName: String = ""
     @State private var bio: String = ""
 
     let currentUser: User
 
     init(currentUser: User) {
         self.currentUser = currentUser
-        _displayName = State(initialValue: currentUser.displayName)
         _bio = State(initialValue: currentUser.bio ?? "")
     }
 
@@ -22,16 +21,7 @@ struct ProfileEditView: View {
         NavigationView {
             ZStack {
                 // Background
-                LinearGradient(
-                    gradient: Gradient(colors: [
-                        Color.orange.opacity(0.8),
-                        Color.red.opacity(0.6),
-                        Color.black
-                    ]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Color.black.ignoresSafeArea()
 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -49,30 +39,23 @@ struct ProfileEditView: View {
                                             .frame(width: 120, height: 120)
                                             .clipShape(Circle())
                                     } else if !viewModel.shouldDeleteImage, let imageUrl = currentUser.profileImageUrl {
-                                        AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(imageUrl) ?? "")) { image in
+                                        AsyncImage(url: URL(string: imageUrl)) { image in
                                             image
                                                 .resizable()
                                                 .scaledToFill()
                                         } placeholder: {
-                                            Circle()
-                                                .fill(Color.white.opacity(0.2))
-                                                .overlay(
-                                                    Image(systemName: "person.fill")
-                                                        .font(.system(size: 40))
-                                                        .foregroundColor(.white.opacity(0.5))
-                                                )
+                                            Image("recoreco")
+                                                .resizable()
+                                                .scaledToFill()
                                         }
                                         .frame(width: 120, height: 120)
                                         .clipShape(Circle())
                                     } else {
-                                        Circle()
-                                            .fill(Color.white.opacity(0.2))
+                                        Image("recoreco")
+                                            .resizable()
+                                            .scaledToFill()
                                             .frame(width: 120, height: 120)
-                                            .overlay(
-                                                Image(systemName: "person.fill")
-                                                    .font(.system(size: 40))
-                                                    .foregroundColor(.white.opacity(0.5))
-                                            )
+                                            .clipShape(Circle())
                                     }
 
                                     // Edit overlay
@@ -109,17 +92,18 @@ struct ProfileEditView: View {
                         }
                         .padding(.top, 32)
 
-                        // Display Name
+                        // Username (read-only)
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("表示名")
+                            Text("ユーザー名")
                                 .font(.system(size: 14, weight: .medium))
                                 .foregroundColor(.white.opacity(0.7))
 
-                            TextField("", text: $displayName)
+                            Text(currentUser.username)
                                 .font(.system(size: 16))
                                 .foregroundColor(.white)
                                 .padding()
-                                .background(Color.white.opacity(0.1))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(Color.white.opacity(0.05))
                                 .cornerRadius(10)
                         }
                         .padding(.horizontal, 20)
@@ -150,11 +134,11 @@ struct ProfileEditView: View {
                             Button(action: {
                                 Task {
                                     await viewModel.saveProfile(
-                                        displayName: displayName,
+                                        displayName: currentUser.username,
                                         bio: bio,
                                         pendingImage: pendingImage,
                                         currentImageUrl: currentUser.profileImageUrl,
-                                        isPublic: currentUser.isPublic
+                                        currentUser: currentUser
                                     )
                                     if viewModel.errorMessage == nil {
                                         dismiss()
@@ -233,13 +217,8 @@ class ProfileEditViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
 
-    func saveProfile(displayName: String, bio: String, pendingImage: UIImage?, currentImageUrl: String?, isPublic: Bool?) async {
+    func saveProfile(displayName: String, bio: String, pendingImage: UIImage?, currentImageUrl: String?, currentUser: User) async {
         // Validate before submitting
-        if displayName.count > 10 {
-            errorMessage = "ユーザー名は10文字以内で入力してください"
-            return
-        }
-
         if bio.count > 20 {
             errorMessage = "プロフィール一言は20文字以内で入力してください"
             return
@@ -254,7 +233,10 @@ class ProfileEditViewModel: ObservableObject {
             // Upload new image if selected
             if let image = pendingImage {
                 print("📤 Uploading new profile image...")
-                let imageUrl = try await uploadImage(image)
+                guard let userId = currentUser.id else {
+                    throw NSError(domain: "ProfileEdit", code: -1, userInfo: [NSLocalizedDescriptionKey: "User ID not found"])
+                }
+                let imageUrl = try await uploadImage(image, userId: userId)
                 print("✅ Image uploaded: \(imageUrl)")
                 profileImageUrl = imageUrl
             } else if shouldDeleteImage {
@@ -263,15 +245,18 @@ class ProfileEditViewModel: ObservableObject {
                 profileImageUrl = nil
             }
 
-            // Update profile
-            let request = APIClient.UpdateProfileRequest(
-                displayName: displayName,
-                profileImageUrl: profileImageUrl,
-                bio: bio.isEmpty ? nil : bio,
-                isPublic: isPublic
-            )
+            // Update profile directly with updateData
+            guard let userId = currentUser.id else {
+                throw NSError(domain: "ProfileEdit", code: -1, userInfo: [NSLocalizedDescriptionKey: "User ID not found"])
+            }
 
-            let _ = try await APIClient.shared.updateProfile(request: request)
+            // Update profile with specific fields
+            try await FirestoreUserManager.shared.updateUserProfile(
+                userId: userId,
+                displayName: displayName,
+                bio: bio.isEmpty ? nil : bio,
+                profileImageUrl: profileImageUrl
+            )
 
             print("✅ Profile updated successfully")
         } catch {
@@ -282,15 +267,13 @@ class ProfileEditViewModel: ObservableObject {
         isLoading = false
     }
 
-    private func uploadImage(_ image: UIImage) async throws -> String {
+    private func uploadImage(_ image: UIImage, userId: String) async throws -> String {
         // EditableImagePickerで既に正方形になっているのでリサイズのみ
-        guard let resizedImage = resize(image: image, targetSize: 500),
-              let imageData = compressImage(resizedImage) else {
+        guard let resizedImage = resize(image: image, targetSize: 500) else {
             throw NSError(domain: "ImageProcessing", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to process image"])
         }
 
-        print("📦 Image data size: \(imageData.count) bytes")
-        return try await APIClient.shared.uploadImage(imageData: imageData)
+        return try await FirebaseStorageManager.shared.uploadProfileImage(resizedImage, userId: userId)
     }
 
     private func resize(image: UIImage, targetSize: CGFloat) -> UIImage? {

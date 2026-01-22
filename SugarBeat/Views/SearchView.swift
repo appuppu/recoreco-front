@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 struct SearchView: View {
     @StateObject private var viewModel = SearchViewModel()
@@ -7,8 +8,10 @@ struct SearchView: View {
         NavigationView {
             VStack {
                 List(viewModel.users) { user in
-                    NavigationLink(destination: UserProfileView(userId: user.id)) {
-                        UserRow(user: user)
+                    if let userId = user.id {
+                        NavigationLink(destination: UserProfileView(userId: userId)) {
+                            UserRow(user: user)
+                        }
                     }
                 }
                 .searchable(text: $viewModel.searchQuery, prompt: "Search users")
@@ -40,23 +43,24 @@ struct UserRow: View {
 
     var body: some View {
         HStack {
-            AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(user.profileImageUrl) ?? "")) { image in
+            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
                 image
                     .resizable()
                     .scaledToFill()
             } placeholder: {
-                Circle()
-                    .fill(Color.gray.opacity(0.3))
+                Image("recoreco")
+                    .resizable()
+                    .scaledToFill()
             }
             .frame(width: 50, height: 50)
             .clipShape(Circle())
 
             VStack(alignment: .leading) {
                 HStack(spacing: 4) {
-                    Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                    Image(systemName: "network")
                         .font(.system(size: 14))
                         .foregroundColor(.secondary)
-                    Text(user.displayName)
+                    Text(user.username)
                         .font(.headline)
                 }
             }

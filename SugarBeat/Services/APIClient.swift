@@ -69,7 +69,7 @@ class APIClient {
     private var baseURL: String { environment.baseURL }
     private var serverBaseURL: String { environment.serverBaseURL }
     private var authToken: String?
-    private(set) var currentUserId: Int64?
+    private(set) var currentUserId: String?  // Changed from Int64 to String
 
     private let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -119,7 +119,7 @@ class APIClient {
         self.authToken = token
     }
 
-    func setCurrentUserId(_ userId: Int64) {
+    func setCurrentUserId(_ userId: String) {
         self.currentUserId = userId
     }
 
@@ -158,6 +158,16 @@ class APIClient {
         return try await performRequest(url: url, method: "POST", body: request, requiresAuth: false)
     }
 
+    func googleAuth(request: GoogleAuthRequest) async throws -> AuthResponse {
+        let url = URL(string: "\(baseURL)/auth/google")!
+        return try await performRequest(url: url, method: "POST", body: request, requiresAuth: false)
+    }
+
+    func appleAuth(request: AppleAuthRequest) async throws -> AuthResponse {
+        let url = URL(string: "\(baseURL)/auth/apple")!
+        return try await performRequest(url: url, method: "POST", body: request, requiresAuth: false)
+    }
+
     func deleteAccount() async throws {
         let url = URL(string: "\(baseURL)/auth/account")!
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
@@ -170,7 +180,7 @@ class APIClient {
         return try await performRequest(url: url, method: "GET")
     }
 
-    func getUser(id: Int64) async throws -> User {
+    func getUser(id: String) async throws -> User {
         let url = URL(string: "\(baseURL)/users/\(id)")!
         return try await performRequest(url: url, method: "GET")
     }
@@ -179,7 +189,6 @@ class APIClient {
         let displayName: String
         let profileImageUrl: String?
         let bio: String?
-        let isPublic: Bool?
     }
 
     func updateProfile(request: UpdateProfileRequest) async throws -> User {
@@ -253,34 +262,34 @@ class APIClient {
         return try await performRequest(url: url, method: "GET", requiresAuth: false)
     }
 
-    func getUserPosts(userId: Int64, page: Int = 0, size: Int = 20, sort: String = "desc") async throws -> [Post] {
+    func getUserPosts(userId: String, page: Int = 0, size: Int = 20, sort: String = "desc") async throws -> [Post] {
         let url = URL(string: "\(baseURL)/posts/user/\(userId)?page=\(page)&size=\(size)&sort=\(sort)")!
         return try await performRequest(url: url, method: "GET")
     }
 
-    func deletePost(postId: Int64) async throws {
+    func deletePost(postId: String) async throws {
         let url = URL(string: "\(baseURL)/posts/\(postId)")!
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
 
     // MARK: - Follow Endpoints
 
-    func followUser(userId: Int64) async throws {
+    func followUser(userId: String) async throws {
         let url = URL(string: "\(baseURL)/follows/\(userId)")!
         let _: EmptyResponse = try await performRequest(url: url, method: "POST")
     }
 
-    func unfollowUser(userId: Int64) async throws {
+    func unfollowUser(userId: String) async throws {
         let url = URL(string: "\(baseURL)/follows/\(userId)")!
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
 
-    func getFollowing(userId: Int64) async throws -> [User] {
+    func getFollowing(userId: String) async throws -> [User] {
         let url = URL(string: "\(baseURL)/follows/\(userId)/following")!
         return try await performRequest(url: url, method: "GET")
     }
 
-    func getFollowers(userId: Int64) async throws -> [User] {
+    func getFollowers(userId: String) async throws -> [User] {
         let url = URL(string: "\(baseURL)/follows/\(userId)/followers")!
         return try await performRequest(url: url, method: "GET")
     }
@@ -292,24 +301,24 @@ class APIClient {
         let isLiked: Bool
     }
 
-    func likePost(postId: Int64) async throws -> LikeResponse {
+    func likePost(postId: String) async throws -> LikeResponse {
         let url = URL(string: "\(baseURL)/posts/\(postId)/likes")!
         return try await performRequest(url: url, method: "POST")
     }
 
-    func unlikePost(postId: Int64) async throws -> LikeResponse {
+    func unlikePost(postId: String) async throws -> LikeResponse {
         let url = URL(string: "\(baseURL)/posts/\(postId)/likes")!
         return try await performRequest(url: url, method: "DELETE")
     }
 
     // MARK: - Block Endpoints
 
-    func blockUser(userId: Int64) async throws {
+    func blockUser(userId: String) async throws {
         let url = URL(string: "\(baseURL)/blocks/\(userId)")!
         let _: EmptyResponse = try await performRequest(url: url, method: "POST")
     }
 
-    func unblockUser(userId: Int64) async throws {
+    func unblockUser(userId: String) async throws {
         let url = URL(string: "\(baseURL)/blocks/\(userId)")!
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
@@ -326,22 +335,22 @@ class APIClient {
         return try await performRequest(url: url, method: "POST", body: request)
     }
 
-    func getComments(postId: Int64) async throws -> [Comment] {
+    func getComments(postId: String) async throws -> [Comment] {
         let url = URL(string: "\(baseURL)/comments/post/\(postId)")!
         return try await performRequest(url: url, method: "GET")
     }
 
-    func deleteComment(commentId: Int64) async throws {
+    func deleteComment(commentId: String) async throws {
         let url = URL(string: "\(baseURL)/comments/\(commentId)")!
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
 
     // MARK: - Report Endpoints
 
-    func reportComment(commentId: Int64, reason: String, description: String?) async throws {
+    func reportComment(commentId: String, reason: String, description: String?) async throws {
         let url = URL(string: "\(baseURL)/reports/comment")!
         struct ReportCommentRequest: Codable {
-            let commentId: Int64
+            let commentId: String
             let reason: String
             let description: String?
         }
@@ -349,10 +358,10 @@ class APIClient {
         let _: EmptyResponse = try await performRequest(url: url, method: "POST", body: body)
     }
 
-    func reportPost(postId: Int64, reason: String, description: String?) async throws {
+    func reportPost(postId: String, reason: String, description: String?) async throws {
         let url = URL(string: "\(baseURL)/reports")!
         struct ReportPostRequest: Codable {
-            let postId: Int64
+            let postId: String
             let reason: String
             let description: String?
         }
@@ -517,7 +526,7 @@ class APIClient {
         return response["count"] ?? 0
     }
 
-    func deleteNotification(notificationId: Int64) async throws {
+    func deleteNotification(notificationId: String) async throws {
         let url = URL(string: "\(baseURL)/notifications/\(notificationId)")!
         let _: EmptyResponse = try await performRequest(url: url, method: "DELETE")
     }
@@ -534,7 +543,7 @@ class APIClient {
         return try await performRequest(url: url, method: "GET")
     }
 
-    func markPostsAsViewed(targetUserId: Int64) async throws {
+    func markPostsAsViewed(targetUserId: String) async throws {
         let url = URL(string: "\(baseURL)/posts/mark-viewed/\(targetUserId)")!
         let _: EmptyResponse = try await performRequest(url: url, method: "PUT")
     }

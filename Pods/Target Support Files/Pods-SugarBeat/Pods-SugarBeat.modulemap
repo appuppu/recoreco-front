@@ -1,6 +1,0 @@
-framework module Pods_SugarBeat {
-  umbrella header "Pods-SugarBeat-umbrella.h"
-
-  export *
-  module * { export * }
-}

@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 struct BlockedUsersView: View {
     @StateObject private var viewModel = BlockedUsersViewModel()
@@ -79,23 +80,20 @@ struct BlockedUserRow: View {
     var body: some View {
         HStack(spacing: 12) {
             // Profile image
-            AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(user.profileImageUrl) ?? "")) { image in
+            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
                 image
                     .resizable()
                     .scaledToFill()
             } placeholder: {
-                Circle()
-                    .fill(Color.white.opacity(0.3))
-                    .overlay(
-                        Image(systemName: "person.fill")
-                            .foregroundColor(.white.opacity(0.6))
-                    )
+                Image("recoreco")
+                    .resizable()
+                    .scaledToFill()
             }
             .frame(width: 50, height: 50)
             .clipShape(Circle())
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(user.displayName)
+                Text(user.username)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.white)
 
@@ -132,7 +130,7 @@ class BlockedUsersViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            blockedUsers = try await APIClient.shared.getBlockedUsers()
+            blockedUsers = try await FirestoreBlockManager.shared.getBlockedUsersDetails()
         } catch {
             errorMessage = "Failed to load blocked users: \(error.localizedDescription)"
         }
@@ -140,9 +138,10 @@ class BlockedUsersViewModel: ObservableObject {
         isLoading = false
     }
 
-    func unblockUser(userId: Int64) async {
+    func unblockUser(userId: String?) async {
+        guard let userId = userId else { return }
         do {
-            try await APIClient.shared.unblockUser(userId: userId)
+            try await FirestoreBlockManager.shared.unblockUser(userId: userId)
             blockedUsers.removeAll { $0.id == userId }
         } catch {
             errorMessage = "Failed to unblock user: \(error.localizedDescription)"

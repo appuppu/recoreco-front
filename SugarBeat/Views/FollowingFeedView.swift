@@ -1,94 +1,130 @@
 import SwiftUI
+import FirebaseAuth
 
-/// フォロー中タブ - フォロー中ユーザーの投稿をグリッド表示（自分の投稿は除外）
+/// フォロー中タブ - フォロー中チャンネルの最新投稿を表示（チャンネルごとに1投稿）
 struct FollowingFeedView: View {
     @StateObject private var viewModel = FollowingFeedViewModel()
     @EnvironmentObject private var authManager: AuthManager
-    @State private var showingLoginPrompt = false
     @State private var showingLoginSheet = false
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-            if !authManager.isAuthenticated {
-                // 未ログイン状態
-                VStack(spacing: 20) {
-                    Image(systemName: "person.2.fill")
-                        .font(.system(size: 60))
-                        .foregroundColor(.white.opacity(0.4))
-                    Text("ログインしてフォロー中の\nユーザーの投稿を見る")
+                if !authManager.isAuthenticated {
+                    // 未ログイン状態
+                    VStack(spacing: 20) {
+                        Image(systemName: "heart.slash")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.4))
+                        Text("ログインしてフォロー中の\nチャンネルの投稿を見る")
+                            .font(.headline)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                        Button("ログイン") {
+                            showingLoginSheet = true
+                        }
+                        .foregroundColor(.purple)
                         .font(.headline)
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                    Button("ログイン") {
-                        showingLoginSheet = true
                     }
-                    .foregroundColor(.purple)
-                    .font(.headline)
-                }
-            } else if viewModel.isLoading && viewModel.posts.isEmpty {
-                ProgressView()
-                    .tint(.white)
-            } else if let errorMessage = viewModel.errorMessage, viewModel.posts.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 50))
-                        .foregroundColor(.red.opacity(0.7))
-                    Text(errorMessage)
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                    Button("再読み込み") {
-                        Task {
-                            await viewModel.loadPosts()
+                } else if viewModel.isLoading && viewModel.channelsWithPosts.isEmpty {
+                    VStack {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(2.0)
+                    }
+                    .onAppear {
+                        print("🔄 [FollowingFeedView] Initial loading ProgressView displayed")
+                    }
+                } else if let errorMessage = viewModel.errorMessage, viewModel.channelsWithPosts.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 50))
+                            .foregroundColor(.red.opacity(0.7))
+                        Text(errorMessage)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                        Button("再読み込み") {
+                            Task {
+                                await viewModel.loadFollowedChannelsPosts()
+                            }
+                        }
+                        .foregroundColor(.purple)
+                    }
+                    .padding()
+                } else if viewModel.channelsWithPosts.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "heart.slash")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.4))
+                        Text("フォロー中のチャンネルの\n投稿がありません")
+                            .font(.headline)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                    }
+                } else {
+                    ZStack {
+                        GeometryReader { geometry in
+                            ScrollView {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(Array(viewModel.channelsWithPosts.enumerated()), id: \.element.channel.id) { index, item in
+                                        if let latestPostId = item.channel.latestPostId {
+                                            ChannelDiscoveryCard(
+                                                channel: item.channel,
+                                                postId: latestPostId
+                                            )
+                                            .padding(.vertical, 4)
+
+                                            // チャンネル間の区切り線
+                                            if index < viewModel.channelsWithPosts.count - 1 {
+                                                Divider()
+                                                    .background(Color.white.opacity(0.2))
+                                                    .padding(.vertical, 4)
+                                            }
+                                        }
+
+                                        // 2チャンネルごとに広告を表示
+                                        if (index + 1) % 2 == 0 && AdConfig.shouldShowAds {
+                                            FeedAdCardView()
+                                                .id("following_ad_\(index)")
+                                                .padding(.vertical, 8)
+                                                .onAppear {
+                                                    print("📢 [FollowingFeedView] Ad view appeared after channel index \(index)")
+                                                }
+                                        }
+                                    }
+                                }
+                                .padding(.top, 4)
+                                .padding(.bottom, 100)
+                            }
+                            .scrollIndicators(.hidden)
+                            .refreshable {
+                                await viewModel.refreshChannels()
+                            }
                         }
                     }
-                    .foregroundColor(.purple)
                 }
-                .padding()
-            } else if viewModel.posts.isEmpty {
-                VStack(spacing: 16) {
-                    Image(systemName: "person.2.slash")
-                        .font(.system(size: 60))
-                        .foregroundColor(.white.opacity(0.4))
-                    Text("フォロー中のユーザーの\n投稿がありません")
-                        .font(.headline)
-                        .foregroundColor(.white.opacity(0.7))
-                        .multilineTextAlignment(.center)
-                }
-            } else {
-                PostGridView(
-                    posts: viewModel.posts,
-                    showingLoginPrompt: $showingLoginPrompt,
-                    showUserInfo: true,
-                    isLoading: viewModel.isLoading,
-                    onRefresh: {
-                        await viewModel.loadPosts(forceRefresh: true)
-                    }
-                )
             }
+            .navigationTitle("フォロー中と自分のチャンネル")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.black.opacity(0.9), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .task {
-            if viewModel.posts.isEmpty && authManager.isAuthenticated {
-                await viewModel.loadPosts()
+            if viewModel.channelsWithPosts.isEmpty && authManager.isAuthenticated {
+                await viewModel.loadFollowedChannelsPosts()
             }
         }
         .onChange(of: authManager.isAuthenticated) { isAuthenticated in
-            if isAuthenticated && viewModel.posts.isEmpty {
+            if isAuthenticated && viewModel.channelsWithPosts.isEmpty {
                 Task {
-                    await viewModel.loadPosts()
+                    await viewModel.loadFollowedChannelsPosts()
                 }
             }
         }
-        .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
-            Button("はい") {
-                showingLoginSheet = true
-            }
-            Button("キャンセル", role: .cancel) {}
-        } message: {
-            Text("この機能を使用するにはログインが必要です")
-        }
-        .sheet(isPresented: $showingLoginSheet) {
+        .fullScreenCover(isPresented: $showingLoginSheet) {
             LoginView()
         }
     }
@@ -97,12 +133,14 @@ struct FollowingFeedView: View {
 // MARK: - ViewModel
 @MainActor
 class FollowingFeedViewModel: ObservableObject {
-    @Published var posts: [Post] = []
+    struct ChannelWithPost {
+        let channel: Channel
+        let post: Post?
+    }
+
+    @Published var channelsWithPosts: [ChannelWithPost] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-
-    private var lastFetchTime: Date?
-    private let cacheValidDuration: TimeInterval = 30 // 30秒キャッシュ
 
     init() {
         // 投稿完了通知を監視
@@ -112,7 +150,18 @@ class FollowingFeedViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                await self?.loadPosts(forceRefresh: true)
+                await self?.loadFollowedChannelsPosts()
+            }
+        }
+
+        // チャンネル作成通知を監視
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name("ChannelCreated"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.loadFollowedChannelsPosts()
             }
         }
 
@@ -122,8 +171,10 @@ class FollowingFeedViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let postId = notification.userInfo?["postId"] as? Int64 {
-                self?.posts.removeAll { $0.id == postId }
+            if let postId = notification.userInfo?["postId"] as? String {
+                Task { @MainActor in
+                    await self?.loadFollowedChannelsPosts()
+                }
             }
         }
 
@@ -133,70 +184,346 @@ class FollowingFeedViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let userId = notification.userInfo?["userId"] as? Int64 {
-                print("🚫 FollowingFeed received block notification for userId: \(userId)")
-                let beforeCount = self?.posts.count ?? 0
-                self?.posts.removeAll { $0.user.id == userId }
-                let afterCount = self?.posts.count ?? 0
-                print("🚫 FollowingFeed posts removed: \(beforeCount - afterCount) posts")
+            if let blockedUserId = notification.userInfo?["blockedUserId"] as? String {
+                Task { @MainActor in
+                    // ブロックされたユーザーのチャンネルを即座に削除
+                    self?.channelsWithPosts.removeAll { $0.channel.userId == blockedUserId }
+                    print("🚫 Removed blocked user's channels from following feed: \(blockedUserId)")
+                }
             }
         }
     }
 
-    func loadPosts(forceRefresh: Bool = false) async {
-        let startTime = Date()
-        let minimumLoadingTime: TimeInterval = 1.5
-
-        // プルリフレッシュの場合はローディング表示
-        if forceRefresh {
-            isLoading = true
-        }
-
-        // キャッシュが有効な場合はスキップ（30秒以内）
-        if let lastFetch = lastFetchTime {
-            let elapsed = Date().timeIntervalSince(lastFetch)
-            if elapsed < cacheValidDuration && !posts.isEmpty {
-                print("📦 Following Feed: Using cache (elapsed: \(Int(elapsed))s)")
-                // キャッシュ使用時もローディングアニメーションを表示
-                if forceRefresh {
-                    try? await Task.sleep(nanoseconds: UInt64(minimumLoadingTime * 1_000_000_000))
-                    isLoading = false
-                }
-                return
-            }
-        }
-
+    func loadFollowedChannelsPosts() async {
+        isLoading = true
         errorMessage = nil
 
         do {
-            // フォロー中のユーザーの投稿を取得
-            let fetchedPosts = try await APIClient.shared.getMutualFollowsFeed()
-
-            // 自分の投稿を除外し、新しい順にソート
-            let currentUserId = AuthManager().currentUser?.userId
-            posts = fetchedPosts
-                .filter { $0.user.id != currentUserId }
-                .sorted { $0.createdAt > $1.createdAt }
-
-            lastFetchTime = Date()
-            print("📥 Following Feed: Loaded \(posts.count) posts (excluded own posts)")
-        } catch let error as NSError {
-            // キャンセルエラー(-999)は無視
-            if error.code == NSURLErrorCancelled {
-                print("⚠️ Following Feed: Request cancelled")
-            } else {
-                errorMessage = "読み込みに失敗しました"
-                print("❌ Following Feed: Failed to load posts: \(error)")
+            // 現在のユーザーIDを取得
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
+                isLoading = false
+                throw FirestorePostError.notAuthenticated
             }
+
+            // ブロック関連ユーザーリストを取得（双方向）
+            let blockedUserIds = (try? await FirestoreBlockManager.shared.getAllBlockRelatedUsers()) ?? []
+
+            // フォロー中のチャンネルを取得
+            var channels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: currentUserId)
+
+            // 自分のチャンネルも取得して追加
+            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+            channels.append(contentsOf: ownChannels)
+
+            // ブロック関連ユーザーのチャンネルを除外（双方向）
+            channels = channels.filter { !blockedUserIds.contains($0.userId) }
+
+            // 最新の投稿順にソート
+            channels.sort { ($0.latestPostAt ?? Date.distantPast) > ($1.latestPostAt ?? Date.distantPast) }
+
+            // チャンネルと投稿のペアを作成
+            channelsWithPosts = channels.map { ChannelWithPost(channel: $0, post: nil) }
+
+            print("📥 Following Feed: Loaded \(channels.count) followed channels")
+        } catch {
+            errorMessage = "読み込みに失敗しました"
+            print("❌ Following Feed: Failed to load channels: \(error)")
         }
 
-        // プルリフレッシュの場合は最低1.5秒間ローディングを表示
-        if forceRefresh {
-            let elapsedTime = Date().timeIntervalSince(startTime)
-            if elapsedTime < minimumLoadingTime {
-                try? await Task.sleep(nanoseconds: UInt64((minimumLoadingTime - elapsedTime) * 1_000_000_000))
+        isLoading = false
+    }
+
+    func refreshChannels() async {
+        // Refresh without setting isLoading to avoid double animation
+        print("🔄 [FollowingFeedViewModel] refreshChannels called - forcing server fetch")
+        errorMessage = nil
+
+        do {
+            // 現在のユーザーIDを取得
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
+                throw FirestorePostError.notAuthenticated
             }
-            isLoading = false
+
+            // ブロック関連ユーザーリストを取得（双方向）
+            let blockedUserIds = (try? await FirestoreBlockManager.shared.getAllBlockRelatedUsers()) ?? []
+
+            // フォロー中のチャンネルを取得（強制的にサーバーから）
+            var channels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: currentUserId, forceRefresh: true)
+
+            // 自分のチャンネルも取得して追加（強制的にサーバーから）
+            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId, forceRefresh: true)
+            channels.append(contentsOf: ownChannels)
+
+            // ブロック関連ユーザーのチャンネルを除外（双方向）
+            channels = channels.filter { !blockedUserIds.contains($0.userId) }
+
+            // 最新の投稿順にソート
+            channels.sort { ($0.latestPostAt ?? Date.distantPast) > ($1.latestPostAt ?? Date.distantPast) }
+
+            // チャンネルと投稿のペアを作成
+            channelsWithPosts = channels.map { ChannelWithPost(channel: $0, post: nil) }
+
+            print("📥 Following Feed: Refreshed \(channels.count) followed channels")
+        } catch {
+            errorMessage = "読み込みに失敗しました"
+            print("❌ Following Feed: Failed to refresh channels: \(error)")
+        }
+    }
+}
+
+// MARK: - Following Post Card
+struct FollowingPostCard: View {
+    let channel: Channel
+    let postId: String
+    @StateObject private var viewModel = ChannelPostsViewModel()
+    @StateObject private var playbackState = PlaybackStateManager.shared
+    @StateObject private var likeState = LikeStateManager.shared
+    @StateObject private var commentState = CommentStateManager.shared
+    @StateObject private var musicKit = MusicKitManager.shared
+    @State private var showingChannelDetail = false
+    @State private var showingComments = false
+    @State private var currentPostIndex: Int = 0
+    @State private var channelOwner: User? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if !viewModel.posts.isEmpty {
+                // Channel Header (clickable)
+                Button(action: {
+                    showingChannelDetail = true
+                }) {
+                    HStack(spacing: 12) {
+                        // Channel thumbnail
+                        if let artworkUrl = channel.latestPostArtworkUrl,
+                           let url = URL(string: artworkUrl) {
+                            AsyncImage(url: url) { phase in
+                                if let image = phase.image {
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 50, height: 50)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                } else {
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .fill(Color.gray.opacity(0.3))
+                                        .frame(width: 50, height: 50)
+                                }
+                            }
+                        } else {
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.gray.opacity(0.3))
+                                .frame(width: 50, height: 50)
+                        }
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(channel.name)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.white)
+
+                            Text("by @\(channelOwner?.username ?? "unknown")")
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.5))
+                        }
+
+                        Spacer()
+
+                        Image(systemName: "chevron.right")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                Divider()
+                    .background(Color.white.opacity(0.2))
+
+                // Posts TabView for horizontal swipe
+                TabView(selection: $currentPostIndex) {
+                    ForEach(Array(viewModel.posts.enumerated()), id: \.element.id) { index, post in
+                        // Post Content
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Artwork
+                            if let artworkUrl = post.artworkUrl, let url = URL(string: artworkUrl) {
+                        ZStack {
+                            AsyncImage(url: url) { phase in
+                                if let image = phase.image {
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(maxWidth: .infinity)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                } else {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                        .aspectRatio(1, contentMode: .fit)
+                                        .frame(maxWidth: .infinity)
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                                        .overlay(
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        )
+                                }
+                            }
+
+                            // Loading indicator when playing
+                            if musicKit.isLoadingPreview && playbackState.isPlaying(post.id ?? "") {
+                                ZStack {
+                                    Color.black.opacity(0.3)
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(1.5)
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                        }
+                    }
+
+                    // Track info
+                    VStack(alignment: .leading, spacing: 4) {
+                        if let trackName = post.trackName {
+                            Text(trackName)
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                        }
+
+                        if let artistName = post.artistName {
+                            Text(artistName)
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+
+                    // Comment
+                    if let comment = post.comment, !comment.isEmpty {
+                        Text(comment)
+                            .font(.body)
+                            .foregroundColor(.white)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    // Action buttons
+                    HStack(spacing: 20) {
+                        // Play button
+                        Button(action: {
+                            Task {
+                                if playbackState.isPlaying(post.id ?? "") {
+                                    musicKit.stopPreview()
+                                    playbackState.stopPlayback()
+                                } else if let previewUrl = post.previewUrl {
+                                    do {
+                                        try await musicKit.playPreviewFromURL(previewUrl, startTime: post.startTime ?? 0)
+                                        playbackState.startPlayback(for: post.id ?? "", userId: post.userId, post: post, user: nil)
+                                    } catch {
+                                        print("Failed to play: \(error)")
+                                    }
+                                }
+                            }
+                        }) {
+                            HStack(spacing: 6) {
+                                Image(systemName: playbackState.currentlyPlayingPostId == post.id ? "pause.circle.fill" : "play.circle.fill")
+                                    .font(.system(size: 22))
+                                Text(playbackState.currentlyPlayingPostId == post.id ? "停止" : "再生")
+                                    .font(.caption)
+                            }
+                            .foregroundColor(.white)
+                        }
+
+                        Spacer()
+
+                        // Like button
+                        Button(action: {
+                            Task {
+                                if let postId = post.id {
+                                    let wasLiked = likeState.isLiked(postId)
+                                    likeState.toggleLike(postId: postId)
+
+                                    do {
+                                        if wasLiked {
+                                            try await FirestoreLikeManager.shared.unlikePost(postId: postId)
+                                        } else {
+                                            try await FirestoreLikeManager.shared.likePost(postId: postId)
+                                        }
+                                    } catch {
+                                        likeState.toggleLike(postId: postId)
+                                        print("Failed to toggle like: \(error)")
+                                    }
+                                }
+                            }
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: likeState.isLiked(post.id ?? "") ? "heart.fill" : "heart")
+                                    .foregroundColor(likeState.isLiked(post.id ?? "") ? .red : .white)
+                                Text("\(likeState.getLikeCount(post.id ?? ""))")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                        }
+
+                        // Comment button
+                        Button(action: {
+                            showingComments = true
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "bubble.right")
+                                    .foregroundColor(.white)
+                                Text("\(commentState.getCommentCount(post.id ?? ""))")
+                                    .font(.caption)
+                                    .foregroundColor(.white.opacity(0.7))
+                            }
+                        }
+                    }
+                        }
+                        .padding(16)
+                        .tag(index)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: 500)
+            } else if viewModel.isLoading {
+                VStack {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(2.0)
+                }
+                .frame(height: 300)
+                .onAppear {
+                    print("🔄 [FollowingFeedView] Channel posts loading ProgressView displayed")
+                }
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .task {
+            if let channelId = channel.id {
+                await viewModel.loadChannelPosts(channelId: channelId, latestPostId: postId)
+            }
+            // Load channel owner info
+            channelOwner = try? await FirestoreUserManager.shared.getUser(userId: channel.userId)
+        }
+        .sheet(isPresented: $showingChannelDetail) {
+            if let channelId = channel.id {
+                if #available(iOS 16.4, *) {
+                    ChannelDetailView(channelId: channelId)
+                        .presentationBackground(Color.black)
+                        .presentationCornerRadius(20)
+                } else {
+                    ChannelDetailView(channelId: channelId)
+                }
+            }
+        }
+        .sheet(isPresented: $showingComments) {
+            if currentPostIndex < viewModel.posts.count {
+                if #available(iOS 16.4, *) {
+                    CommentsView(post: viewModel.posts[currentPostIndex])
+                        .presentationBackground(Color.black)
+                        .presentationCornerRadius(20)
+                } else {
+                    CommentsView(post: viewModel.posts[currentPostIndex])
+                }
+            }
         }
     }
 }

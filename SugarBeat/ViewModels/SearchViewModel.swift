@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import FirebaseAuth
 
 @MainActor
 class SearchViewModel: ObservableObject {
@@ -32,7 +33,7 @@ class SearchViewModel: ObservableObject {
             }
 
             do {
-                users = try await APIClient.shared.searchUsers(query: searchQuery)
+                users = try await FirestoreUserManager.shared.searchUsers(query: searchQuery)
             } catch {
                 if !Task.isCancelled {
                     errorMessage = "Search failed: \(error.localizedDescription)"

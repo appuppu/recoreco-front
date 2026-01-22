@@ -2,7 +2,7 @@ import SwiftUI
 
 struct UserPostsListView: View {
     let allUserPosts: [UserPosts]
-    let unreadCounts: [Int64: Int]
+    let unreadCounts: [String: Int]
     let onUserTapped: (Int) -> Void
     let onDismiss: () -> Void
 
@@ -39,7 +39,7 @@ struct UserPostsListView: View {
                                 UserPostListRow(
                                     userPosts: userPosts,
                                     isCurrentUser: index == 0,
-                                    unreadCount: unreadCounts[userPosts.user.id] ?? 0
+                                    unreadCount: userPosts.user.id.flatMap { unreadCounts[$0] } ?? 0
                                 )
                                 .onTapGesture {
                                     onUserTapped(index)
@@ -109,7 +109,7 @@ struct UserPostListRow: View {
             // User info and comment
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(userPosts.user.displayName)
+                    Text(userPosts.user.username)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.white)
 

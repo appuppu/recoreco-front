@@ -1,9 +1,10 @@
 import Foundation
 import Combine
 import SwiftUI
+import FirebaseAuth
 
 struct UserPosts: Identifiable {
-    let id: Int64 // user ID
+    let id: String // user ID
     let user: User
     var posts: [Post]
 }
@@ -13,11 +14,9 @@ class FeedViewModel: ObservableObject {
     @Published var allUserPosts: [UserPosts] = [] // All users including self, sorted by latest post
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var hasUnreadDiscoveryPosts = false
-    @Published var usersWithUnreadPosts: Set<Int64> = [] // Track users with new posts
+    @Published var usersWithUnreadPosts: Set<String> = [] // Track users with new posts
 
     private var latestPostDate: Date?
-    private var latestDiscoveryPostDate: Date?
     private var pollingTask: Task<Void, Never>?
 
     init() {
@@ -27,14 +26,10 @@ class FeedViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let userId = notification.userInfo?["userId"] as? Int64 {
+            if let userId = notification.userInfo?["blockedUserId"] as? String {
                 print("🚫 FeedViewModel received block notification for userId: \(userId)")
                 // Remove the blocked user from allUserPosts
                 self?.allUserPosts.removeAll { $0.id == userId }
-                // Also remove from discovery posts (id: -1)
-                if let discoveryIndex = self?.allUserPosts.firstIndex(where: { $0.id == -1 }) {
-                    self?.allUserPosts[discoveryIndex].posts.removeAll { $0.user.id == userId }
-                }
                 print("🚫 FeedViewModel: Removed blocked user's posts")
             }
         }
@@ -45,13 +40,13 @@ class FeedViewModel: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let postId = notification.userInfo?["postId"] as? Int64 {
+            if let postId = notification.userInfo?["postId"] as? String {
                 // Remove the deleted post from all user posts
                 for i in 0..<(self?.allUserPosts.count ?? 0) {
                     self?.allUserPosts[i].posts.removeAll { $0.id == postId }
                 }
                 // Remove users with no posts
-                self?.allUserPosts.removeAll { $0.posts.isEmpty && $0.id != -1 }
+                self?.allUserPosts.removeAll { $0.posts.isEmpty }
             }
         }
     }
@@ -61,104 +56,79 @@ class FeedViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            // Load discovery feed (limit to 20 posts for performance)
-            let discoveryPosts = try await APIClient.shared.getDiscoveryFeed(page: 0, size: 20)
-            print("📥 Loaded \(discoveryPosts.count) posts from discovery feed")
-
             // Check if user is authenticated
-            if let currentUserId = APIClient.shared.currentUserId {
-                // Authenticated user: Load all feeds
-                // Load current user's posts (limit to 20 posts for performance)
-                let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId, page: 0, size: 20)
+            if let currentUserId = Auth.auth().currentUser?.uid {
+                // Authenticated user: Load own posts + following posts
+                // Load current user's posts (limit to 50 posts for performance)
+                let (currentUserPostsList, _) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId, limit: 50)
                 print("📥 Loaded \(currentUserPostsList.count) posts for current user \(currentUserId)")
 
-                // Get mutual follows feed
-                let mutualFollowsPosts = try await APIClient.shared.getMutualFollowsFeed()
-                print("📥 Loaded \(mutualFollowsPosts.count) posts from mutual follows")
+                // Get following user IDs
+                let followingIds = try await FirestoreFollowManager.shared.getFollowingIds(userId: currentUserId)
 
-                // Combine current user posts and mutual follows posts
-                let allPosts = currentUserPostsList + mutualFollowsPosts
+                // Get following users' posts
+                let (followingPosts, _) = followingIds.isEmpty ? ([], nil) : try await FirestorePostManager.shared.getFollowingFeed(userIds: followingIds, limit: 100)
+                print("📥 Loaded \(followingPosts.count) posts from following users")
+
+                // Combine current user posts and following posts
+                let allPosts = currentUserPostsList + followingPosts
 
                 // Group posts by user
-                let grouped = Dictionary(grouping: allPosts) { $0.user.id }
+                let grouped = Dictionary(grouping: allPosts) { $0.userId }
+
+                // Batch fetch user info to avoid N+1 queries
+                let userIds = Array(grouped.keys)
+                let users = try await FirestoreUserManager.shared.getUsers(userIds: userIds)
+                let userMap = Dictionary(uniqueKeysWithValues: users.map { ($0.id ?? "", $0) })
 
                 // Create UserPosts for each user and sort by most recent post
-                allUserPosts = grouped.map { userId, userPostsList in
-                    UserPosts(
+                var userPostsArray: [UserPosts] = []
+                for (userId, userPostsList) in grouped {
+                    guard let user = userMap[userId] else { continue }
+                    let sortedPosts = userPostsList.sorted { $0.createdAt > $1.createdAt }
+                    userPostsArray.append(UserPosts(
                         id: userId,
-                        user: userPostsList.first!.user,
-                        posts: userPostsList.sorted { $0.createdAt > $1.createdAt }
-                    )
-                }.sorted {
-                    // Sort by latest post timestamp
-                    $0.posts.first?.createdAt ?? Date.distantPast >
-                    $1.posts.first?.createdAt ?? Date.distantPast
+                        user: user,
+                        posts: sortedPosts
+                    ))
                 }
 
-                // Update latest post date for polling (BEFORE moving current user to front)
+                // Sort by latest post timestamp
+                allUserPosts = userPostsArray.sorted { a, b in
+                    let aDate = a.posts.first?.createdAt ?? Date.distantPast
+                    let bDate = b.posts.first?.createdAt ?? Date.distantPast
+                    return aDate > bDate
+                }
+
+                // Update latest post date for polling
                 latestPostDate = allUserPosts.first?.posts.first?.createdAt
 
-                // Move current user to the front (always first)
-                if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
-                    let currentUser = allUserPosts.remove(at: currentUserIndex)
-                    allUserPosts.insert(currentUser, at: 0)
-                }
+                print("📊 Total users in feed: \(allUserPosts.count)")
             } else {
-                // Unauthenticated user: Only show discovery feed
+                // Unauthenticated user: Show empty feed
                 allUserPosts = []
             }
 
-            // Add discovery feed at the beginning (leftmost) with special ID -1
-            // Always add discovery tab even if there are no posts
-            let discoveryUser = User(
-                id: -1,
-                username: "discovery",
-                email: nil,
-                displayName: "音楽の発見",
-                profileImageUrl: nil,
-                bio: nil,
-                isPublic: nil,
-                createdAt: nil,
-                isFollowing: nil,
-                isFollower: nil,
-                isMutual: nil,
-                followingCount: nil,
-                followerCount: nil
-            )
-            let discoveryUserPosts = UserPosts(
-                id: -1,
-                user: discoveryUser,
-                posts: discoveryPosts.sorted { $0.createdAt > $1.createdAt }
-            )
-            allUserPosts.insert(discoveryUserPosts, at: 0)
-
-            // Update latest discovery post date
-            latestDiscoveryPostDate = discoveryUserPosts.posts.first?.createdAt
-
-            // Update LikeStateManager and CommentStateManager with server data
+            // Update LikeStateManager and CommentStateManager with Firestore data
             for userPosts in allUserPosts {
                 for post in userPosts.posts {
-                    LikeStateManager.shared.updateFromServer(
-                        postId: post.id,
-                        isLiked: post.isLiked ?? false,
-                        count: post.likeCount ?? 0
-                    )
-                    CommentStateManager.shared.updateFromServer(
-                        postId: post.id,
-                        count: post.commentCount ?? 0
-                    )
+                    if let postId = post.id {
+                        LikeStateManager.shared.updateFromServer(
+                            postId: postId,
+                            isLiked: post.isLiked ?? false,
+                            count: post.likeCount ?? 0
+                        )
+                        CommentStateManager.shared.updateFromServer(
+                            postId: postId,
+                            count: post.commentCount ?? 0
+                        )
+                    }
                 }
             }
 
             print("📊 Total users in feed: \(allUserPosts.count)")
 
         } catch {
-            // Ignore cancellation errors (happens when quickly switching between users)
-            if let urlError = error as? URLError, urlError.code == .cancelled {
-                print("⚠️ Feed load cancelled (normal when switching users quickly)")
-                return
-            }
-
             errorMessage = "フィードの読み込みに失敗しました: \(error.localizedDescription)"
             print("❌ Failed to load feed: \(error)")
         }
@@ -203,114 +173,81 @@ class FeedViewModel: ObservableObject {
         }
 
         do {
-            guard let currentUserId = APIClient.shared.currentUserId else {
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
                 return
             }
 
-            // Load discovery feed (only check recent 10 posts for efficiency during polling)
-            let discoveryPosts = try await APIClient.shared.getDiscoveryFeed(page: 0, size: 10)
-
             // Load current user's posts (only check recent 10 posts for efficiency during polling)
-            let currentUserPostsList = try await APIClient.shared.getUserPosts(userId: currentUserId, page: 0, size: 10)
+            let (currentUserPostsList, _) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId, limit: 10)
 
-            // Get mutual follows feed
-            let mutualFollowsPosts = try await APIClient.shared.getMutualFollowsFeed()
+            // Get following user IDs
+            let followingIds = try await FirestoreFollowManager.shared.getFollowingIds(userId: currentUserId)
+
+            // Get following users' posts
+            let (followingPosts, _) = followingIds.isEmpty ? ([], nil) : try await FirestorePostManager.shared.getFollowingFeed(userIds: followingIds, limit: 50)
 
             // Combine posts
-            let allPosts = currentUserPostsList + mutualFollowsPosts
+            let allPosts = currentUserPostsList + followingPosts
 
-            // Check if there are any new posts in follows or discovery
-            let hasNewFollowPosts = allPosts.contains { $0.createdAt > latestDate }
+            // Check if there are any new posts
+            let hasNewPosts = allPosts.contains { $0.createdAt > latestDate }
 
-            let hasNewDiscoveryPosts: Bool
-            if let latestDiscoveryDate = latestDiscoveryPostDate {
-                hasNewDiscoveryPosts = discoveryPosts.contains { $0.createdAt > latestDiscoveryDate }
-            } else {
-                hasNewDiscoveryPosts = !discoveryPosts.isEmpty
-            }
-
-            if hasNewFollowPosts || hasNewDiscoveryPosts {
-                print("🆕 New posts detected (follow: \(hasNewFollowPosts), discovery: \(hasNewDiscoveryPosts)), refreshing feed silently")
-
-                // Set unread flag for discovery if new posts detected
-                if hasNewDiscoveryPosts {
-                    self.hasUnreadDiscoveryPosts = true
-                }
+            if hasNewPosts {
+                print("🆕 New posts detected, refreshing feed silently")
 
                 // Track which users have new posts
-                if hasNewFollowPosts {
-                    var usersWithNewPosts: Set<Int64> = []
-                    for post in allPosts {
-                        if post.createdAt > latestDate {
-                            usersWithNewPosts.insert(post.user.id)
-                        }
+                var usersWithNewPosts: Set<String> = []
+                for post in allPosts {
+                    if post.createdAt > latestDate {
+                        usersWithNewPosts.insert(post.userId)
                     }
-                    self.usersWithUnreadPosts.formUnion(usersWithNewPosts)
                 }
+                self.usersWithUnreadPosts.formUnion(usersWithNewPosts)
 
                 // Group posts by user
-                let grouped = Dictionary(grouping: allPosts) { $0.user.id }
+                let grouped = Dictionary(grouping: allPosts) { $0.userId }
+
+                // Batch fetch user info to avoid N+1 queries
+                let userIds = Array(grouped.keys)
+                let users = try await FirestoreUserManager.shared.getUsers(userIds: userIds)
+                let userMap = Dictionary(uniqueKeysWithValues: users.map { ($0.id ?? "", $0) })
 
                 // Create UserPosts for each user and sort by most recent post
-                allUserPosts = grouped.map { userId, userPostsList in
-                    UserPosts(
+                var userPostsArray: [UserPosts] = []
+                for (userId, userPostsList) in grouped {
+                    guard let user = userMap[userId] else { continue }
+                    let sortedPosts = userPostsList.sorted { $0.createdAt > $1.createdAt }
+                    userPostsArray.append(UserPosts(
                         id: userId,
-                        user: userPostsList.first!.user,
-                        posts: userPostsList.sorted { $0.createdAt > $1.createdAt }
-                    )
-                }.sorted {
-                    $0.posts.first?.createdAt ?? Date.distantPast >
-                    $1.posts.first?.createdAt ?? Date.distantPast
+                        user: user,
+                        posts: sortedPosts
+                    ))
                 }
 
-                // Update latest post date (BEFORE moving current user to front)
+                // Sort by latest post timestamp
+                allUserPosts = userPostsArray.sorted { a, b in
+                    let aDate = a.posts.first?.createdAt ?? Date.distantPast
+                    let bDate = b.posts.first?.createdAt ?? Date.distantPast
+                    return aDate > bDate
+                }
+
+                // Update latest post date
                 latestPostDate = allUserPosts.first?.posts.first?.createdAt
 
-                // Move current user to the front (always first)
-                if let currentUserIndex = allUserPosts.firstIndex(where: { $0.id == currentUserId }) {
-                    let currentUser = allUserPosts.remove(at: currentUserIndex)
-                    allUserPosts.insert(currentUser, at: 0)
-                }
-
-                // Add discovery feed at the beginning (leftmost) with special ID -1
-                // Always add discovery tab even if there are no posts
-                let discoveryUser = User(
-                    id: -1,
-                    username: "discovery",
-                    email: nil,
-                    displayName: "音楽の発見",
-                    profileImageUrl: nil,
-                    bio: nil,
-                    isPublic: nil,
-                    createdAt: nil,
-                    isFollowing: nil,
-                    isFollower: nil,
-                    isMutual: nil,
-                    followingCount: nil,
-                    followerCount: nil
-                )
-                let discoveryUserPosts = UserPosts(
-                    id: -1,
-                    user: discoveryUser,
-                    posts: discoveryPosts.sorted { $0.createdAt > $1.createdAt }
-                )
-                allUserPosts.insert(discoveryUserPosts, at: 0)
-
-                // Update latest discovery post date
-                latestDiscoveryPostDate = discoveryUserPosts.posts.first?.createdAt
-
-                // Update LikeStateManager and CommentStateManager with server data
+                // Update LikeStateManager and CommentStateManager with Firestore data
                 for userPosts in allUserPosts {
                     for post in userPosts.posts {
-                        LikeStateManager.shared.updateFromServer(
-                            postId: post.id,
-                            isLiked: post.isLiked ?? false,
-                            count: post.likeCount ?? 0
-                        )
-                        CommentStateManager.shared.updateFromServer(
-                            postId: post.id,
-                            count: post.commentCount ?? 0
-                        )
+                        if let postId = post.id {
+                            LikeStateManager.shared.updateFromServer(
+                                postId: postId,
+                                isLiked: post.isLiked ?? false,
+                                count: post.likeCount ?? 0
+                            )
+                            CommentStateManager.shared.updateFromServer(
+                                postId: postId,
+                                count: post.commentCount ?? 0
+                            )
+                        }
                     }
                 }
 
@@ -321,10 +258,6 @@ class FeedViewModel: ObservableObject {
 
         } catch {
             // Silently ignore errors during polling
-            if let urlError = error as? URLError, urlError.code == .cancelled {
-                // Normal cancellation, ignore
-                return
-            }
             print("⚠️ Polling error (ignored): \(error.localizedDescription)")
         }
     }

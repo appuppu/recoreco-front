@@ -9,18 +9,20 @@ struct PlayingPostInfo {
 
 @MainActor
 class PlaybackStateManager: ObservableObject {
-    @Published var currentlyPlayingPostId: Int64?
-    @Published var currentlyPlayingUserId: Int64? // Which user's tab is playing
+    @Published var currentlyPlayingPostId: String?
+    @Published var currentlyPlayingUserId: String? // Which user's tab is playing
     @Published var currentlyPlayingInfo: PlayingPostInfo? // Currently playing post info
 
     static let shared = PlaybackStateManager()
 
     private init() {}
 
-    func startPlayback(for postId: Int64, userId: Int64, post: Post, user: User) {
+    func startPlayback(for postId: String, userId: String?, post: Post, user: User?) {
         currentlyPlayingPostId = postId
         currentlyPlayingUserId = userId
-        currentlyPlayingInfo = PlayingPostInfo(post: post, user: user)
+        if let user = user {
+            currentlyPlayingInfo = PlayingPostInfo(post: post, user: user)
+        }
     }
 
     func stopPlayback() {
@@ -29,15 +31,15 @@ class PlaybackStateManager: ObservableObject {
         currentlyPlayingInfo = nil
     }
 
-    func isPlaying(_ postId: Int64) -> Bool {
+    func isPlaying(_ postId: String) -> Bool {
         return currentlyPlayingPostId == postId
     }
 
-    func isPlayingInContext(postId: Int64, userId: Int64) -> Bool {
+    func isPlayingInContext(postId: String, userId: String) -> Bool {
         return currentlyPlayingPostId == postId && currentlyPlayingUserId == userId
     }
 
-    func updatePlaybackContext(userId: Int64) {
+    func updatePlaybackContext(userId: String) {
         currentlyPlayingUserId = userId
     }
 }

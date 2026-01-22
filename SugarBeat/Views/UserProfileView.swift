@@ -1,75 +1,91 @@
 import SwiftUI
+import FirebaseAuth
 
 /// ユーザープロフィール画面 - グリッドレイアウト + 左上にユーザー情報オーバーレイ
 struct UserProfileView: View {
-    let userId: Int64
+    let userId: String
     @StateObject private var viewModel = UserProfileViewModel()
     @EnvironmentObject private var authManager: AuthManager
     @Environment(\.dismiss) private var dismiss
     @State private var showingLoginPrompt = false
     @State private var showingLoginSheet = false
-    @State private var showingFollowList = false
-    @State private var followListType: FollowListType = .following
     @State private var showingProfileEdit = false
+    @State private var viewMode: ViewMode = .posts
+    @State private var showingUserMenu = false
+
+    enum ViewMode {
+        case posts
+        case channels
+    }
 
     var isOwnProfile: Bool {
-        APIClient.shared.currentUserId == userId
+        Auth.auth().currentUser?.uid == userId
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea(edges: .bottom)
 
-            if viewModel.isLoading && viewModel.user == nil && !viewModel.isBlocked {
-                ProgressView()
-                    .tint(.white)
-            } else if viewModel.isBlocked {
-                // ブロック状態（ユーザー情報がなくても表示）
-                blockedViewWithClose
-            } else if let user = viewModel.user {
-                if canViewPosts(user: user) {
-                    if viewModel.posts.isEmpty {
-                        emptyPostsView
-                    } else {
-                        // PostGridViewを使用 + ユーザー情報オーバーレイ
-                        ZStack(alignment: .topLeading) {
-                            PostGridView(
-                                posts: viewModel.posts,
-                                showingLoginPrompt: $showingLoginPrompt,
-                                showUserInfo: false,
-                                isLoading: viewModel.isLoading,
-                                onRefresh: {
-                                    await viewModel.loadUser(userId: userId)
+                if viewModel.isLoading && viewModel.user == nil && !viewModel.isBlocked && !viewModel.isBlockedBy {
+                    ProgressView()
+                        .tint(.white)
+                } else if viewModel.isBlocked {
+                    // ブロック状態（操作ユーザーがブロックしている）
+                    blockedViewWithClose
+                } else if viewModel.isBlockedBy {
+                    // ブロックされている状態（操作ユーザーがブロックされている）
+                    blockedByViewWithClose
+                } else if let user = viewModel.user {
+                    if canViewPosts(user: user) {
+                        VStack(spacing: 0) {
+                            // ユーザー情報ヘッダー
+                            userInfoHeader(user: user)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 8)
+                                .padding(.bottom, 12)
+
+                            // コンテンツ
+                            if viewMode == .posts {
+                                if viewModel.posts.isEmpty {
+                                    emptyPostsView
+                                } else {
+                                    PostGridView(
+                                        posts: viewModel.posts,
+                                        showingLoginPrompt: $showingLoginPrompt,
+                                        showUserInfo: false,
+                                        isLoading: viewModel.isLoading,
+                                        onRefresh: {
+                                            await viewModel.loadUser(userId: userId)
+                                        }
+                                    )
                                 }
-                            )
-
-                            // 左上のユーザー情報オーバーレイ
-                            userInfoOverlay(user: user)
-                                .padding(.top, 12)
-                                .padding(.leading, 12)
+                            } else {
+                                channelsListView
+                            }
                         }
+                    } else {
+                        privateAccountView(user: user)
                     }
-                } else {
-                    privateAccountView(user: user)
-                }
-            } else if let errorMessage = viewModel.errorMessage {
-                VStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 50))
-                        .foregroundColor(.red.opacity(0.7))
-                    Text(errorMessage)
-                        .foregroundColor(.white.opacity(0.7))
-                    Button("再読み込み") {
-                        Task {
-                            await viewModel.loadUser(userId: userId)
+                } else if let errorMessage = viewModel.errorMessage {
+                    VStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 50))
+                            .foregroundColor(.red.opacity(0.7))
+                        Text(errorMessage)
+                            .foregroundColor(.white.opacity(0.7))
+                        Button("再読み込み") {
+                            Task {
+                                await viewModel.loadUser(userId: userId)
+                            }
                         }
+                        .foregroundColor(.purple)
                     }
-                    .foregroundColor(.purple)
                 }
             }
+            .navigationBarHidden(true)
+            .presentationDragIndicator(.visible)
         }
-        .navigationBarHidden(true)
-        .presentationDragIndicator(.visible)
         .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
             Button("はい") {
                 showingLoginSheet = true
@@ -78,158 +94,129 @@ struct UserProfileView: View {
         } message: {
             Text("この機能を使用するにはログインが必要です")
         }
-        .sheet(isPresented: $showingLoginSheet) {
-            LoginView()
-        }
-        .sheet(isPresented: $showingFollowList) {
-            NavigationStack {
-                FollowListView(userId: userId, listType: followListType)
+        .fullScreenCover(isPresented: $showingLoginSheet) {
+            if #available(iOS 16.4, *) {
+                LoginView()
+                    .presentationBackground(Color.black)
+                    .presentationCornerRadius(20)
+            } else {
+                LoginView()
             }
         }
         .sheet(isPresented: $showingProfileEdit) {
-            if let authUser = authManager.currentUser {
-                let user = User(
-                    id: authUser.userId,
-                    username: authUser.username,
-                    email: authUser.email,
-                    displayName: authUser.displayName,
-                    profileImageUrl: authUser.profileImageUrl,
-                    bio: nil,
-                    isPublic: authUser.isPublic,
-                    createdAt: nil,
-                    isFollowing: nil,
-                    isFollower: nil,
-                    isMutual: nil,
-                    followingCount: nil,
-                    followerCount: nil
-                )
-                ProfileEditView(currentUser: user)
+            if let currentUser = authManager.currentUser {
+                if #available(iOS 16.4, *) {
+                    ProfileEditView(currentUser: currentUser)
+                        .presentationBackground(Color.black)
+                        .presentationCornerRadius(20)
+                } else {
+                    ProfileEditView(currentUser: currentUser)
+                }
             }
+        }
+        .confirmationDialog("ユーザーオプション", isPresented: $showingUserMenu, titleVisibility: .hidden) {
+            Button("ユーザーをブロック", role: .destructive) {
+                Task {
+                    await viewModel.blockUser(userId: userId)
+                    dismiss()
+                }
+            }
+            Button("キャンセル", role: .cancel) {}
         }
         .task {
             await viewModel.loadUser(userId: userId)
         }
     }
 
-    // MARK: - User Info Overlay
+    // MARK: - User Info Header
     @ViewBuilder
-    private func userInfoOverlay(user: User) -> some View {
-        let imageUrl = APIClient.shared.getFullImageURL(user.profileImageUrl)
-
-        VStack(alignment: .leading, spacing: 10) {
-            // バツボタン + プロフィール画像 + 名前
-            HStack(spacing: 8) {
-                // バツボタン
+    private func userInfoHeader(user: User) -> some View {
+        VStack(spacing: 12) {
+            // バツボタンとメニューボタン
+            HStack {
                 Button(action: { dismiss() }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 28))
                         .foregroundColor(.white.opacity(0.8))
                 }
+                Spacer()
 
+                // 他のユーザーの場合のみメニューボタンを表示
+                if !isOwnProfile {
+                    Button(action: { showingUserMenu = true }) {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 44, height: 44)
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
                 // プロフィール画像
-                AsyncImage(url: URL(string: imageUrl ?? "")) { image in
+                AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
                     image
                         .resizable()
                         .scaledToFill()
                 } placeholder: {
-                    Circle()
-                        .fill(Color.gray.opacity(0.5))
-                        .overlay(
-                            Image(systemName: "person.fill")
-                                .font(.system(size: 16))
-                                .foregroundColor(.white.opacity(0.6))
-                        )
+                    Image("recoreco")
+                        .resizable()
+                        .scaledToFill()
                 }
-                .frame(width: 40, height: 40)
+                .frame(width: 60, height: 60)
                 .clipShape(Circle())
 
-                VStack(alignment: .leading, spacing: 2) {
-                    // 公開/非公開アイコン + 名前 + 設定ボタン（自分の場合）
-                    HStack(spacing: 4) {
-                        Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
-                            .font(.system(size: 12))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(user.username)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.white)
+
+                    if let bio = user.bio, !bio.isEmpty {
+                        Text(bio)
+                            .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.7))
-                        Text(user.displayName)
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(.white)
-
-                        // 自分のプロフィールの場合は設定ボタンを表示
-                        if isOwnProfile {
-                            Button(action: { showingProfileEdit = true }) {
-                                Image(systemName: "gearshape.fill")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white.opacity(0.8))
-                            }
-                        }
                     }
                 }
+
+                Spacer()
             }
 
-            // フォロー数・フォロワー数（タップ可能、大きめ表示）
-            HStack(spacing: 16) {
+            // 切り替えボタン
+            HStack(spacing: 8) {
                 Button(action: {
-                    showingFollowList = true
-                    followListType = .following
-                }) {
-                    HStack(spacing: 4) {
-                        Text("\(user.followingCount ?? 0)")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                        Text("フォロー")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.8))
+                    withAnimation {
+                        viewMode = .posts
                     }
+                }) {
+                    Text("投稿")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(viewMode == .posts ? .white : .white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(viewMode == .posts ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                        .cornerRadius(8)
                 }
 
                 Button(action: {
-                    showingFollowList = true
-                    followListType = .followers
-                }) {
-                    HStack(spacing: 4) {
-                        Text("\(user.followerCount ?? 0)")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                        Text("フォロワー")
-                            .font(.system(size: 14))
-                            .foregroundColor(.white.opacity(0.8))
+                    withAnimation {
+                        viewMode = .channels
                     }
-                }
-            }
-
-            // フォローボタン（自分以外の場合）
-            if let currentUserId = APIClient.shared.currentUserId, currentUserId != user.id {
-                if let isFollowing = user.isFollowing {
-                    Button(action: {
+                    if viewModel.channels.isEmpty {
                         Task {
-                            if isFollowing {
-                                await viewModel.unfollowUser(userId: userId)
-                            } else {
-                                await viewModel.followUser(userId: userId)
-                            }
+                            await viewModel.loadChannels(userId: userId)
                         }
-                    }) {
-                        Text(isFollowing ? "フォロー中" : "フォロー")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 6)
-                            .background(
-                                Group {
-                                    if isFollowing {
-                                        Color.white.opacity(0.3)
-                                    } else {
-                                        AppTheme.horizontalGradient
-                                    }
-                                }
-                            )
-                            .cornerRadius(14)
                     }
+                }) {
+                    Text("チャンネル")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(viewMode == .channels ? .white : .white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(viewMode == .channels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                        .cornerRadius(8)
                 }
             }
         }
-        .padding(10)
-        .background(Color.black.opacity(0.6))
-        .cornerRadius(12)
     }
 
     // MARK: - Helper Views
@@ -253,7 +240,7 @@ struct UserProfileView: View {
                         .font(.system(size: 28))
                         .foregroundColor(.white.opacity(0.8))
                 }
-                .padding(.top, 12)
+                .padding(.top, 60)
                 .padding(.leading, 12)
                 Spacer()
             }
@@ -264,7 +251,36 @@ struct UserProfileView: View {
                 Image(systemName: "hand.raised.fill")
                     .font(.system(size: 50))
                     .foregroundColor(.white.opacity(0.4))
-                Text("このユーザーは表示できません")
+                Text("ブロック中です")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+
+            Spacer()
+        }
+    }
+
+    private var blockedByViewWithClose: some View {
+        VStack {
+            // 閉じるボタン
+            HStack {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(.top, 60)
+                .padding(.leading, 12)
+                Spacer()
+            }
+
+            Spacer()
+
+            VStack(spacing: 12) {
+                Image(systemName: "person.fill.questionmark")
+                    .font(.system(size: 50))
+                    .foregroundColor(.white.opacity(0.4))
+                Text("ユーザーが見つかりませんでした。")
                     .font(.system(size: 16))
                     .foregroundColor(.white.opacity(0.7))
             }
@@ -282,6 +298,7 @@ struct UserProfileView: View {
                 .font(.system(size: 16))
                 .foregroundColor(.white.opacity(0.7))
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ViewBuilder
@@ -290,7 +307,7 @@ struct UserProfileView: View {
             Image(systemName: "lock.fill")
                 .font(.system(size: 50))
                 .foregroundColor(.white.opacity(0.4))
-            Text(user.isPublic == true ? "フォローして紹介を見る" : "相互フォローで紹介を見ることができます")
+            Text("フォローして紹介を見る")
                 .font(.system(size: 16))
                 .foregroundColor(.white.opacity(0.7))
                 .multilineTextAlignment(.center)
@@ -299,8 +316,103 @@ struct UserProfileView: View {
     }
 
     private func canViewPosts(user: User) -> Bool {
-        (APIClient.shared.currentUserId == user.id) ||
-        (user.isPublic == true) ||
-        (user.isPublic != true && (user.isMutual ?? false))
+        // 全てのユーザーの投稿を閲覧可能（パブリック）
+        return true
+    }
+
+    @ViewBuilder
+    private var channelsListView: some View {
+        if viewModel.channels.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "music.note.house")
+                    .font(.system(size: 50))
+                    .foregroundColor(.white.opacity(0.4))
+                Text("チャンネルがありません")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(viewModel.channels) { channel in
+                        if let channelId = channel.id {
+                            NavigationLink(destination: ChannelDetailView(channelId: channelId)) {
+                                ChannelRowView(channel: channel)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        } else {
+                            ChannelRowView(channel: channel)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 100)
+            }
+        }
     }
 }
+
+struct ChannelRowView: View {
+    let channel: Channel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // アルバムアート
+            if let artworkUrl = channel.latestPostArtworkUrl, let url = URL(string: artworkUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.1))
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .font(.system(size: 20))
+                                .foregroundColor(.white.opacity(0.5))
+                        )
+                }
+                .frame(width: 60, height: 60)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                Rectangle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 60, height: 60)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .font(.system(size: 20))
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "music.note.house.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.7))
+                    Text(channel.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2.fill")
+                        .font(.caption2)
+                    Text("\(channel.followerCount ?? 0)")
+                        .font(.caption)
+                }
+                .foregroundColor(.white.opacity(0.6))
+            }
+
+            Spacer()
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.1))
+        .cornerRadius(12)
+    }
+}
+

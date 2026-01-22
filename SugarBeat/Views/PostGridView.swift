@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 /// 再利用可能な投稿グリッドレイアウト
 /// - 最初の投稿を大きなセルで表示
@@ -10,9 +11,15 @@ struct PostGridView: View {
     var showUserInfo: Bool = true // 大きいセルにユーザー情報を表示するか
     var isLoading: Bool = false // リフレッシュ中のローディング表示
     var onRefresh: (() async -> Void)? = nil // リフレッシュコールバック
+    var respectNavigationBar: Bool = false // NavigationBarの下に表示するかどうか
 
     @StateObject private var screenshotMode = ScreenshotModeManager.shared
     @ObservedObject private var playbackState = PlaybackStateManager.shared
+    @EnvironmentObject var authManager: AuthManager
+
+    // Dynamic user and channel info cache
+    @State private var postUserCache: [String: User] = [:]  // postId -> User
+    @State private var postChannelCache: [String: Channel] = [:]  // postId -> Channel
 
     /// 再生中の投稿（先頭以外で再生中の場合のみ）
     var playingPost: Post? {
@@ -35,14 +42,20 @@ struct PostGridView: View {
             let screenWidth = geometry.size.width
             let spacing: CGFloat = 2
             let featuredHeight = screenWidth // 正方形
+            let safeAreaTop = geometry.safeAreaInsets.top
 
             ZStack(alignment: .top) {
-                Color.black.ignoresSafeArea()
+                Color.black
 
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        // 一番上のグリッド
-                        if let post = displayPost {
+                        // 一番上のグリッド: スクショモード時はユーザー情報、通常時は投稿
+                        if screenshotMode.isScreenshotMode {
+                            // スクショモード: ユーザー情報セル
+                            UserInfoCell(width: screenWidth, height: featuredHeight)
+                                .environmentObject(authManager)
+                        } else if let post = displayPost {
+                            // 通常モード: 投稿セル
                             FeaturedPostCellSimple(
                                 post: post,
                                 width: screenWidth,
@@ -50,7 +63,7 @@ struct PostGridView: View {
                                 showingLoginPrompt: $showingLoginPrompt,
                                 isScreenshotMode: screenshotMode.isScreenshotMode,
                                 showUserInfo: showUserInfo,
-                                safeAreaTop: 0
+                                safeAreaTop: safeAreaTop
                             )
                             .frame(width: screenWidth, height: featuredHeight)
                         }
@@ -61,13 +74,14 @@ struct PostGridView: View {
                                 .padding(.top, spacing)
                         }
                     }
+                    .padding(.bottom, 100)
                 }
                 .refreshable {
                     if let refresh = onRefresh {
                         await refresh()
                     }
                 }
-                .tint(AppTheme.tintColor)
+                .tint(.white)
                 .simultaneousGesture(
                     TapGesture()
                         .onEnded { _ in
@@ -88,6 +102,7 @@ struct PostGridView: View {
                         .scaleEffect(1.2)
                 }
             }
+            .ignoresSafeArea(respectNavigationBar ? [] : .all)
         }
         .toolbar(screenshotMode.isScreenshotMode ? .hidden : .visible, for: .tabBar)
     }
@@ -116,15 +131,20 @@ struct PostGridView: View {
         let mergedCellWidth = mergedCellWidth5
         let mergedCellHeight = mergedCellHeight5
 
+        let _ = print("🎨 [PostGridView.gridLayout] screenshotMode: \(screenshotMode.isScreenshotMode), posts.count: \(posts.count)")
+
         VStack(spacing: spacing) {
-            // 投稿数が少ない場合は単純な4列グリッドを使用
-            if posts.count < 9 {
+            // 投稿数が少ない場合、またはスクショモード時は単純な4列グリッドを使用
+            if posts.count < 9 || screenshotMode.isScreenshotMode {
+                let _ = print("🎨 [PostGridView.gridLayout] Using simple 4-column grid")
                 // シンプルな4列グリッド（左詰め）
                 let rowCount = (posts.count + 3) / 4
+                let _ = print("🎨 [PostGridView.gridLayout] totalCells: \(posts.count), rowCount: \(rowCount)")
                 ForEach(0..<rowCount, id: \.self) { row in
                     HStack(spacing: spacing) {
                         ForEach(0..<4, id: \.self) { col in
                             let index = row * 4 + col
+
                             if index < posts.count {
                                 SmallPostCell(
                                     post: posts[index],
@@ -174,9 +194,10 @@ struct PostGridView: View {
                         }
                     }
 
-                    if posts.count > 3 {
+                    let index3 = screenshotMode.isScreenshotMode ? 2 : 3
+                    if index3 < posts.count {
                         SmallPostCell(
-                            post: posts[3],
+                            post: posts[index3],
                             width: mergedCellWidth6,
                             height: mergedCellHeight6,
                             showingLoginPrompt: $showingLoginPrompt,
@@ -185,9 +206,10 @@ struct PostGridView: View {
                     }
 
                     VStack(spacing: spacing) {
-                        if posts.count > 4 {
+                        let index4 = screenshotMode.isScreenshotMode ? 3 : 4
+                        if index4 < posts.count {
                             SmallPostCell(
-                                post: posts[4],
+                                post: posts[index4],
                                 width: columns6Width,
                                 height: columns6Width,
                                 showingLoginPrompt: $showingLoginPrompt,
@@ -196,9 +218,10 @@ struct PostGridView: View {
                         } else {
                             Color.clear.frame(width: columns6Width, height: columns6Width)
                         }
-                        if posts.count > 8 {
+                        let index8 = screenshotMode.isScreenshotMode ? 7 : 8
+                        if index8 < posts.count {
                             SmallPostCell(
-                                post: posts[8],
+                                post: posts[index8],
                                 width: columns6Width,
                                 height: columns6Width,
                                 showingLoginPrompt: $showingLoginPrompt,
@@ -467,39 +490,92 @@ struct FeaturedPostCellSimple: View {
     @State private var likeAnimationScale: CGFloat = 1.0
     @State private var menuAnimationScale: CGFloat = 1.0
     @ObservedObject private var likeState = LikeStateManager.shared
+    @ObservedObject private var commentState = CommentStateManager.shared
+    @State private var postUser: User? = nil  // Post owner user info
+    @State private var postChannel: Channel? = nil  // Post channel info
 
     var isPlaying: Bool {
-        playbackState.isPlaying(post.id)
+        guard let postId = post.id else { return false }
+        return playbackState.isPlaying(postId)
     }
 
     var isLiked: Bool {
-        likeState.isLiked(post.id)
+        guard let postId = post.id else { return false }
+        return likeState.isLiked(postId)
     }
 
     var likeCount: Int {
-        likeState.getLikeCount(post.id)
+        guard let postId = post.id else { return 0 }
+        return likeState.getLikeCount(postId)
     }
 
     var commentCount: Int {
-        post.commentCount ?? 0
+        guard let postId = post.id else { return 0 }
+        return commentState.getCommentCount(postId)
     }
 
     var body: some View {
         ZStack {
-            // Background artwork
-            AsyncImage(url: URL(string: post.artworkUrl ?? "")) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                Color.gray.opacity(0.3)
+            // Background image (artwork for music, thumbnail for YouTube, image for website)
+            let backgroundImageUrl: String? = {
+                let type = post.contentType ?? ContentType.music.rawValue
+                if type == ContentType.youtube.rawValue {
+                    return post.youtubeThumbnailUrl
+                } else if type == ContentType.website.rawValue {
+                    return post.websiteImageUrl
+                } else {
+                    return post.artworkUrl
+                }
+            }()
+
+            AsyncImage(url: URL(string: backgroundImageUrl ?? "")) { phase in
+                if let image = phase.image {
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else if phase.error != nil {
+                    // Loading failed, show placeholder with error icon
+                    Color.gray.opacity(0.3)
+                        .overlay(
+                            Image(systemName: {
+                                let type = post.contentType ?? ContentType.music.rawValue
+                                if type == ContentType.youtube.rawValue {
+                                    return "play.rectangle.fill"
+                                } else if type == ContentType.website.rawValue {
+                                    return "globe"
+                                } else {
+                                    return "music.note"
+                                }
+                            }())
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.3))
+                        )
+                } else {
+                    // Loading in progress
+                    Color.gray.opacity(0.3)
+                        .overlay(
+                            ProgressView()
+                                .tint(.white)
+                                .scaleEffect(1.5)
+                        )
+                }
             }
             .frame(width: width, height: height)
             .clipped()
 
+            // Loading indicator (centered)
+            if musicKit.isLoadingPreview && isPlaying {
+                ZStack {
+                    Color.black.opacity(0.3)
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(1.5)
+                }
+            }
+
             // Content overlay
             VStack(alignment: .leading, spacing: 0) {
-                // Top: Menu button only (hidden in screenshot mode)
+                // Top: Menu button (normal mode only)
                 if !isScreenshotMode {
                     HStack {
                         Spacer()
@@ -542,14 +618,45 @@ struct FeaturedPostCellSimple: View {
                     HStack(alignment: .bottom, spacing: 12) {
                         // Left: Track info with background shadow
                         VStack(alignment: .leading, spacing: 4) {
+                            // Content type badge
+                            if let type = post.contentType {
+                                if type == ContentType.youtube.rawValue {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "play.rectangle.fill")
+                                            .foregroundColor(.red)
+                                            .font(.system(size: 14))
+                                        Text("YouTube")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundColor(.red)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.red.opacity(0.15))
+                                    .cornerRadius(6)
+                                } else if type == ContentType.website.rawValue {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "safari")
+                                            .foregroundColor(.blue)
+                                            .font(.system(size: 14))
+                                        Text("Website")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundColor(.blue)
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(Color.blue.opacity(0.15))
+                                    .cornerRadius(6)
+                                }
+                            }
+
                             HStack(spacing: 6) {
-                                Text(post.trackName)
+                                Text(post.contentTitle ?? post.trackName ?? "")
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(.white)
                                     .lineLimit(1)
 
-                                // Waveform animation when playing
-                                if isPlaying {
+                                // Waveform animation when playing (only for music)
+                                if isPlaying && (post.contentType == nil || post.contentType == ContentType.music.rawValue) {
                                     MiniWaveformView()
                                         .frame(width: 30, height: 20)
                                 }
@@ -559,7 +666,7 @@ struct FeaturedPostCellSimple: View {
                             .background(Color.black.opacity(0.5))
                             .cornerRadius(6)
 
-                            Text(post.artistName)
+                            Text(post.contentDescription ?? post.artistName ?? "")
                                 .font(.system(size: 14))
                                 .foregroundColor(.white.opacity(0.95))
                                 .lineLimit(1)
@@ -578,21 +685,33 @@ struct FeaturedPostCellSimple: View {
                                     showingUserProfile = true
                                 }) {
                                     HStack(spacing: 6) {
-                                        AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(post.user.profileImageUrl) ?? "")) { image in
-                                            image
+                                        if let user = postUser {
+                                            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
+                                                image
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                            } placeholder: {
+                                                Image("recoreco")
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fill)
+                                            }
+                                            .frame(width: 20, height: 20)
+                                            .clipShape(Circle())
+
+                                            Text(user.displayName)
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.white.opacity(0.9))
+                                        } else {
+                                            Image("recoreco")
                                                 .resizable()
                                                 .aspectRatio(contentMode: .fill)
-                                        } placeholder: {
-                                            Image(systemName: "person.circle.fill")
-                                                .resizable()
-                                                .foregroundColor(.white.opacity(0.5))
-                                        }
-                                        .frame(width: 20, height: 20)
-                                        .clipShape(Circle())
+                                                .frame(width: 20, height: 20)
+                                                .clipShape(Circle())
 
-                                        Text(post.user.displayName)
-                                            .font(.system(size: 12, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.9))
+                                            Text("Loading...")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.white.opacity(0.9))
+                                        }
 
                                         Text("・")
                                             .foregroundColor(.white.opacity(0.5))
@@ -618,6 +737,23 @@ struct FeaturedPostCellSimple: View {
                                     .background(Color.black.opacity(0.5))
                                     .cornerRadius(6)
                             }
+
+                            // Channel name
+                            if let channelId = post.channelId,
+                               let channel = postChannel {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "number")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white.opacity(0.6))
+                                    Text(channel.name)
+                                        .font(.system(size: 11))
+                                        .foregroundColor(.white.opacity(0.7))
+                                }
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.black.opacity(0.5))
+                                .cornerRadius(6)
+                            }
                         }
 
                         Spacer()
@@ -626,6 +762,10 @@ struct FeaturedPostCellSimple: View {
                         VStack(alignment: .center, spacing: 10) {
                             // Like button with animation
                             Button(action: {
+                                if !authManager.isAuthenticated {
+                                    showingLoginPrompt = true
+                                    return
+                                }
                                 // ハートのポップアニメーション
                                 withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
                                     likeAnimationScale = 1.3
@@ -688,14 +828,7 @@ struct FeaturedPostCellSimple: View {
         .overlay(
             RoundedRectangle(cornerRadius: 4)
                 .strokeBorder(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            AppTheme.gradientStartColor.opacity(0.9),
-                            AppTheme.gradientEndColor.opacity(0.7)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
+                    Color.white.opacity(0.7),
                     lineWidth: isPlaying ? 3 : 0
                 )
         )
@@ -713,7 +846,7 @@ struct FeaturedPostCellSimple: View {
                 }
             }
 
-            if let currentUserId = authManager.currentUser?.userId, currentUserId == post.user.id {
+            if let currentUserId = Auth.auth().currentUser?.uid, currentUserId == post.userId {
                 Button("削除", role: .destructive) {
                     Task {
                         await deletePost()
@@ -734,8 +867,8 @@ struct FeaturedPostCellSimple: View {
         .sheet(item: $activeSheet) { sheet in
             sheetContent(for: sheet)
         }
-        .sheet(isPresented: $showingUserProfile) {
-            UserProfileView(userId: post.user.id)
+        .fullScreenCover(isPresented: $showingUserProfile) {
+            UserProfileView(userId: post.userId)
         }
         .alert("ブロック確認", isPresented: $showingBlockConfirmation) {
             Button("キャンセル", role: .cancel) {}
@@ -745,15 +878,30 @@ struct FeaturedPostCellSimple: View {
                 }
             }
         } message: {
-            Text("\(post.user.displayName)さんをブロックしますか？")
+            Text("\(postUser?.displayName ?? "このユーザー")さんをブロックしますか？")
         }
         .onAppear {
-            // Update like state from server data
-            likeState.updateFromServer(
-                postId: post.id,
-                isLiked: post.isLiked ?? false,
-                count: post.likeCount ?? 0
-            )
+            // Update like and comment state from server data
+            if let postId = post.id {
+                likeState.updateFromServer(
+                    postId: postId,
+                    isLiked: post.isLiked ?? false,
+                    count: post.likeCount ?? 0
+                )
+                commentState.initialize(postId: postId, count: post.commentCount ?? 0)
+            }
+        }
+        .task(id: "\(post.id ?? "")_\(post.channelId ?? "")") {
+            // Load user and channel info for the displayed post
+            // Load user info
+            if postUser == nil {
+                postUser = try? await FirestoreUserManager.shared.getUser(userId: post.userId)
+            }
+
+            // Load channel info - always refresh to get latest channel name
+            if let channelId = post.channelId {
+                postChannel = try? await FirestoreChannelManager.shared.getChannel(channelId: channelId)
+            }
         }
     }
 
@@ -775,22 +923,26 @@ struct FeaturedPostCellSimple: View {
             return
         }
 
+        guard let postId = post.id else { return }
+
         let wasLiked = isLiked
-        likeState.toggleLike(postId: post.id)
+        likeState.toggleLike(postId: postId)
 
         do {
             if wasLiked {
-                try await APIClient.shared.unlikePost(postId: post.id)
+                try await FirestoreLikeManager.shared.unlikePost(postId: postId)
             } else {
-                try await APIClient.shared.likePost(postId: post.id)
+                try await FirestoreLikeManager.shared.likePost(postId: postId)
             }
         } catch {
-            likeState.toggleLike(postId: post.id)
+            likeState.toggleLike(postId: postId)
             print("Failed to toggle like: \(error)")
         }
     }
 
     private func playMusic() async {
+        guard let postId = post.id else { return }
+
         if isPlaying {
             musicKit.stopPreview()
             playbackState.stopPlayback()
@@ -799,8 +951,8 @@ struct FeaturedPostCellSimple: View {
 
         if let previewUrl = post.previewUrl {
             do {
-                try await musicKit.playPreviewFromURL(previewUrl, startTime: post.startTime)
-                playbackState.startPlayback(for: post.id, userId: post.user.id, post: post, user: post.user)
+                try await musicKit.playPreviewFromURL(previewUrl, startTime: post.startTime ?? 0)
+                playbackState.startPlayback(for: postId, userId: post.userId, post: post, user: nil)
             } catch {
                 print("Failed to play preview: \(error)")
             }
@@ -808,13 +960,15 @@ struct FeaturedPostCellSimple: View {
     }
 
     private func deletePost() async {
+        guard let postId = post.id else { return }
+
         do {
-            try await APIClient.shared.deletePost(postId: post.id)
+            try await FirestorePostManager.shared.deletePost(postId: postId)
             // 通知を発行して即座に反映
             NotificationCenter.default.post(
                 name: Foundation.Notification.Name.postDeleted,
                 object: nil,
-                userInfo: ["postId": post.id]
+                userInfo: ["postId": postId]
             )
         } catch {
             print("Failed to delete post: \(error)")
@@ -823,17 +977,17 @@ struct FeaturedPostCellSimple: View {
 
     private func blockUser() async {
         do {
-            try await APIClient.shared.blockUser(userId: post.user.id)
-            print("🚫 Block succeeded for userId: \(post.user.id), posting notification...")
+            try await FirestoreBlockManager.shared.blockUser(userId: post.userId)
+            print("🚫 Block succeeded for userId: \(post.userId), posting notification...")
             // 通知を発行して即座に反映
             await MainActor.run {
                 NotificationCenter.default.post(
                     name: Foundation.Notification.Name.userBlocked,
                     object: nil,
-                    userInfo: ["userId": post.user.id]
+                    userInfo: ["userId": post.userId]
                 )
             }
-            print("🚫 Block notification posted for userId: \(post.user.id)")
+            print("🚫 Block notification posted for userId: \(post.userId)")
         } catch {
             print("❌ Failed to block user: \(error)")
         }
@@ -844,5 +998,311 @@ struct FeaturedPostCellSimple: View {
         formatter.unitsStyle = .abbreviated
         formatter.locale = Locale(identifier: "ja_JP")
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+// MARK: - Mini Waveform View
+struct MiniWaveformView: View {
+    @State private var animationValues: [CGFloat] = Array(repeating: 0.3, count: 3)
+    let timer = Timer.publish(every: 0.15, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<3, id: \.self) { index in
+                RoundedRectangle(cornerRadius: 1.5)
+                    .fill(
+                        AppTheme.verticalGradient
+                    )
+                    .frame(width: 3, height: animationValues[index] * 20)
+                    .animation(.easeInOut(duration: 0.3), value: animationValues[index])
+            }
+        }
+        .onReceive(timer) { _ in
+            for index in 0..<3 {
+                animationValues[index] = CGFloat.random(in: 0.3...1.0)
+            }
+        }
+    }
+}
+
+// MARK: - Small Post Cell
+struct SmallPostCell: View {
+    let post: Post
+    let width: CGFloat
+    let height: CGFloat
+    @Binding var showingLoginPrompt: Bool
+    var isScreenshotMode: Bool = false
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var musicKit = MusicKitManager.shared
+    @StateObject private var playbackState = PlaybackStateManager.shared
+
+    // Long press state
+    @State private var showingActionSheet = false
+    @State private var showingBlockConfirmation = false
+    @State private var showingReportSheet = false
+    @State private var showingUserProfile = false
+    @State private var cellScale: CGFloat = 1.0
+    @State private var postUser: User? = nil  // Post owner user info
+
+    var isPlaying: Bool {
+        guard let postId = post.id else { return false }
+        return playbackState.isPlaying(postId)
+    }
+
+    var isOwnPost: Bool {
+        authManager.currentUser?.id == post.userId
+    }
+
+    var body: some View {
+        let backgroundImageUrl: String? = {
+            let type = post.contentType ?? ContentType.music.rawValue
+            if type == ContentType.youtube.rawValue {
+                return post.youtubeThumbnailUrl
+            } else if type == ContentType.website.rawValue {
+                return post.websiteImageUrl
+            } else {
+                return post.artworkUrl
+            }
+        }()
+
+        ZStack {
+            AsyncImage(url: URL(string: backgroundImageUrl ?? "")) { phase in
+                if let image = phase.image {
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else if phase.error != nil {
+                    // Loading failed, show placeholder with error icon
+                    Color.gray.opacity(0.3)
+                        .overlay(
+                            Image(systemName: {
+                                let type = post.contentType ?? ContentType.music.rawValue
+                                if type == ContentType.youtube.rawValue {
+                                    return "play.rectangle.fill"
+                                } else if type == ContentType.website.rawValue {
+                                    return "globe"
+                                } else {
+                                    return "music.note"
+                                }
+                            }())
+                            .font(.system(size: min(width, height) * 0.3))
+                            .foregroundColor(.white.opacity(0.3))
+                        )
+                } else {
+                    // Loading in progress
+                    Color.gray.opacity(0.3)
+                        .overlay(
+                            ProgressView()
+                                .tint(.white)
+                        )
+                }
+            }
+            .frame(width: width, height: height)
+            .clipped()
+            .cornerRadius(4)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(
+                        Color.white.opacity(0.7),
+                        lineWidth: isPlaying ? 3 : 0
+                    )
+            )
+
+            // Content type badge (top-left corner)
+            if let type = post.contentType {
+                if type == ContentType.youtube.rawValue || type == ContentType.website.rawValue {
+                    VStack {
+                        HStack {
+                            Image(systemName: type == ContentType.youtube.rawValue ? "play.circle.fill" : "safari")
+                                .font(.system(size: 12))
+                                .foregroundColor(.white)
+                                .padding(4)
+                                .background(type == ContentType.youtube.rawValue ? Color.red.opacity(0.8) : Color.blue.opacity(0.8))
+                                .cornerRadius(4)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(4)
+                }
+            }
+
+            // Loading indicator or waveform animation when playing (centered)
+            if musicKit.isLoadingPreview && isPlaying {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.2)
+            } else if isPlaying {
+                MiniWaveformView()
+                    .frame(width: 30, height: 20)
+            }
+        }
+        .scaleEffect(cellScale)
+        .onTapGesture {
+            // Disable music playback in screenshot mode
+            if !isScreenshotMode {
+                Task {
+                    await playMusic()
+                }
+            }
+        }
+        .onLongPressGesture(minimumDuration: 0.3, pressing: { isPressing in
+            // Scale animation on press
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                cellScale = isPressing ? 1.15 : 1.0
+            }
+        }) {
+            // Trigger haptic feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+            // 未ログインの場合はログインを促す
+            if !authManager.isAuthenticated {
+                showingLoginPrompt = true
+            } else {
+                showingActionSheet = true
+            }
+        }
+        .confirmationDialog("", isPresented: $showingActionSheet, titleVisibility: .hidden) {
+            if let appleMusicUrl = post.appleMusicUrl, let url = URL(string: appleMusicUrl) {
+                Button("Apple Musicで開く") {
+                    UIApplication.shared.open(url)
+                }
+            }
+
+            Button("プロフィールを見る") {
+                showingUserProfile = true
+            }
+
+            if isOwnPost {
+                Button("削除", role: .destructive) {
+                    Task {
+                        await deletePost()
+                    }
+                }
+            } else {
+                Button("報告") {
+                    showingReportSheet = true
+                }
+                Button("ブロック", role: .destructive) {
+                    showingBlockConfirmation = true
+                }
+            }
+
+            Button("キャンセル", role: .cancel) {}
+        }
+        .tint(.primary)
+        .fullScreenCover(isPresented: $showingUserProfile) {
+            UserProfileView(userId: post.userId)
+        }
+        .sheet(isPresented: $showingReportSheet) {
+            ReportPostView(post: post)
+        }
+        .alert("ブロック確認", isPresented: $showingBlockConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("ブロック", role: .destructive) {
+                Task {
+                    await blockUser()
+                }
+            }
+        } message: {
+            Text("\(postUser?.displayName ?? "このユーザー")さんをブロックしますか？")
+        }
+        .task(id: post.id) {
+            // Load user info for the displayed post
+            if postUser == nil {
+                postUser = try? await FirestoreUserManager.shared.getUser(userId: post.userId)
+            }
+        }
+    }
+
+    private func playMusic() async {
+        guard let postId = post.id else { return }
+
+        // Toggle play/pause if already playing
+        if isPlaying {
+            musicKit.stopPreview()
+            playbackState.stopPlayback()
+            print("⏸️ Stopped preview for: \(post.trackName)")
+            return
+        }
+
+        // Play music preview if available
+        if let previewUrl = post.previewUrl {
+            do {
+                try await musicKit.playPreviewFromURL(previewUrl, startTime: post.startTime ?? 0)
+                playbackState.startPlayback(for: postId, userId: post.userId, post: post, user: nil)
+                print("🎵 Playing preview for: \(post.trackName ?? "unknown")")
+            } catch {
+                print("❌ Failed to play preview: \(error)")
+            }
+        }
+    }
+
+    private func deletePost() async {
+        guard let postId = post.id else { return }
+
+        do {
+            try await FirestorePostManager.shared.deletePost(postId: postId)
+            NotificationCenter.default.post(
+                name: Foundation.Notification.Name.postDeleted,
+                object: nil,
+                userInfo: ["postId": postId]
+            )
+        } catch {
+            print("Failed to delete post: \(error)")
+        }
+    }
+
+    private func blockUser() async {
+        do {
+            try await FirestoreBlockManager.shared.blockUser(userId: post.userId)
+            print("🚫 Block succeeded for userId: \(post.userId), posting notification...")
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: Foundation.Notification.Name.userBlocked,
+                    object: nil,
+                    userInfo: ["userId": post.userId]
+                )
+            }
+            print("🚫 Block notification posted for userId: \(post.userId)")
+        } catch {
+            print("❌ Failed to block user: \(error)")
+        }
+    }
+}
+
+// MARK: - User Info Cell (for screenshot mode grid)
+struct UserInfoCell: View {
+    let width: CGFloat
+    let height: CGFloat
+    @EnvironmentObject var authManager: AuthManager
+
+    var body: some View {
+        let _ = print("🎨 [UserInfoCell] Creating cell - width: \(width), height: \(height), username: \(authManager.currentUser?.username ?? "nil")")
+
+        // デバッグ用：超シンプルで目立つバージョン
+        ZStack {
+            // 真っ赤な背景（絶対に見える）
+            Color.red
+
+            // 大きな白いテキスト
+            VStack(spacing: 4) {
+                Text("USER")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.white)
+
+                if let username = authManager.currentUser?.username, !username.isEmpty {
+                    Text("@\(username)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                } else {
+                    Text("@???")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                }
+            }
+        }
+        .frame(width: width, height: height)
+        .border(Color.yellow, width: 5) // 黄色い枠線
     }
 }

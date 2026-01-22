@@ -17,6 +17,15 @@ struct AdConfig {
         #endif
     }
 
+    /// フィード広告（ネイティブ広告）のユニットID
+    static var feedAdUnitId: String {
+        #if DEBUG
+        return "ca-app-pub-3940256099942544/3986624511" // テスト用ネイティブ広告
+        #else
+        return "ca-app-pub-3107120992746486/3547387325" // 本番用ユニットID
+        #endif
+    }
+
     // MARK: - Ad Sizes
 
     /// バナー広告の高さ

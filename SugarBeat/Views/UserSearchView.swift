@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseAuth
 
 struct UserSearchView: View {
     @Environment(\.dismiss) private var dismiss
@@ -6,8 +7,7 @@ struct UserSearchView: View {
     @State private var searchQuery = ""
 
     var body: some View {
-        NavigationView {
-            ZStack {
+        ZStack {
                 Color.black.ignoresSafeArea()
 
                 VStack(spacing: 0) {
@@ -82,70 +82,56 @@ struct UserSearchView: View {
                         }
                         Spacer()
                     } else {
-                        ScrollView {
-                            LazyVStack(spacing: 0) {
-                                ForEach(viewModel.users) { user in
-                                    NavigationLink(destination: UserProfileView(userId: user.id)) {
-                                        UserSearchRow(
-                                            user: user,
-                                            onFollowToggle: {
-                                                Task {
-                                                    if user.isFollowing == true {
-                                                        await viewModel.unfollowUser(userId: user.id)
-                                                    } else {
-                                                        await viewModel.followUser(userId: user.id)
-                                                    }
-                                                }
-                                            }
-                                        )
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    .padding(.horizontal)
-                                    .padding(.vertical, 12)
-
-                                    Divider()
-                                        .background(Color.white.opacity(0.1))
-                                }
-                            }
-                        }
+                        searchResultsList
                     }
                 }
             }
+            .navigationTitle("ユーザー検索")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("ユーザー検索")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .navigationBarLeading) {
                     Button("閉じる") {
                         dismiss()
                     }
                     .foregroundColor(.white)
                 }
             }
-            .toolbarBackground(Color.black, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
+    }
+
+    private var searchResultsList: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(viewModel.users) { user in
+                    if let userId = user.id {
+                        NavigationLink(destination: UserProfileView(userId: userId)) {
+                            UserSearchRow(user: user)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 8)
         }
     }
 }
 
 struct UserSearchRow: View {
     let user: User
-    let onFollowToggle: () -> Void
-    @State private var isProcessing = false
 
     var body: some View {
         HStack(spacing: 12) {
             // Profile image
-            AsyncImage(url: URL(string: APIClient.shared.getFullImageURL(user.profileImageUrl) ?? "")) { image in
-                image
-                    .resizable()
-                    .scaledToFill()
-            } placeholder: {
-                Circle()
-                    .fill(Color.white.opacity(0.2))
+            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { phase in
+                if let image = phase.image {
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image("recoreco")
+                        .resizable()
+                        .scaledToFill()
+                }
             }
             .frame(width: 50, height: 50)
             .clipShape(Circle())
@@ -153,51 +139,33 @@ struct UserSearchRow: View {
             // User info
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
-                    Image(systemName: user.isPublic == true ? "network" : "network.badge.shield.half.filled")
+                    Image(systemName: "network")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.6))
-                    Text(user.displayName)
+                    Text(user.username)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                 }
 
-                if let isMutual = user.isMutual, isMutual {
-                    HStack(spacing: 4) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.green)
-                        Text("相互フォロー")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                    }
+                if let bio = user.bio, !bio.isEmpty {
+                    Text(bio)
+                        .font(.caption)
+                        .foregroundColor(.white.opacity(0.6))
+                        .lineLimit(1)
                 }
             }
 
             Spacer()
 
-            // Follow button
-            Button(action: {
-                isProcessing = true
-                onFollowToggle()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    isProcessing = false
-                }
-            }) {
-                if isProcessing {
-                    ProgressView()
-                        .tint(.white)
-                        .frame(width: 80, height: 32)
-                } else {
-                    Text(user.isFollowing == true ? "フォロー中" : "フォロー")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(user.isFollowing == true ? .white : .black)
-                        .frame(width: 80, height: 32)
-                        .background(user.isFollowing == true ? Color.white.opacity(0.2) : Color.white)
-                        .cornerRadius(16)
-                }
-            }
-            .disabled(isProcessing)
+            // Navigate to profile icon
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.4))
         }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(12)
     }
 }
 
@@ -217,72 +185,11 @@ class UserSearchViewModel: ObservableObject {
         errorMessage = nil
 
         do {
-            users = try await APIClient.shared.searchUsers(query: query)
+            users = try await FirestoreUserManager.shared.searchUsers(query: query)
         } catch {
             errorMessage = "検索に失敗しました: \(error.localizedDescription)"
         }
 
         isSearching = false
-    }
-
-    func followUser(userId: Int64) async {
-        do {
-            try await APIClient.shared.followUser(userId: userId)
-            // Update user in list
-            if let index = users.firstIndex(where: { $0.id == userId }) {
-                let updatedUser = users[index]
-                // Create a new User instance with updated values
-                users[index] = User(
-                    id: updatedUser.id,
-                    username: updatedUser.username,
-                    email: updatedUser.email,
-                    displayName: updatedUser.displayName,
-                    profileImageUrl: updatedUser.profileImageUrl,
-                    bio: updatedUser.bio,
-                    isPublic: updatedUser.isPublic,
-                    createdAt: updatedUser.createdAt,
-                    isFollowing: true,
-                    isFollower: updatedUser.isFollower,
-                    isMutual: updatedUser.isFollower == true ? true : false,
-                    followingCount: updatedUser.followingCount,
-                    followerCount: updatedUser.followerCount
-                )
-            }
-
-            // Notify FeedView to refresh
-            NotificationCenter.default.post(name: NSNotification.Name("FollowStatusChanged"), object: nil)
-        } catch {
-            errorMessage = "フォローに失敗しました: \(error.localizedDescription)"
-        }
-    }
-
-    func unfollowUser(userId: Int64) async {
-        do {
-            try await APIClient.shared.unfollowUser(userId: userId)
-            // Update user in list
-            if let index = users.firstIndex(where: { $0.id == userId }) {
-                let updatedUser = users[index]
-                users[index] = User(
-                    id: updatedUser.id,
-                    username: updatedUser.username,
-                    email: updatedUser.email,
-                    displayName: updatedUser.displayName,
-                    profileImageUrl: updatedUser.profileImageUrl,
-                    bio: updatedUser.bio,
-                    isPublic: updatedUser.isPublic,
-                    createdAt: updatedUser.createdAt,
-                    isFollowing: false,
-                    isFollower: updatedUser.isFollower,
-                    isMutual: false,
-                    followingCount: updatedUser.followingCount,
-                    followerCount: updatedUser.followerCount
-                )
-            }
-
-            // Notify FeedView to refresh
-            NotificationCenter.default.post(name: NSNotification.Name("FollowStatusChanged"), object: nil)
-        } catch {
-            errorMessage = "アンフォローに失敗しました: \(error.localizedDescription)"
-        }
     }
 }

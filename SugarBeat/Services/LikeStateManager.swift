@@ -3,14 +3,14 @@ import SwiftUI
 
 @MainActor
 class LikeStateManager: ObservableObject {
-    @Published private(set) var likedPostIds: Set<Int64> = []
-    @Published private(set) var likeCounts: [Int64: Int] = [:]
+    @Published private(set) var likedPostIds: Set<String> = []
+    @Published private(set) var likeCounts: [String: Int] = [:]
 
     static let shared = LikeStateManager()
 
     private init() {}
 
-    func initialize(postId: Int64, isLiked: Bool, count: Int) {
+    func initialize(postId: String, isLiked: Bool, count: Int) {
         // Only initialize if not already set (to preserve user changes)
         if likeCounts[postId] == nil {
             if isLiked {
@@ -20,7 +20,7 @@ class LikeStateManager: ObservableObject {
         }
     }
 
-    func updateFromServer(postId: Int64, isLiked: Bool, count: Int) {
+    func updateFromServer(postId: String, isLiked: Bool, count: Int) {
         // Force update from server data (for polling updates)
         if isLiked {
             likedPostIds.insert(postId)
@@ -30,7 +30,7 @@ class LikeStateManager: ObservableObject {
         likeCounts[postId] = count
     }
 
-    func toggleLike(postId: Int64) {
+    func toggleLike(postId: String) {
         if likedPostIds.contains(postId) {
             likedPostIds.remove(postId)
             likeCounts[postId] = max(0, (likeCounts[postId] ?? 0) - 1)
@@ -40,11 +40,11 @@ class LikeStateManager: ObservableObject {
         }
     }
 
-    func isLiked(_ postId: Int64) -> Bool {
+    func isLiked(_ postId: String) -> Bool {
         return likedPostIds.contains(postId)
     }
 
-    func getLikeCount(_ postId: Int64) -> Int {
+    func getLikeCount(_ postId: String) -> Int {
         return likeCounts[postId] ?? 0
     }
 

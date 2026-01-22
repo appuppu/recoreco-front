@@ -8,7 +8,7 @@ class UnreadPostsManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let readPostsKey = "readPostIds"
 
-    @Published private var readPostIds: Set<Int64> = []
+    @Published private var readPostIds: Set<String> = []
 
     private init() {
         loadReadPosts()
@@ -16,7 +16,7 @@ class UnreadPostsManager: ObservableObject {
 
     private func loadReadPosts() {
         if let data = userDefaults.data(forKey: readPostsKey),
-           let decoded = try? JSONDecoder().decode(Set<Int64>.self, from: data) {
+           let decoded = try? JSONDecoder().decode(Set<String>.self, from: data) {
             readPostIds = decoded
         }
     }
@@ -27,11 +27,12 @@ class UnreadPostsManager: ObservableObject {
         }
     }
 
-    func isUnread(_ postId: Int64) -> Bool {
+    func isUnread(_ postId: String?) -> Bool {
+        guard let postId = postId else { return false }
         return !readPostIds.contains(postId)
     }
 
-    func markAsRead(_ postId: Int64) {
+    func markAsRead(_ postId: String) {
         readPostIds.insert(postId)
         saveReadPosts()
     }

@@ -7,6 +7,7 @@ class MusicKitManager: ObservableObject {
     @Published var isAuthorized = false
     @Published var authorizationStatus: MusicAuthorization.Status = .notDetermined
     @Published var isPlaying = false
+    @Published var isLoadingPreview = false
 
     static let shared = MusicKitManager()
 
@@ -72,8 +73,28 @@ class MusicKitManager: ObservableObject {
         // Stop any existing playback
         stopPreview()
 
+        // Set loading state
+        isLoadingPreview = true
+
         // Create new AVPlayer
         avPlayer = AVPlayer(url: url)
+
+        // Wait for player to be ready
+        guard let playerItem = avPlayer?.currentItem else {
+            isLoadingPreview = false
+            throw MusicKitError.invalidURL
+        }
+
+        // Observe when player is ready to play
+        let readyObserver = playerItem.observe(\.status, options: [.new]) { [weak self] item, _ in
+            Task { @MainActor in
+                if item.status == .readyToPlay {
+                    self?.isLoadingPreview = false
+                } else if item.status == .failed {
+                    self?.isLoadingPreview = false
+                }
+            }
+        }
 
         // Seek to start time if specified
         if startTime > 0 {
@@ -99,6 +120,12 @@ class MusicKitManager: ObservableObject {
         // Start playback
         avPlayer?.play()
         isPlaying = true
+
+        // Clean up observer after a delay
+        Task {
+            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            readyObserver.invalidate()
+        }
     }
 
     func stopPreview() {
@@ -109,6 +136,7 @@ class MusicKitManager: ObservableObject {
         avPlayer?.pause()
         avPlayer = nil
         isPlaying = false
+        isLoadingPreview = false
     }
 
     func togglePlayPause() {

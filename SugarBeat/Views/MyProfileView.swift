@@ -476,10 +476,24 @@ struct MyProfileView: View {
                 LazyVStack(spacing: 12) {
                     ForEach(viewModel.channels) { channel in
                         if let channelId = channel.id {
-                            NavigationLink(destination: ChannelDetailView(channelId: channelId)) {
-                                ChannelRowView(channel: channel)
+                            ZStack(alignment: .trailing) {
+                                NavigationLink(destination: ChannelDetailView(channelId: channelId)) {
+                                    ChannelRowView(channel: channel, isEditable: false)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+
+                                // 編集ボタンを上に重ねる
+                                Button(action: {
+                                    viewModel.editingChannel = channel
+                                    viewModel.editingChannelName = channel.name
+                                    viewModel.showEditChannelSheet = true
+                                }) {
+                                    Image(systemName: "pencil.circle.fill")
+                                        .font(.system(size: 28))
+                                        .foregroundColor(.white.opacity(0.7))
+                                        .padding(.trailing, 16)
+                                }
                             }
-                            .buttonStyle(PlainButtonStyle())
                         } else {
                             ChannelRowView(channel: channel)
                         }
@@ -488,6 +502,16 @@ struct MyProfileView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .padding(.bottom, 100)
+            }
+            .sheet(isPresented: $viewModel.showEditChannelSheet) {
+                EditChannelNameSheet(
+                    channelName: $viewModel.editingChannelName,
+                    onSave: {
+                        Task {
+                            await viewModel.updateChannelName()
+                        }
+                    }
+                )
             }
         }
     }
@@ -528,6 +552,9 @@ class MyProfileViewModel: ObservableObject {
     @Published var channels: [Channel] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var showEditChannelSheet = false
+    @Published var editingChannel: Channel?
+    @Published var editingChannelName: String = ""
 
     private var lastFetchTime: Date?
     private let cacheValidDuration: TimeInterval = 30 // 30秒キャッシュ
@@ -624,5 +651,111 @@ class MyProfileViewModel: ObservableObject {
             errorMessage = "チャンネルの取得に失敗しました"
             print("❌ Failed to load channels: \(error)")
         }
+    }
+
+    func updateChannelName() async {
+        guard let channelId = editingChannel?.id,
+              !editingChannelName.isEmpty else {
+            print("❌ Invalid channel data for update")
+            return
+        }
+
+        do {
+            try await FirestoreChannelManager.shared.updateChannel(channelId: channelId, name: editingChannelName)
+
+            // ローカルでチャンネル名を更新
+            if let index = channels.firstIndex(where: { $0.id == channelId }) {
+                channels[index].name = editingChannelName
+            }
+
+            // シートを閉じる
+            showEditChannelSheet = false
+            editingChannel = nil
+            editingChannelName = ""
+
+            print("✅ Channel name updated successfully")
+        } catch {
+            errorMessage = "チャンネル名の更新に失敗しました"
+            print("❌ Failed to update channel name: \(error)")
+        }
+    }
+}
+
+// MARK: - Edit Channel Name Sheet
+struct EditChannelNameSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @Binding var channelName: String
+    let onSave: () -> Void
+    @FocusState private var isTextFieldFocused: Bool
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+
+                VStack(spacing: 24) {
+                    VStack(spacing: 8) {
+                        Text("チャンネル名を編集")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.white)
+
+                        Text("新しいチャンネル名を入力してください")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+
+                    TextField("チャンネル名", text: $channelName)
+                        .textFieldStyle(.plain)
+                        .font(.body)
+                        .foregroundColor(.white)
+                        .padding()
+                        .background(Color.white.opacity(0.1))
+                        .cornerRadius(12)
+                        .focused($isTextFieldFocused)
+
+                    HStack(spacing: 12) {
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            Text("キャンセル")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(Color.white.opacity(0.2))
+                                .cornerRadius(12)
+                        }
+
+                        Button(action: {
+                            onSave()
+                            dismiss()
+                        }) {
+                            Text("保存")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    LinearGradient(
+                                        gradient: Gradient(colors: [Color(hex: "cc208e"), Color(hex: "6713d2")]),
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                                .cornerRadius(12)
+                        }
+                        .disabled(channelName.isEmpty)
+                        .opacity(channelName.isEmpty ? 0.5 : 1.0)
+                    }
+                }
+                .padding(24)
+            }
+            .onAppear {
+                isTextFieldFocused = true
+            }
+        }
+        .presentationDetents([.height(300)])
     }
 }

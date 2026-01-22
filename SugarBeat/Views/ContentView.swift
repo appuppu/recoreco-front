@@ -1756,6 +1756,8 @@ struct ChannelPostCardGrid: View {
     @State private var showingPostMenu = false
     @State private var showingComments = false
     @State private var showingUserProfile = false
+    @State private var showingReportPost = false
+    @State private var showingReportChannel = false
     @State private var likeAnimationScale: CGFloat = 1.0
     @State private var menuAnimationScale: CGFloat = 1.0
     @State private var postUser: User? = nil
@@ -1783,20 +1785,12 @@ struct ChannelPostCardGrid: View {
         GeometryReader { geometry in
             ZStack {
                 // Background image - full width
-                AsyncImage(url: URL(string: post.artworkUrl ?? "")) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } else {
-                        Color.gray.opacity(0.3)
-                            .overlay(
-                                Image(systemName: "music.note")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.white.opacity(0.3))
-                            )
-                    }
-                }
+                ArtworkImageView(
+                    artworkUrl: post.artworkUrl,
+                    placeholder: "music.note",
+                    width: geometry.size.width,
+                    height: geometry.size.height
+                )
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .clipped()
 
@@ -2054,19 +2048,34 @@ struct ChannelPostCardGrid: View {
                 }
             }
 
-            Button("報告") {
-                // TODO: 報告機能実装
-            }
-
-            if authManager.currentUser?.id != post.userId {
-                Button("ユーザーをブロック", role: .destructive) {
+            if authManager.currentUser?.id == post.userId {
+                Button("削除", role: .destructive) {
+                    Task {
+                        await deletePost()
+                    }
+                }
+            } else {
+                Button("投稿を報告") {
+                    showingReportPost = true
+                }
+                Button("チャンネルを報告") {
+                    showingReportChannel = true
+                }
+                Button("ユーザーをブロック") {
                     Task {
                         await blockUser()
                     }
                 }
             }
-
             Button("キャンセル", role: .cancel) {}
+        }
+        .sheet(isPresented: $showingReportPost) {
+            ReportPostView(post: post)
+        }
+        .sheet(isPresented: $showingReportChannel) {
+            if let channelId = post.channelId {
+                ReportChannelView(channelId: channelId, channelName: channelName)
+            }
         }
         .task(id: post.id) {
             if postUser == nil {
@@ -2140,6 +2149,22 @@ struct ChannelPostCardGrid: View {
             )
         } catch {
             print("❌ Failed to block user: \(error)")
+        }
+    }
+
+    private func deletePost() async {
+        guard let postId = post.id else { return }
+
+        do {
+            try await FirestorePostManager.shared.deletePost(postId: postId)
+            NotificationCenter.default.post(
+                name: Foundation.Notification.Name.postDeleted,
+                object: nil,
+                userInfo: ["postId": postId]
+            )
+            print("✅ Post deleted successfully")
+        } catch {
+            print("❌ Failed to delete post: \(error)")
         }
     }
 
@@ -2255,20 +2280,12 @@ struct ChannelPostCard: View {
 
             ZStack {
                 // Background image
-                AsyncImage(url: URL(string: post.artworkUrl ?? "")) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } else {
-                        Color.gray.opacity(0.3)
-                            .overlay(
-                                Image(systemName: "music.note")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.white.opacity(0.3))
-                            )
-                    }
-                }
+                ArtworkImageView(
+                    artworkUrl: post.artworkUrl,
+                    placeholder: "music.note",
+                    width: screenWidth,
+                    height: screenHeight
+                )
                 .frame(width: screenWidth, height: screenHeight)
                 .clipped()
 

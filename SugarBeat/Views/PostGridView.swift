@@ -528,38 +528,21 @@ struct FeaturedPostCellSimple: View {
                 }
             }()
 
-            AsyncImage(url: URL(string: backgroundImageUrl ?? "")) { phase in
-                if let image = phase.image {
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } else if phase.error != nil {
-                    // Loading failed, show placeholder with error icon
-                    Color.gray.opacity(0.3)
-                        .overlay(
-                            Image(systemName: {
-                                let type = post.contentType ?? ContentType.music.rawValue
-                                if type == ContentType.youtube.rawValue {
-                                    return "play.rectangle.fill"
-                                } else if type == ContentType.website.rawValue {
-                                    return "globe"
-                                } else {
-                                    return "music.note"
-                                }
-                            }())
-                            .font(.system(size: 60))
-                            .foregroundColor(.white.opacity(0.3))
-                        )
-                } else {
-                    // Loading in progress
-                    Color.gray.opacity(0.3)
-                        .overlay(
-                            ProgressView()
-                                .tint(.white)
-                                .scaleEffect(1.5)
-                        )
-                }
-            }
+            ArtworkImageView(
+                artworkUrl: backgroundImageUrl,
+                placeholder: {
+                    let type = post.contentType ?? ContentType.music.rawValue
+                    if type == ContentType.youtube.rawValue {
+                        return "play.rectangle.fill"
+                    } else if type == ContentType.website.rawValue {
+                        return "globe"
+                    } else {
+                        return "music.note"
+                    }
+                }(),
+                width: width,
+                height: height
+            )
             .frame(width: width, height: height)
             .clipped()
 
@@ -1066,37 +1049,21 @@ struct SmallPostCell: View {
         }()
 
         ZStack {
-            AsyncImage(url: URL(string: backgroundImageUrl ?? "")) { phase in
-                if let image = phase.image {
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } else if phase.error != nil {
-                    // Loading failed, show placeholder with error icon
-                    Color.gray.opacity(0.3)
-                        .overlay(
-                            Image(systemName: {
-                                let type = post.contentType ?? ContentType.music.rawValue
-                                if type == ContentType.youtube.rawValue {
-                                    return "play.rectangle.fill"
-                                } else if type == ContentType.website.rawValue {
-                                    return "globe"
-                                } else {
-                                    return "music.note"
-                                }
-                            }())
-                            .font(.system(size: min(width, height) * 0.3))
-                            .foregroundColor(.white.opacity(0.3))
-                        )
-                } else {
-                    // Loading in progress
-                    Color.gray.opacity(0.3)
-                        .overlay(
-                            ProgressView()
-                                .tint(.white)
-                        )
-                }
-            }
+            ArtworkImageView(
+                artworkUrl: backgroundImageUrl,
+                placeholder: {
+                    let type = post.contentType ?? ContentType.music.rawValue
+                    if type == ContentType.youtube.rawValue {
+                        return "play.rectangle.fill"
+                    } else if type == ContentType.website.rawValue {
+                        return "globe"
+                    } else {
+                        return "music.note"
+                    }
+                }(),
+                width: width,
+                height: height
+            )
             .frame(width: width, height: height)
             .clipped()
             .cornerRadius(4)
@@ -1304,5 +1271,154 @@ struct UserInfoCell: View {
         }
         .frame(width: width, height: height)
         .border(Color.yellow, width: 5) // 黄色い枠線
+    }
+}
+
+// MARK: - Artwork Image View with Retry
+
+/// Apple MusicのアートワークURLを適切に処理するカスタムAsyncImage
+/// エラー時に異なるサイズでリトライし、ネットワークの一時的な問題にも対応
+struct ArtworkImageView: View {
+    let artworkUrl: String?
+    let placeholder: String
+    let width: CGFloat?
+    let height: CGFloat?
+
+    @State private var currentUrl: URL?
+    @State private var hasError = false
+    @State private var retryCount = 0
+    @State private var loadId = UUID() // URLを強制的に再ロードするためのID
+
+    private let maxRetries = 4
+    private let imageSizes = [600, 1000, 300, 512, 800] // 試すサイズのリスト
+
+    init(artworkUrl: String?, placeholder: String = "music.note", width: CGFloat? = nil, height: CGFloat? = nil) {
+        self.artworkUrl = artworkUrl
+        self.placeholder = placeholder
+        self.width = width
+        self.height = height
+    }
+
+    var body: some View {
+        Group {
+            if let url = currentUrl, !hasError {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    case .failure(let error):
+                        // エラー時は少し待ってからリトライ
+                        Color.clear
+                            .onAppear {
+                                print("⚠️ Image load failed for \(url.absoluteString): \(error.localizedDescription)")
+                                // 少し待ってからリトライ
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                    retryWithDifferentSize()
+                                }
+                            }
+                    case .empty:
+                        // ローディング中
+                        Color.gray.opacity(0.3)
+                            .overlay(
+                                ProgressView()
+                                    .tint(.white)
+                            )
+                    @unknown default:
+                        placeholderView
+                    }
+                }
+                .id(loadId) // IDを使用して強制的に再ロード
+            } else {
+                placeholderView
+            }
+        }
+        .onAppear {
+            setupInitialUrl()
+        }
+    }
+
+    private var placeholderView: some View {
+        Color.gray.opacity(0.3)
+            .overlay(
+                Image(systemName: placeholder)
+                    .font(.system(size: min(width ?? 60, height ?? 60) * 0.4))
+                    .foregroundColor(.white.opacity(0.3))
+            )
+    }
+
+    private func setupInitialUrl() {
+        guard let urlString = artworkUrl, !urlString.isEmpty else {
+            hasError = true
+            return
+        }
+
+        // 元のURLをそのまま使用（最初のリトライ）
+        currentUrl = URL(string: urlString)
+        print("📸 Loading artwork: \(urlString)")
+    }
+
+    private func retryWithDifferentSize() {
+        retryCount += 1
+
+        guard retryCount <= maxRetries else {
+            // リトライ回数上限に達したらプレースホルダーを表示
+            print("❌ Max retries reached for artwork URL")
+            hasError = true
+            currentUrl = nil
+            return
+        }
+
+        guard let urlString = artworkUrl else {
+            hasError = true
+            return
+        }
+
+        if retryCount == 1 {
+            // 最初のリトライ: 同じURLでもう一度試す（ネットワークの一時的な問題の可能性）
+            loadId = UUID()
+            print("🔄 Retry #\(retryCount): Reloading same URL")
+        } else if retryCount - 2 < imageSizes.count {
+            // 2回目以降: 異なるサイズで試す
+            let sizeIndex = retryCount - 2
+            let processedUrl = processArtworkUrl(urlString, size: imageSizes[sizeIndex])
+            currentUrl = URL(string: processedUrl)
+            loadId = UUID()
+            print("🔄 Retry #\(retryCount): Trying size \(imageSizes[sizeIndex])")
+        } else {
+            // すべてのサイズを試したらエラー
+            hasError = true
+            currentUrl = nil
+            print("❌ All sizes attempted, showing placeholder")
+        }
+    }
+
+    private func processArtworkUrl(_ urlString: String, size: Int) -> String {
+        var processed = urlString
+
+        // Apple MusicのアートワークURLのプレースホルダーを置き換える
+        // 例: https://is1-ssl.mzstatic.com/image/thumb/.../300x300bb.jpg
+        //     https://example.com/artwork/{w}x{h}bb.jpg
+
+        // {w}x{h}のパターンを実際のサイズに置き換え
+        processed = processed.replacingOccurrences(of: "{w}x{h}", with: "\(size)x\(size)")
+        processed = processed.replacingOccurrences(of: "{w}", with: "\(size)")
+        processed = processed.replacingOccurrences(of: "{h}", with: "\(size)")
+
+        // サイズのパターン（例: 300x300, 600x600）を見つけて置き換え
+        // Apple MusicのURLには通常 "600x600bb.jpg" のような形式が含まれる
+        let pattern = "(\\d+)x(\\d+)bb"
+        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+            let range = NSRange(processed.startIndex..., in: processed)
+            processed = regex.stringByReplacingMatches(
+                in: processed,
+                options: [],
+                range: range,
+                withTemplate: "\(size)x\(size)bb"
+            )
+        }
+
+        return processed
     }
 }

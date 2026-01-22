@@ -356,6 +356,8 @@ struct UserProfileView: View {
 
 struct ChannelRowView: View {
     let channel: Channel
+    var isEditable: Bool = false
+    var onEdit: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 12) {
@@ -408,6 +410,15 @@ struct ChannelRowView: View {
             }
 
             Spacer()
+
+            // 編集ボタン（自分のチャンネルの場合のみ）
+            if isEditable, let onEdit = onEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            }
         }
         .padding()
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -18,9 +18,39 @@ struct MyProfileView: View {
     @State private var isArtworkOnlyMode = false
     @State private var viewMode: ViewMode = .posts
 
+    // Screenshot grid selection
+    @State private var showingGridSelection = false
+    @State private var showingPostSelection = false
+    @State private var selectedGridType: GridType?
+    @State private var selectedPosts: [Post] = []
+
     enum ViewMode {
         case posts
         case channels
+    }
+
+    struct GridType: Identifiable {
+        let id = UUID()
+        let count: Int
+        let rows: Int
+        let columns: Int
+
+        var displayText: String {
+            "\(count)(\(columns)×\(rows))"
+        }
+
+        static let availableTypes: [GridType] = [
+            GridType(count: 4, rows: 2, columns: 2),
+            GridType(count: 6, rows: 3, columns: 2),
+            GridType(count: 9, rows: 3, columns: 3),
+            GridType(count: 12, rows: 4, columns: 3),
+            GridType(count: 15, rows: 5, columns: 3),
+            GridType(count: 16, rows: 4, columns: 4),
+            GridType(count: 20, rows: 5, columns: 4),
+            GridType(count: 25, rows: 5, columns: 5),
+            GridType(count: 36, rows: 6, columns: 6),
+            GridType(count: 42, rows: 7, columns: 6)
+        ]
     }
 
     init(pendingPlayPostId: Binding<String?> = .constant(nil)) {
@@ -113,82 +143,34 @@ struct MyProfileView: View {
 
     @ViewBuilder
     private var artworkOnlyGrid: some View {
-        GeometryReader { geometry in
-            let columns = 3
-            let spacing: CGFloat = 2
-            let totalWidth = geometry.size.width
-            let itemWidth = (totalWidth - spacing * CGFloat(columns - 1)) / CGFloat(columns)
-
-            ScrollView(showsIndicators: false) {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns), spacing: spacing) {
-                    // 最初のセル: ユーザー情報
-                    if let currentUser = authManager.currentUser {
-                        ZStack {
-                            Color.black
-
-                            VStack(spacing: 8) {
-                                // プロフィール画像
-                                AsyncImage(url: URL(string: currentUser.profileImageUrl ?? "")) { phase in
-                                    if let image = phase.image {
-                                        image
-                                            .resizable()
-                                            .scaledToFill()
-                                    } else {
-                                        Image("recoreco")
-                                            .resizable()
-                                            .scaledToFill()
-                                    }
-                                }
-                                .frame(width: itemWidth * 0.5, height: itemWidth * 0.5)
-                                .clipShape(Circle())
-
-                                // ユーザー名
-                                Text("@\(currentUser.username)")
-                                    .font(.system(size: 10, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .lineLimit(1)
-                            }
-                        }
-                        .frame(width: itemWidth, height: itemWidth)
+        if let gridType = selectedGridType, !selectedPosts.isEmpty {
+            DynamicArtworkGrid(posts: selectedPosts, columns: gridType.columns, rows: gridType.rows)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    // スクショモードを終了して共有画面を表示
+                    withAnimation {
+                        isArtworkOnlyMode = false
+                        screenshotMode.isScreenshotMode = false
                     }
-
-                    // 残りのセル: アルバムアート
-                    ForEach(viewModel.posts) { post in
-                        if let artworkUrl = post.artworkUrl, let url = URL(string: artworkUrl) {
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            } placeholder: {
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.3))
-                            }
-                            .frame(width: itemWidth, height: itemWidth)
-                            .clipped()
-                        }
-                    }
+                    showingShareScreen = true
                 }
-                .padding(.bottom, 100) // 下部に余白を追加（Safe Area分）
-            }
+        } else {
+            // Fallback: 全投稿を3x3で表示
+            DynamicArtworkGrid(posts: viewModel.posts, columns: 3, rows: 3)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    withAnimation {
+                        isArtworkOnlyMode = false
+                        screenshotMode.isScreenshotMode = false
+                    }
+                    showingShareScreen = true
+                }
         }
-        .contentShape(Rectangle()) // タップ可能な領域を全体に拡張
-        .onTapGesture {
-            // スクショモードを終了して共有画面を表示
-            withAnimation {
-                isArtworkOnlyMode = false
-                screenshotMode.isScreenshotMode = false
-            }
-            showingShareScreen = true
-        }
-        .ignoresSafeArea(edges: .bottom) // 下部のSafe Areaを無視（上部は時計が見えるように残す）
-        .persistentSystemOverlays(.hidden) // ホームインジケーターを非表示
     }
 
 
     var body: some View {
-        let _ = Self._printChanges()
-
-        return NavigationStack {
+        NavigationStack {
             Group {
                 if isArtworkOnlyMode {
                     // スクショモード: ZStackを使わず全画面表示
@@ -266,19 +248,19 @@ struct MyProfileView: View {
                             .multilineTextAlignment(.center)
                             .lineSpacing(4)
 
-                        // OKボタン
+                        // グリッド選択ボタン
                         Button(action: {
                             showingScreenshotTip = false
-                            // 音楽を停止してスクショモードに入る
+                            // 音楽を停止
                             PlaybackStateManager.shared.stopPlayback()
                             MusicKitManager.shared.stopPreview()
-                            withAnimation {
-                                isArtworkOnlyMode = true
-                                screenshotMode.isScreenshotMode = true
-                            }
-                            print("📸 Screenshot mode enabled (OK button)")
+                            // 前回の選択状態をリセット
+                            selectedPosts = []
+                            selectedGridType = nil
+                            // グリッド選択画面を表示
+                            showingGridSelection = true
                         }) {
-                            Text("OK")
+                            Text("グリッド選択へ")
                                 .font(.system(size: 18, weight: .semibold))
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
@@ -359,6 +341,35 @@ struct MyProfileView: View {
             }
             .sheet(isPresented: $showingShareScreen) {
                 ProfileShareView(authManager: authManager)
+            }
+            .onChange(of: isArtworkOnlyMode) { newValue in
+                // スクショモードを終了した時に選択状態をリセット
+                if !newValue {
+                    selectedPosts = []
+                    selectedGridType = nil
+                }
+            }
+            .fullScreenCover(isPresented: $showingGridSelection) {
+                GridTypeSelectionView(
+                    totalPosts: viewModel.posts.count,
+                    selectedGridType: $selectedGridType,
+                    selectedPosts: $selectedPosts,
+                    showingGridSelection: $showingGridSelection,
+                    showingPostSelection: $showingPostSelection
+                )
+            }
+            .fullScreenCover(isPresented: $showingPostSelection) {
+                if let gridType = selectedGridType {
+                    PostSelectionView(
+                        posts: viewModel.posts,
+                        gridType: gridType,
+                        selectedPosts: $selectedPosts,
+                        selectedGridType: $selectedGridType,
+                        showingPostSelection: $showingPostSelection,
+                        isArtworkOnlyMode: $isArtworkOnlyMode,
+                        screenshotMode: $screenshotMode.isScreenshotMode
+                    )
+                }
             }
         }
     }
@@ -550,6 +561,309 @@ struct MyProfileView: View {
             rootViewController.present(activityController, animated: true)
             print("✅ [MyProfileView] Sharing profile URL: \(url.absoluteString)")
         }
+    }
+}
+
+// MARK: - Grid Type Selection View
+struct GridTypeSelectionView: View {
+    let totalPosts: Int
+    @Binding var selectedGridType: MyProfileView.GridType?
+    @Binding var selectedPosts: [Post]
+    @Binding var showingGridSelection: Bool
+    @Binding var showingPostSelection: Bool
+    @State private var tempSelectedGridType: MyProfileView.GridType?
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.95)
+                .ignoresSafeArea()
+
+            VStack(spacing: 24) {
+                // Header
+                HStack {
+                    Text("グリッドを選択")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.white)
+
+                    Spacer()
+
+                    Button(action: {
+                        selectedGridType = nil
+                        selectedPosts = []
+                        showingGridSelection = false
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                }
+
+                Text("全 \(totalPosts) 投稿")
+                    .font(.system(size: 16))
+                    .foregroundColor(.white.opacity(0.7))
+
+                // Grid options
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                        ForEach(MyProfileView.GridType.availableTypes) { gridType in
+                            let isAvailable = totalPosts >= gridType.count
+                            let isSelected = tempSelectedGridType?.count == gridType.count
+
+                            Button(action: {
+                                if isAvailable {
+                                    tempSelectedGridType = gridType
+                                }
+                            }) {
+                                VStack(spacing: 8) {
+                                    Text(gridType.displayText)
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(isAvailable ? .white : .white.opacity(0.3))
+
+                                    // Mini preview grid
+                                    VStack(spacing: 2) {
+                                        ForEach(0..<gridType.rows, id: \.self) { _ in
+                                            HStack(spacing: 2) {
+                                                ForEach(0..<gridType.columns, id: \.self) { _ in
+                                                    Rectangle()
+                                                        .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                                                        .frame(width: 8, height: 8)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(isAvailable ? Color.white.opacity(0.1) : Color.white.opacity(0.05))
+                                )
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(
+                                            isSelected ?
+                                            LinearGradient(
+                                                gradient: Gradient(colors: [Color(hex: "cc208e"), Color(hex: "6713d2")]),
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            ) :
+                                            LinearGradient(
+                                                gradient: Gradient(colors: [Color.white.opacity(isAvailable ? 0.3 : 0.1)]),
+                                                startPoint: .leading,
+                                                endPoint: .trailing
+                                            ),
+                                            lineWidth: isSelected ? 3 : 1
+                                        )
+                                )
+                            }
+                            .disabled(!isAvailable)
+                        }
+                    }
+                }
+
+                // OK button
+                if tempSelectedGridType != nil {
+                    Button(action: {
+                        selectedGridType = tempSelectedGridType
+                        showingGridSelection = false
+                        showingPostSelection = true
+                    }) {
+                        Text("OK")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color(hex: "cc208e"), Color(hex: "6713d2")]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(12)
+                    }
+                }
+            }
+            .padding(24)
+        }
+    }
+}
+
+// MARK: - Post Selection View
+struct PostSelectionView: View {
+    let posts: [Post]
+    let gridType: MyProfileView.GridType
+    @Binding var selectedPosts: [Post]
+    @Binding var selectedGridType: MyProfileView.GridType?
+    @Binding var showingPostSelection: Bool
+    @Binding var isArtworkOnlyMode: Bool
+    @Binding var screenshotMode: Bool
+
+    @State private var localPosts: [Post] = []
+
+    var body: some View {
+        let spacing: CGFloat = 2
+        let screenWidth = UIScreen.main.bounds.width
+        let itemWidth = (screenWidth - spacing * 2 - 32) / 3  // 3 columns, 16px padding on each side
+
+        ZStack {
+            Color.black.opacity(0.95)
+                .ignoresSafeArea()
+
+            VStack(spacing: 16) {
+                // Header
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("投稿を選択")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(.white)
+
+                        Text("\(selectedPosts.count)/\(gridType.count)")
+                            .font(.system(size: 16))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+
+                    Spacer()
+
+                    Button(action: {
+                        selectedPosts = []
+                        selectedGridType = nil
+                        showingPostSelection = false
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                }
+                .padding(.horizontal)
+
+                // Posts grid (3 columns) - Use regular VGrid instead of LazyVGrid to avoid cancellation issues
+                ScrollView {
+                    let columns = Array(repeating: GridItem(.fixed(itemWidth), spacing: spacing), count: 3)
+                    LazyVStack(spacing: 0) {
+                        ForEach(0..<Int(ceil(Double(localPosts.count) / 3.0)), id: \.self) { rowIndex in
+                            HStack(spacing: spacing) {
+                                ForEach(0..<3, id: \.self) { colIndex in
+                                    let index = rowIndex * 3 + colIndex
+                                    if index < localPosts.count {
+                                        let post = localPosts[index]
+                                        Button(action: {
+                                            togglePostSelection(post)
+                                        }) {
+                                            ZStack(alignment: .topTrailing) {
+                                                ArtworkImageView(
+                                                    artworkUrl: post.artworkUrl,
+                                                    placeholder: "photo",
+                                                    width: itemWidth,
+                                                    height: itemWidth
+                                                )
+                                                .frame(width: itemWidth, height: itemWidth)
+                                                .clipped()
+
+                                                // Selection indicator
+                                                if let selectedIndex = selectedPosts.firstIndex(where: { $0.id == post.id }) {
+                                                    ZStack {
+                                                        Circle()
+                                                            .fill(Color.purple)
+                                                            .frame(width: 28, height: 28)
+
+                                                        Text("\(selectedIndex + 1)")
+                                                            .font(.system(size: 14, weight: .bold))
+                                                            .foregroundColor(.white)
+                                                    }
+                                                    .padding(8)
+                                                }
+                                            }
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    } else {
+                                        Color.clear
+                                            .frame(width: itemWidth, height: itemWidth)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+
+                // Bottom button
+                if selectedPosts.count == gridType.count {
+                    Button(action: {
+                        showingPostSelection = false
+                        isArtworkOnlyMode = true
+                        screenshotMode = true
+                    }) {
+                        Text("スクショ画面へ")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [Color(hex: "cc208e"), Color(hex: "6713d2")]),
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .cornerRadius(12)
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom)
+                }
+            }
+        }
+        .onAppear {
+            // 親Viewの再レンダリングの影響を受けないよう、postsをローカルにコピー
+            if localPosts.isEmpty {
+                localPosts = posts
+            }
+        }
+    }
+
+    private func togglePostSelection(_ post: Post) {
+        if let index = selectedPosts.firstIndex(where: { $0.id == post.id }) {
+            selectedPosts.remove(at: index)
+        } else if selectedPosts.count < gridType.count {
+            selectedPosts.append(post)
+        }
+    }
+}
+
+// MARK: - Dynamic Artwork Grid
+struct DynamicArtworkGrid: View {
+    let posts: [Post]
+    let columns: Int
+    let rows: Int
+
+    var body: some View {
+        GeometryReader { geometry in
+            let spacing: CGFloat = 2
+            let totalWidth = geometry.size.width
+            let itemWidth = (totalWidth - spacing * CGFloat(columns - 1)) / CGFloat(columns)
+
+            ScrollView(showsIndicators: false) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns), spacing: spacing) {
+                    ForEach(posts.prefix(columns * rows)) { post in
+                        if let artworkUrl = post.artworkUrl, let url = URL(string: artworkUrl) {
+                            AsyncImage(url: url) { image in
+                                image
+                                    .resizable()
+                                    .scaledToFill()
+                            } placeholder: {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.3))
+                            }
+                            .frame(width: itemWidth, height: itemWidth)
+                            .clipped()
+                        }
+                    }
+                }
+                .padding(.bottom, 100)
+            }
+        }
+        .ignoresSafeArea(edges: .bottom)
+        .persistentSystemOverlays(.hidden)
     }
 }
 

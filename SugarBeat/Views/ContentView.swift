@@ -1174,7 +1174,9 @@ class DiscoveryViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            channels = try await FirestorePostManager.shared.getDiscoveryChannels(limit: 20)
+            // Fetch 50 channels and shuffle for randomness, then take 20
+            let allChannels = try await FirestorePostManager.shared.getDiscoveryChannels(limit: 50)
+            channels = Array(allChannels.shuffled().prefix(20))
         } catch {
             print("❌ Failed to load channels: \(error)")
         }
@@ -1184,7 +1186,9 @@ class DiscoveryViewModel: ObservableObject {
         // Refresh without setting isLoading to avoid double animation
         print("🔄 [DiscoveryViewModel] refreshChannels called")
         do {
-            channels = try await FirestorePostManager.shared.getDiscoveryChannels(limit: 20)
+            // Fetch 50 channels and shuffle for randomness, then take 20
+            let allChannels = try await FirestorePostManager.shared.getDiscoveryChannels(limit: 50)
+            channels = Array(allChannels.shuffled().prefix(20))
             print("✅ [DiscoveryViewModel] Refreshed \(channels.count) channels")
         } catch {
             print("❌ Failed to refresh channels: \(error)")

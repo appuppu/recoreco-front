@@ -543,6 +543,7 @@ struct FeaturedPostCellSimple: View {
                 width: width,
                 height: height
             )
+            .id(post.id)  // Force re-render when post changes
             .frame(width: width, height: height)
             .clipped()
 

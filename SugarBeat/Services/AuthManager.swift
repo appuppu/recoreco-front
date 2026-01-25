@@ -144,17 +144,18 @@ class AuthManager: ObservableObject {
         GIDSignIn.sharedInstance.configuration = config
 
         let result = try await GIDSignIn.sharedInstance.signIn(withPresenting: viewController)
-        let user = result.user
+        let googleUser = result.user
 
-        guard let idToken = user.idToken?.tokenString else {
+        guard let idToken = googleUser.idToken?.tokenString else {
             throw NSError(domain: "AuthManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to get ID token"])
         }
 
-        let accessToken = user.accessToken.tokenString
+        let accessToken = googleUser.accessToken.tokenString
 
         // Sign in to Firebase with Google credentials
         let credential = GoogleAuthProvider.credential(withIDToken: idToken, accessToken: accessToken)
-        try await Auth.auth().signIn(with: credential)
+        let authResult = try await Auth.auth().signIn(with: credential)
+        let uid = authResult.user.uid
 
         // Firebase auth listener will handle loading user from Firestore
         // If user doesn't exist, needsUsernameSetup will be set to true

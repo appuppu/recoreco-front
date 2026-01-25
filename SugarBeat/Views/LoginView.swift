@@ -174,6 +174,19 @@ struct LoginView: View {
                     dismiss()
                 }
             }
+            .onChange(of: authManager.needsUsernameSetup) { needsSetup in
+                // When username setup is completed, dismiss login view
+                if authManager.isAuthenticated && !needsSetup {
+                    dismiss()
+                }
+            }
+            .fullScreenCover(isPresented: Binding(
+                get: { authManager.needsUsernameSetup },
+                set: { _ in }
+            )) {
+                UsernameSetupView(email: authManager.pendingUserEmail)
+                    .environmentObject(authManager)
+            }
     }
 
     private func login() {

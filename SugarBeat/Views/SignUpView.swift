@@ -261,6 +261,19 @@ struct SignUpView: View {
             }
         }
         .navigationViewStyle(.stack)
+        .onChange(of: authManager.needsUsernameSetup) { needsSetup in
+            // When username setup is completed, dismiss signup view
+            if authManager.isAuthenticated && !needsSetup {
+                dismiss()
+            }
+        }
+        .fullScreenCover(isPresented: Binding(
+            get: { authManager.needsUsernameSetup },
+            set: { _ in }
+        )) {
+            UsernameSetupView(email: authManager.pendingUserEmail)
+                .environmentObject(authManager)
+        }
     }
 
     private var isFormValid: Bool {
@@ -353,7 +366,10 @@ struct SignUpView: View {
         Task {
             do {
                 try await authManager.signInWithGoogle(presenting: viewController)
-                dismiss()
+                // If needsUsernameSetup is true, don't dismiss (UsernameSetupView will be shown)
+                if !authManager.needsUsernameSetup {
+                    dismiss()
+                }
             } catch {
                 errorMessage = "Google登録に失敗しました"
             }
@@ -370,7 +386,10 @@ struct SignUpView: View {
                 switch result {
                 case .success(let authorization):
                     try await authManager.handleAppleSignInCompletion(authorization)
-                    dismiss()
+                    // If needsUsernameSetup is true, don't dismiss (UsernameSetupView will be shown)
+                    if !authManager.needsUsernameSetup {
+                        dismiss()
+                    }
                 case .failure(let error):
                     throw error
                 }

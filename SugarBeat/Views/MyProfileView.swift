@@ -901,7 +901,8 @@ class MyProfileViewModel: ObservableObject {
         ) { [weak self] notification in
             if let postId = notification.userInfo?["postId"] as? String {
                 Task { @MainActor in
-                    self?.posts.removeAll { $0.id == postId }
+                    // 投稿削除後、リストを再読み込みして最新状態に更新
+                    await self?.loadPosts(forceRefresh: true)
                 }
             }
         }
@@ -922,17 +923,13 @@ class MyProfileViewModel: ObservableObject {
             isLoading = true
         }
 
-        // キャッシュが有効な場合はスキップ（30秒以内）
-        if let lastFetch = lastFetchTime {
-            let elapsed = Date().timeIntervalSince(lastFetch)
-            if elapsed < cacheValidDuration && !posts.isEmpty {
-                print("📦 My Profile: Using cache (elapsed: \(Int(elapsed))s)")
-                // キャッシュ使用時もローディングアニメーションを表示
-                if forceRefresh {
-                    try? await Task.sleep(nanoseconds: UInt64(minimumLoadingTime * 1_000_000_000))
-                    isLoading = false
+        // forceRefreshがtrueの場合はキャッシュをスキップ
+        if !forceRefresh {
+            if let lastFetch = lastFetchTime {
+                let elapsed = Date().timeIntervalSince(lastFetch)
+                if elapsed < cacheValidDuration && !posts.isEmpty {
+                    return
                 }
-                return
             }
         }
 
@@ -943,7 +940,6 @@ class MyProfileViewModel: ObservableObject {
             let (fetchedPosts, _) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId, limit: 50)
             posts = fetchedPosts.sorted { $0.createdAt > $1.createdAt }
             lastFetchTime = Date()
-            print("📥 My Profile: Loaded \(posts.count) posts")
         } catch let error as NSError {
             // キャンセルエラー(-999)は無視
             if error.code == NSURLErrorCancelled {

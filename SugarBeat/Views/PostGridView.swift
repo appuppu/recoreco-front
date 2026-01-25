@@ -20,6 +20,7 @@ struct PostGridView: View {
     // Dynamic user and channel info cache
     @State private var postUserCache: [String: User] = [:]  // postId -> User
     @State private var postChannelCache: [String: Channel] = [:]  // postId -> Channel
+    @State private var featuredCellKey = UUID() // Featured cellを強制再作成するためのキー
 
     /// 再生中の投稿（先頭以外で再生中の場合のみ）
     var playingPost: Post? {
@@ -65,6 +66,7 @@ struct PostGridView: View {
                                 showUserInfo: showUserInfo,
                                 safeAreaTop: safeAreaTop
                             )
+                            .id("\(post.id ?? "nil")_\(featuredCellKey.uuidString)")  // 完全に再作成
                             .frame(width: screenWidth, height: featuredHeight)
                         }
 
@@ -105,6 +107,10 @@ struct PostGridView: View {
             .ignoresSafeArea(respectNavigationBar ? [] : .all)
         }
         .toolbar(screenshotMode.isScreenshotMode ? .hidden : .visible, for: .tabBar)
+        .onChange(of: displayPost?.id) { newPostId in
+            // Featured cellを完全に再作成するためにキーを更新
+            featuredCellKey = UUID()
+        }
     }
 
     // MARK: - Grid Layout
@@ -543,7 +549,6 @@ struct FeaturedPostCellSimple: View {
                 width: width,
                 height: height
             )
-            .id(post.id)  // Force re-render when post changes
             .frame(width: width, height: height)
             .clipped()
 
@@ -1313,7 +1318,6 @@ struct ArtworkImageView: View {
                         // エラー時は少し待ってからリトライ
                         Color.clear
                             .onAppear {
-                                print("⚠️ Image load failed for \(url.absoluteString): \(error.localizedDescription)")
                                 // 少し待ってからリトライ
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                                     retryWithDifferentSize()
@@ -1338,6 +1342,17 @@ struct ArtworkImageView: View {
         .onAppear {
             setupInitialUrl()
         }
+        .onChange(of: artworkUrl) { newUrl in
+            // artworkUrlが実際に変わった場合のみ処理
+            guard newUrl != currentUrl?.absoluteString else {
+                return
+            }
+
+            // リセットして再初期化
+            retryCount = 0
+            hasError = false
+            setupInitialUrl()  // currentUrlを更新（loadId更新は不要）
+        }
     }
 
     private var placeholderView: some View {
@@ -1357,7 +1372,6 @@ struct ArtworkImageView: View {
 
         // 元のURLをそのまま使用（最初のリトライ）
         currentUrl = URL(string: urlString)
-        print("📸 Loading artwork: \(urlString)")
     }
 
     private func retryWithDifferentSize() {
@@ -1365,7 +1379,6 @@ struct ArtworkImageView: View {
 
         guard retryCount <= maxRetries else {
             // リトライ回数上限に達したらプレースホルダーを表示
-            print("❌ Max retries reached for artwork URL")
             hasError = true
             currentUrl = nil
             return
@@ -1379,19 +1392,16 @@ struct ArtworkImageView: View {
         if retryCount == 1 {
             // 最初のリトライ: 同じURLでもう一度試す（ネットワークの一時的な問題の可能性）
             loadId = UUID()
-            print("🔄 Retry #\(retryCount): Reloading same URL")
         } else if retryCount - 2 < imageSizes.count {
             // 2回目以降: 異なるサイズで試す
             let sizeIndex = retryCount - 2
             let processedUrl = processArtworkUrl(urlString, size: imageSizes[sizeIndex])
             currentUrl = URL(string: processedUrl)
             loadId = UUID()
-            print("🔄 Retry #\(retryCount): Trying size \(imageSizes[sizeIndex])")
         } else {
             // すべてのサイズを試したらエラー
             hasError = true
             currentUrl = nil
-            print("❌ All sizes attempted, showing placeholder")
         }
     }
 

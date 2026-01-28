@@ -10,7 +10,9 @@ struct PostGridView: View {
     var isScreenshotMode: Bool = false
     var showUserInfo: Bool = true // 大きいセルにユーザー情報を表示するか
     var isLoading: Bool = false // リフレッシュ中のローディング表示
+    var isLoadingMore: Bool = false // 追加読み込み中のローディング表示
     var onRefresh: (() async -> Void)? = nil // リフレッシュコールバック
+    var onLoadMore: (() async -> Void)? = nil // 追加読み込みコールバック
     var respectNavigationBar: Bool = false // NavigationBarの下に表示するかどうか
 
     @StateObject private var screenshotMode = ScreenshotModeManager.shared
@@ -74,6 +76,26 @@ struct PostGridView: View {
                         if posts.count > 1 {
                             gridLayout(posts: Array(posts.dropFirst()), screenWidth: screenWidth, spacing: spacing)
                                 .padding(.top, spacing)
+                        }
+
+                        // 追加読み込みインジケータ
+                        if isLoadingMore {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .tint(.white)
+                                    .padding()
+                                Spacer()
+                            }
+                        } else if onLoadMore != nil {
+                            // Trigger load more when this view appears
+                            Color.clear
+                                .frame(height: 50)
+                                .onAppear {
+                                    Task {
+                                        await onLoadMore?()
+                                    }
+                                }
                         }
                     }
                     .padding(.bottom, 100)
@@ -1299,8 +1321,8 @@ struct ArtworkImageView: View {
     @State private var retryCount = 0
     @State private var loadId = UUID() // URLを強制的に再ロードするためのID
 
-    private let maxRetries = 4
-    private let imageSizes = [600, 1000, 300, 512, 800] // 試すサイズのリスト
+    private let maxRetries = 2  // Optimized: Reduced from 4 to 2
+    private let imageSizes = [600, 1000] // Optimized: Reduced from 5 to 2 most common sizes
 
     init(artworkUrl: String?, placeholder: String = "music.note", width: CGFloat? = nil, height: CGFloat? = nil) {
         self.artworkUrl = artworkUrl
@@ -1322,8 +1344,8 @@ struct ArtworkImageView: View {
                         // エラー時は少し待ってからリトライ
                         Color.clear
                             .onAppear {
-                                // 少し待ってからリトライ
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                // Optimized: Reduced delay from 0.3s to 0.1s
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                                     retryWithDifferentSize()
                                 }
                             }

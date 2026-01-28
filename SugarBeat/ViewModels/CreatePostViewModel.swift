@@ -277,10 +277,12 @@ class CreatePostViewModel: ObservableObject {
             }
             print("✅ [CreatePostViewModel] Current userId: \(currentUserId)")
 
-            // Load both own channels and followed channels
-            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+            // Load both own channels and followed channels in parallel
+            async let ownChannelsTask = FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+            async let followedChannelsTask = FirestoreChannelManager.shared.getFollowedChannels(userId: currentUserId)
+
+            let (ownChannels, followedChannels) = try await (ownChannelsTask, followedChannelsTask)
             print("✅ [CreatePostViewModel] Fetched \(ownChannels.count) own channels")
-            let followedChannels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: currentUserId)
             print("✅ [CreatePostViewModel] Fetched \(followedChannels.count) followed channels")
 
             // Merge and remove duplicates

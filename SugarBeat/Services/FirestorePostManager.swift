@@ -272,7 +272,8 @@ class FirestorePostManager {
                 .order(by: "createdAt", descending: true)
                 .limit(to: limit)
 
-            let snapshot = try await query.getDocuments(source: .server)
+            // Optimized: Changed from .server to .default for cache-first performance
+            let snapshot = try await query.getDocuments(source: .default)
             print("📥 [PostManager] Fetched \(snapshot.documents.count) posts by user \(userId) in channel \(channelId)")
             let posts = try snapshot.documents.compactMap { try $0.data(as: Post.self) }
 

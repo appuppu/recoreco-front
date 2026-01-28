@@ -56,8 +56,12 @@ struct UserProfileView: View {
                                         showingLoginPrompt: $showingLoginPrompt,
                                         showUserInfo: false,
                                         isLoading: viewModel.isLoading,
+                                        isLoadingMore: viewModel.isLoadingMore,
                                         onRefresh: {
                                             await viewModel.loadUser(userId: userId)
+                                        },
+                                        onLoadMore: {
+                                            await viewModel.loadMorePosts(userId: userId)
                                         }
                                     )
                                 }

@@ -96,28 +96,41 @@ class FirestoreChannelManager {
     /// Get user's channels
     func getUserChannels(userId: String, forceRefresh: Bool = false) async throws -> [Channel] {
         print("🔍 [ChannelManager] getUserChannels - userId: \(userId), forceRefresh: \(forceRefresh)")
+
+        // Check cache first
+        if !forceRefresh, let cachedChannels = FirestoreCacheManager.shared.getCachedUserChannels(userId: userId) {
+            print("✅ [ChannelManager] Returning cached user channels: \(cachedChannels.count)")
+            return cachedChannels
+        }
+
         let snapshot = try await db.collection(channelsCollection)
             .whereField("userId", isEqualTo: userId)
             .order(by: "createdAt", descending: true)
             .getDocuments(source: forceRefresh ? .server : .default)
 
         var channels: [Channel] = []
+        let channelIds: [String] = snapshot.documents.compactMap { $0.documentID }
+
         for document in snapshot.documents {
             if var channel = try? document.data(as: Channel.self) {
-                // Check if current user is following
-                if let currentUserId = Auth.auth().currentUser?.uid {
-                    let isFollowing = try await checkIfFollowing(channelId: channel.id ?? "", userId: currentUserId)
-                    channel.isFollowing = isFollowing
-                }
-
-                // Get follower count dynamically
-                if let channelId = channel.id {
-                    channel.followerCount = try? await getFollowerCount(channelId: channelId)
-                }
-
                 channels.append(channel)
             }
         }
+
+        // Batch fetch following status and follower counts
+        if let currentUserId = Auth.auth().currentUser?.uid {
+            let (followingMap, followerCountMap) = try await batchFetchChannelMetadata(channelIds: channelIds, currentUserId: currentUserId)
+
+            for i in 0..<channels.count {
+                if let channelId = channels[i].id {
+                    channels[i].isFollowing = followingMap[channelId] ?? false
+                    channels[i].followerCount = followerCountMap[channelId] ?? 0
+                }
+            }
+        }
+
+        // Cache the result
+        FirestoreCacheManager.shared.cacheUserChannels(userId: userId, channels: channels)
 
         return channels
     }
@@ -145,6 +158,13 @@ class FirestoreChannelManager {
     /// Get followed channels for user
     func getFollowedChannels(userId: String, forceRefresh: Bool = false) async throws -> [Channel] {
         print("🔍 [ChannelManager] getFollowedChannels - userId: \(userId), forceRefresh: \(forceRefresh)")
+
+        // Check cache first
+        if !forceRefresh, let cachedChannels = FirestoreCacheManager.shared.getCachedFollowedChannels(userId: userId) {
+            print("✅ [ChannelManager] Returning cached followed channels: \(cachedChannels.count)")
+            return cachedChannels
+        }
+
         // Get list of followed channel IDs
         let followSnapshot = try await db.collection("users")
             .document(userId)
@@ -169,20 +189,28 @@ class FirestoreChannelManager {
 
             for document in snapshot.documents {
                 if var channel = try? document.data(as: Channel.self) {
-                    channel.isFollowing = true
-
-                    // Get follower count dynamically
-                    if let channelId = channel.id {
-                        channel.followerCount = try? await getFollowerCount(channelId: channelId)
-                    }
-
                     channels.append(channel)
+                }
+            }
+        }
+
+        // Batch fetch follower counts (they're already following, so no need to check)
+        if let currentUserId = Auth.auth().currentUser?.uid {
+            let (_, followerCountMap) = try await batchFetchChannelMetadata(channelIds: channelIds, currentUserId: currentUserId)
+
+            for i in 0..<channels.count {
+                channels[i].isFollowing = true
+                if let channelId = channels[i].id {
+                    channels[i].followerCount = followerCountMap[channelId] ?? 0
                 }
             }
         }
 
         // Sort by latest post date
         channels.sort { ($0.latestPostAt ?? Date.distantPast) > ($1.latestPostAt ?? Date.distantPast) }
+
+        // Cache the result
+        FirestoreCacheManager.shared.cacheFollowedChannels(userId: userId, channels: channels)
 
         return channels
     }
@@ -523,6 +551,52 @@ class FirestoreChannelManager {
         try await batch.commit()
 
         print("✅ Unfollowed channel: \(channelId)")
+    }
+
+    /// Batch fetch channel metadata (following status and follower counts)
+    /// Returns a tuple of (followingMap, followerCountMap)
+    private func batchFetchChannelMetadata(channelIds: [String], currentUserId: String) async throws -> ([String: Bool], [String: Int]) {
+        guard !channelIds.isEmpty else {
+            return ([:], [:])
+        }
+
+        // Fetch all following statuses in parallel
+        async let followingTask: [String: Bool] = {
+            let followingSnapshot = try await self.db.collection("users")
+                .document(currentUserId)
+                .collection("followingChannels")
+                .getDocuments()
+
+            var followingMap: [String: Bool] = [:]
+            for doc in followingSnapshot.documents {
+                followingMap[doc.documentID] = true
+            }
+            return followingMap
+        }()
+
+        // Fetch all follower counts in parallel
+        async let followerCountTask: [String: Int] = {
+            var followerCountMap: [String: Int] = [:]
+
+            // Use Task Group for parallel fetching
+            await withTaskGroup(of: (String, Int).self) { group in
+                for channelId in channelIds {
+                    group.addTask {
+                        let count = (try? await self.getFollowerCount(channelId: channelId)) ?? 0
+                        return (channelId, count)
+                    }
+                }
+
+                for await (channelId, count) in group {
+                    followerCountMap[channelId] = count
+                }
+            }
+
+            return followerCountMap
+        }()
+
+        let (followingMap, followerCountMap) = try await (followingTask, followerCountTask)
+        return (followingMap, followerCountMap)
     }
 
     func checkIfFollowing(channelId: String, userId: String) async throws -> Bool {

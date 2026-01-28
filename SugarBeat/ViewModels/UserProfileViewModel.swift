@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import FirebaseAuth
+import FirebaseFirestore
 
 @MainActor
 class UserProfileViewModel: ObservableObject {
@@ -8,9 +9,13 @@ class UserProfileViewModel: ObservableObject {
     @Published var posts: [Post] = []
     @Published var channels: [Channel] = []
     @Published var isLoading = false
+    @Published var isLoadingMore = false
     @Published var errorMessage: String?
     @Published var isBlocked = false // 操作ユーザーがブロックしている
     @Published var isBlockedBy = false // 操作ユーザーがブロックされている
+
+    private var lastDocument: DocumentSnapshot?
+    private var hasMorePosts = true
 
     init() {
         // 投稿削除通知を監視
@@ -78,11 +83,16 @@ class UserProfileViewModel: ObservableObject {
             user = try await FirestoreUserManager.shared.getUser(userId: userId, fetchCounts: true)
             print("✅ [UserProfileViewModel] Loaded user: \(user?.username ?? "unknown")")
 
-            let (fetchedPosts, _) = try await FirestorePostManager.shared.getUserPosts(userId: userId, limit: 50)
-            // チャンネルに紐づく投稿のみをフィルタリング
-            let channelPosts = fetchedPosts.filter { $0.channelId != nil }
-            posts = channelPosts.sorted { $0.createdAt > $1.createdAt }
-            print("🔍 [UserProfileViewModel] Loaded \(posts.count) channel posts (out of \(fetchedPosts.count) total)")
+            // Reset pagination state on initial load
+            lastDocument = nil
+            hasMorePosts = true
+
+            let (fetchedPosts, lastDoc) = try await FirestorePostManager.shared.getUserPosts(userId: userId, limit: 20)
+            // 全ての投稿を表示（channelIdフィルタリングを削除）
+            posts = fetchedPosts.sorted { $0.createdAt > $1.createdAt }
+            lastDocument = lastDoc
+            hasMorePosts = fetchedPosts.count >= 20
+            print("🔍 [UserProfileViewModel] Loaded \(posts.count) posts, hasMore: \(hasMorePosts)")
         } catch {
             errorMessage = "ユーザー情報を取得できませんでした"
             print("❌ Failed to load user: \(error)")
@@ -132,11 +142,38 @@ class UserProfileViewModel: ObservableObject {
         }
     }
 
+    func loadMorePosts(userId: String) async {
+        guard !isLoadingMore, hasMorePosts, let lastDoc = lastDocument else {
+            print("⏭️ [UserProfileViewModel] Skip loadMore - isLoadingMore: \(isLoadingMore), hasMore: \(hasMorePosts), lastDoc: \(lastDocument != nil)")
+            return
+        }
+
+        isLoadingMore = true
+        print("📄 [UserProfileViewModel] Loading more posts from lastDocument...")
+
+        do {
+            let (fetchedPosts, lastDoc) = try await FirestorePostManager.shared.getUserPosts(userId: userId, limit: 20, lastDocument: lastDoc)
+
+            // Append new posts to existing posts
+            posts.append(contentsOf: fetchedPosts.sorted { $0.createdAt > $1.createdAt })
+            lastDocument = lastDoc
+            hasMorePosts = fetchedPosts.count >= 20
+
+            print("✅ [UserProfileViewModel] Loaded \(fetchedPosts.count) more posts. Total: \(posts.count), hasMore: \(hasMorePosts)")
+        } catch {
+            print("❌ [UserProfileViewModel] Failed to load more posts: \(error)")
+        }
+
+        isLoadingMore = false
+    }
+
     func loadChannels(userId: String) async {
         do {
-            // Load both own channels and followed channels
-            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: userId)
-            let followedChannels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: userId)
+            // Load both own channels and followed channels in parallel
+            async let ownChannelsTask = FirestoreChannelManager.shared.getUserChannels(userId: userId)
+            async let followedChannelsTask = FirestoreChannelManager.shared.getFollowedChannels(userId: userId)
+
+            let (ownChannels, followedChannels) = try await (ownChannelsTask, followedChannelsTask)
 
             // Merge and remove duplicates
             var allChannels = ownChannels

@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseAuth
+import FirebaseFirestore
 
 /// プロフィールタブ - 自分の投稿一覧を表示（発見タブと同じデザイン）
 struct MyProfileView: View {
@@ -129,8 +130,12 @@ struct MyProfileView: View {
                             showingLoginPrompt: $showingLoginPrompt,
                             showUserInfo: true,
                             isLoading: viewModel.isLoading,
+                            isLoadingMore: viewModel.isLoadingMore,
                             onRefresh: {
                                 await viewModel.loadPosts(forceRefresh: true)
+                            },
+                            onLoadMore: {
+                                await viewModel.loadMorePosts()
                             }
                         )
                         .environmentObject(authManager)
@@ -917,6 +922,7 @@ class MyProfileViewModel: ObservableObject {
     @Published var posts: [Post] = []
     @Published var channels: [Channel] = []
     @Published var isLoading = false
+    @Published var isLoadingMore = false
     @Published var errorMessage: String?
     @Published var showEditChannelSheet = false
     @Published var editingChannel: Channel?
@@ -924,6 +930,8 @@ class MyProfileViewModel: ObservableObject {
 
     private var lastFetchTime: Date?
     private let cacheValidDuration: TimeInterval = 30 // 30秒キャッシュ
+    private var lastDocument: DocumentSnapshot?
+    private var hasMorePosts = true
 
     init() {
         // 投稿完了通知を監視
@@ -980,13 +988,19 @@ class MyProfileViewModel: ObservableObject {
 
         errorMessage = nil
 
+        // Reset pagination state on initial load
+        lastDocument = nil
+        hasMorePosts = true
+
         do {
             // 自分の投稿を取得（新しい順）
             print("🔄 [MyProfileViewModel] Fetching posts for userId: \(currentUserId), forceRefresh: \(forceRefresh)")
-            let (fetchedPosts, _) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId, limit: 50)
+            let (fetchedPosts, lastDoc) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId, limit: 20)
             posts = fetchedPosts.sorted { $0.createdAt > $1.createdAt }
+            lastDocument = lastDoc
+            hasMorePosts = fetchedPosts.count >= 20
             lastFetchTime = Date()
-            print("✅ [MyProfileViewModel] Fetched \(posts.count) posts for user")
+            print("✅ [MyProfileViewModel] Fetched \(posts.count) posts for user, hasMore: \(hasMorePosts)")
         } catch let error as NSError {
             // キャンセルエラー(-999)は無視
             if error.code == NSURLErrorCancelled {
@@ -1008,11 +1022,43 @@ class MyProfileViewModel: ObservableObject {
         isLoading = false
     }
 
+    func loadMorePosts() async {
+        guard !isLoadingMore, hasMorePosts, let lastDoc = lastDocument else {
+            print("⏭️ [MyProfileViewModel] Skip loadMore - isLoadingMore: \(isLoadingMore), hasMore: \(hasMorePosts), lastDoc: \(lastDocument != nil)")
+            return
+        }
+
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("⚠️ [MyProfileViewModel] loadMorePosts: User not authenticated")
+            return
+        }
+
+        isLoadingMore = true
+        print("📄 [MyProfileViewModel] Loading more posts from lastDocument...")
+
+        do {
+            let (fetchedPosts, lastDoc) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId, limit: 20, lastDocument: lastDoc)
+
+            // Append new posts to existing posts
+            posts.append(contentsOf: fetchedPosts.sorted { $0.createdAt > $1.createdAt })
+            lastDocument = lastDoc
+            hasMorePosts = fetchedPosts.count >= 20
+
+            print("✅ [MyProfileViewModel] Loaded \(fetchedPosts.count) more posts. Total: \(posts.count), hasMore: \(hasMorePosts)")
+        } catch {
+            print("❌ [MyProfileViewModel] Failed to load more posts: \(error)")
+        }
+
+        isLoadingMore = false
+    }
+
     func loadChannels(userId: String) async {
         do {
-            // Load both own channels and followed channels
-            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: userId)
-            let followedChannels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: userId)
+            // Load both own channels and followed channels in parallel
+            async let ownChannelsTask = FirestoreChannelManager.shared.getUserChannels(userId: userId)
+            async let followedChannelsTask = FirestoreChannelManager.shared.getFollowedChannels(userId: userId)
+
+            let (ownChannels, followedChannels) = try await (ownChannelsTask, followedChannelsTask)
 
             // Merge and remove duplicates
             var allChannels = ownChannels

@@ -407,14 +407,24 @@ struct FeedView: View {
                                                     .clipShape(Circle())
                                             default:
                                                 Circle()
-                                                    .fill(Color.gray)
+                                                    .fill(Color.white.opacity(0.1))
                                                     .frame(width: 40, height: 40)
+                                                    .overlay(
+                                                        Image(systemName: "person.fill")
+                                                            .font(.system(size: 20))
+                                                            .foregroundColor(.white.opacity(0.5))
+                                                    )
                                             }
                                         }
                                     } else {
                                         Circle()
-                                            .fill(Color.gray)
+                                            .fill(Color.white.opacity(0.1))
                                             .frame(width: 40, height: 40)
+                                            .overlay(
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 20))
+                                                    .foregroundColor(.white.opacity(0.5))
+                                            )
                                     }
 
                                     VStack(alignment: .leading, spacing: 2) {
@@ -653,71 +663,265 @@ struct PostCard: View {
 
 struct DiscoveryView: View {
     @StateObject private var viewModel = DiscoveryViewModel()
+    @State private var isSearching = false
+    @State private var searchQuery = ""
+    @State private var searchResults: [Channel] = []
+    @State private var isSearchingDB = false
+    @State private var selectedChannelType: ChannelType = .shared
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                if viewModel.isLoading && viewModel.channels.isEmpty {
-                    VStack {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(2.0)
+                VStack(spacing: 0) {
+                    if !isSearching {
+                        channelTypeSwitcher
                     }
-                    .onAppear {
-                        print("🔄 [DiscoveryView] Initial loading ProgressView displayed")
-                    }
-                } else if !viewModel.channels.isEmpty {
-                    ZStack {
-                        GeometryReader { geometry in
-                            ScrollView {
-                                LazyVStack(spacing: 0) {
-                                    ForEach(Array(viewModel.channels.enumerated()), id: \.element.id) { index, channel in
-                                        ChannelDiscoveryCard(
-                                            channel: channel,
-                                            postId: channel.latestPostId ?? ""
-                                        )
-                                        .padding(.vertical, 4)
 
-                                        // チャンネル間の区切り線
-                                        if index < viewModel.channels.count - 1 {
-                                            Divider()
-                                                .background(Color.white.opacity(0.2))
-                                                .padding(.vertical, 4)
-                                        }
-
-                                        // 2チャンネルごとに広告を表示
-                                        if (index + 1) % 2 == 0 && AdConfig.shouldShowAds {
-                                            FeedAdCardView()
-                                                .id("discovery_ad_\(index)")
-                                                .padding(.vertical, 8)
-                                                .onAppear {
-                                                    print("📢 [DiscoveryView] Ad view appeared after channel index \(index)")
-                                                }
-                                        }
-                                    }
-                                }
-                                .padding(.top, 8)
-                                .padding(.bottom, 100)
-                            }
-                            .scrollIndicators(.hidden)
-                            .refreshable {
-                                await viewModel.refreshChannels()
-                            }
-                        }
+                    if isSearching {
+                        searchBar
                     }
+
+                    contentArea
                 }
             }
             .navigationTitle("すべてのチャンネル")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: {
+                        isSearching = true
+                    }) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.white)
+                    }
+                }
+            }
             .toolbarBackground(.black.opacity(0.9), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .task {
-            await viewModel.loadChannels()
+            await viewModel.loadChannels(channelType: .shared)
         }
+    }
+
+    // MARK: - Subviews
+
+    @ViewBuilder
+    private var channelTypeSwitcher: some View {
+        HStack(spacing: 8) {
+            Button(action: {
+                withAnimation {
+                    selectedChannelType = .shared
+                    viewModel.filterChannels(by: .shared)
+                }
+            }) {
+                Text("公開チャンネル")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(selectedChannelType == .shared ? .white : .white.opacity(0.6))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(selectedChannelType == .shared ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                    .cornerRadius(8)
+            }
+
+            Button(action: {
+                withAnimation {
+                    selectedChannelType = .personal
+                    viewModel.filterChannels(by: .personal)
+                }
+            }) {
+                Text("個人チャンネル")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(selectedChannelType == .personal ? .white : .white.opacity(0.6))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(selectedChannelType == .personal ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                    .cornerRadius(8)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.black)
+    }
+
+    @ViewBuilder
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.white.opacity(0.5))
+
+                TextField("チャンネル名を検索", text: $searchQuery)
+                    .foregroundColor(.white)
+                    .autocapitalization(.none)
+
+                if !searchQuery.isEmpty {
+                    Button(action: {
+                        searchQuery = ""
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color.white.opacity(0.1))
+            .cornerRadius(10)
+
+            Button(action: {
+                Task {
+                    await performSearch()
+                }
+            }) {
+                Text("検索")
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color.blue)
+                    .cornerRadius(10)
+            }
+            .disabled(searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .opacity(searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1.0)
+
+            Button(action: {
+                isSearching = false
+                searchQuery = ""
+                searchResults = []
+            }) {
+                Text("キャンセル")
+                    .foregroundColor(.white)
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.black)
+    }
+
+    @ViewBuilder
+    private var contentArea: some View {
+        if isSearching {
+            // Search mode
+            if isSearchingDB {
+                VStack {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(2.0)
+                    Text("検索中...")
+                        .foregroundColor(.white.opacity(0.7))
+                        .padding(.top, 8)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if searchResults.isEmpty && !searchQuery.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 60))
+                        .foregroundColor(.white.opacity(0.3))
+                    Text("チャンネルが見つかりません")
+                        .font(.title3)
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if !searchResults.isEmpty {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(Array(searchResults.enumerated()), id: \.element.id) { index, channel in
+                            ChannelDiscoveryCard(
+                                channel: channel,
+                                postId: channel.latestPostId ?? ""
+                            )
+                            .padding(.vertical, 4)
+
+                            if index < searchResults.count - 1 {
+                                Divider()
+                                    .background(Color.white.opacity(0.2))
+                                    .padding(.vertical, 4)
+                            }
+                        }
+                    }
+                    .padding(.top, 8)
+                    .padding(.bottom, 100)
+                }
+                .scrollIndicators(.hidden)
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 60))
+                        .foregroundColor(.white.opacity(0.3))
+                    Text("チャンネル名を入力して\n検索ボタンを押してください")
+                        .font(.title3)
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else {
+            // Normal mode
+            if viewModel.isLoading && viewModel.channels.isEmpty {
+                VStack {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(2.0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onAppear {
+                    print("🔄 [DiscoveryView] Initial loading ProgressView displayed")
+                }
+            } else if !viewModel.channels.isEmpty {
+                GeometryReader { geometry in
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            ForEach(Array(viewModel.channels.enumerated()), id: \.element.id) { index, channel in
+                                ChannelDiscoveryCard(
+                                    channel: channel,
+                                    postId: channel.latestPostId ?? ""
+                                )
+                                .padding(.vertical, 4)
+
+                                if index < viewModel.channels.count - 1 {
+                                    Divider()
+                                        .background(Color.white.opacity(0.2))
+                                        .padding(.vertical, 4)
+                                }
+
+                                if (index + 1) % 2 == 0 && AdConfig.shouldShowAds {
+                                    FeedAdCardView()
+                                        .id("discovery_ad_\(index)")
+                                        .padding(.vertical, 8)
+                                        .onAppear {
+                                            print("📢 [DiscoveryView] Ad view appeared after channel index \(index)")
+                                        }
+                                }
+                            }
+                        }
+                        .padding(.top, 8)
+                        .padding(.bottom, 100)
+                    }
+                    .scrollIndicators(.hidden)
+                    .refreshable {
+                        await viewModel.refreshChannels(channelType: selectedChannelType)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Helper Functions
+
+    private func performSearch() async {
+        isSearchingDB = true
+
+        do {
+            let results = try await FirestoreChannelManager.shared.searchChannels(query: searchQuery)
+            searchResults = results
+        } catch {
+            print("❌ Failed to search channels: \(error)")
+            searchResults = []
+        }
+
+        isSearchingDB = false
     }
 }
 
@@ -768,7 +972,9 @@ struct ChannelDiscoveryCard: View {
                                 ChannelPostCardGrid(
                                     post: post,
                                     channelName: channel.name,
+                                    channelId: channel.id ?? "",
                                     showingLoginPrompt: $showingLoginPrompt,
+                                    showingChannelDetail: $showingChannelDetail,
                                     viewModel: viewModel
                                 )
                                 .environmentObject(authManager)
@@ -895,56 +1101,6 @@ struct ChannelDiscoveryCard: View {
 
     @ViewBuilder
     private var channelThumbnailView: some View {
-        ZStack(alignment: .bottomTrailing) {
-            // Channel artwork - use first post's artwork (updates dynamically when posts are deleted)
-            let artworkUrl = viewModel.posts.first?.artworkUrl
-
-            if let artworkUrlString = artworkUrl,
-               let url = URL(string: artworkUrlString) {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: 50, height: 50)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                    } else if phase.error != nil {
-                        // Loading failed, show placeholder
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 50, height: 50)
-                            .overlay(
-                                Image(systemName: "photo")
-                                    .foregroundColor(.white.opacity(0.5))
-                            )
-                    } else {
-                        // Loading in progress
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.3))
-                            .frame(width: 50, height: 50)
-                            .overlay(
-                                ProgressView()
-                                    .tint(.white)
-                            )
-                    }
-                }
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.gray.opacity(0.3))
-                    .frame(width: 50, height: 50)
-                    .overlay(
-                        Image(systemName: "music.note")
-                            .foregroundColor(.white.opacity(0.5))
-                    )
-            }
-
-            // Profile icon overlay
-            profileOverlayButton
-        }
-    }
-
-    @ViewBuilder
-    private var profileOverlayButton: some View {
         Button(action: {
             if !authManager.isAuthenticated {
                 showingLoginPrompt = true
@@ -959,15 +1115,20 @@ struct ChannelDiscoveryCard: View {
                         image
                             .resizable()
                             .aspectRatio(contentMode: .fill)
-                            .frame(width: 24, height: 24)
+                            .frame(width: 50, height: 50)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.black, lineWidth: 2))
                     } else if phase.error != nil {
                         // Error loading image
                         profilePlaceholder
                     } else {
                         // Loading in progress
-                        profilePlaceholder
+                        Circle()
+                            .fill(Color.gray.opacity(0.3))
+                            .frame(width: 50, height: 50)
+                            .overlay(
+                                ProgressView()
+                                    .tint(.white)
+                            )
                     }
                 }
             } else {
@@ -975,17 +1136,18 @@ struct ChannelDiscoveryCard: View {
             }
         }
         .buttonStyle(PlainButtonStyle())
-        .offset(x: 3, y: 3)
     }
 
     @ViewBuilder
     private var profilePlaceholder: some View {
-        Image("recoreco")
-            .resizable()
-            .aspectRatio(contentMode: .fill)
-            .frame(width: 24, height: 24)
-            .clipShape(Circle())
-            .overlay(Circle().stroke(Color.black, lineWidth: 2))
+        Circle()
+            .fill(Color.white.opacity(0.1))
+            .frame(width: 50, height: 50)
+            .overlay(
+                Image(systemName: "person.fill")
+                    .font(.system(size: 24))
+                    .foregroundColor(.white.opacity(0.5))
+            )
     }
 
     @ViewBuilder
@@ -998,6 +1160,10 @@ struct ChannelDiscoveryCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 4) {
+                        // Channel type icon
+                        Image(systemName: channel.channelType == .shared ? "globe" : "person.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white)
                         Image(systemName: "music.note.house.fill")
                             .font(.system(size: 10))
                             .foregroundColor(.white)
@@ -1006,6 +1172,17 @@ struct ChannelDiscoveryCard: View {
                             .foregroundColor(.white)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
+
+                        // 公開タグ
+                        if channel.channelType == .shared {
+                            Text("公開")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(Color.green.opacity(0.7))
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                        }
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -1039,29 +1216,11 @@ struct ChannelDiscoveryCard: View {
                 }
 
                 Spacer()
-
-                channelActionButton
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
         .buttonStyle(PlainButtonStyle())
-    }
-
-    @ViewBuilder
-    private var channelActionButton: some View {
-        Button(action: {
-            showingChannelDetail = true
-        }) {
-            Text("チャンネルへ")
-                .font(.caption)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
-                .background(Color.white.opacity(0.2))
-                .clipShape(Capsule())
-        }
     }
 }
 
@@ -1152,8 +1311,27 @@ struct FollowButton: View {
 class DiscoveryViewModel: ObservableObject {
     @Published var channels: [Channel] = []
     @Published var isLoading = false
+    private var allChannels: [Channel] = []
 
     init() {
+        // Listen for post created notifications
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name.postCreated,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self = self else { return }
+                print("📥 [DiscoveryViewModel] Received postCreated notification")
+                // Reload channels to get updated latestPostId
+                if !self.channels.isEmpty {
+                    let currentType = self.channels.first?.channelType ?? .shared
+                    print("🔄 [DiscoveryViewModel] Refreshing channels for type: \(currentType.rawValue)")
+                    await self.refreshChannels(channelType: currentType)
+                }
+            }
+        }
+
         // Listen for user block notifications
         NotificationCenter.default.addObserver(
             forName: Foundation.Notification.Name.userBlocked,
@@ -1162,6 +1340,7 @@ class DiscoveryViewModel: ObservableObject {
         ) { [weak self] notification in
             if let blockedUserId = notification.userInfo?["blockedUserId"] as? String {
                 Task { @MainActor in
+                    self?.allChannels.removeAll { $0.userId == blockedUserId }
                     self?.channels.removeAll { $0.userId == blockedUserId }
                     print("🚫 Removed blocked user's channels from discovery: \(blockedUserId)")
                 }
@@ -1169,30 +1348,37 @@ class DiscoveryViewModel: ObservableObject {
         }
     }
 
-    func loadChannels() async {
+    func loadChannels(channelType: ChannelType = .shared) async {
         isLoading = true
         defer { isLoading = false }
 
         do {
-            // Fetch 50 channels and shuffle for randomness, then take 20
-            let allChannels = try await FirestorePostManager.shared.getDiscoveryChannels(limit: 50)
-            channels = Array(allChannels.shuffled().prefix(20))
+            // Fetch all channels in latest post order
+            allChannels = try await FirestorePostManager.shared.getDiscoveryChannels(channelType: nil, limit: 100)
+            // Filter by type
+            filterChannels(by: channelType)
         } catch {
             print("❌ Failed to load channels: \(error)")
         }
     }
 
-    func refreshChannels() async {
+    func refreshChannels(channelType: ChannelType) async {
         // Refresh without setting isLoading to avoid double animation
         print("🔄 [DiscoveryViewModel] refreshChannels called")
         do {
-            // Fetch 50 channels and shuffle for randomness, then take 20
-            let allChannels = try await FirestorePostManager.shared.getDiscoveryChannels(limit: 50)
-            channels = Array(allChannels.shuffled().prefix(20))
+            // Fetch all channels in latest post order
+            allChannels = try await FirestorePostManager.shared.getDiscoveryChannels(channelType: nil, limit: 100)
+            // Filter by type
+            filterChannels(by: channelType)
             print("✅ [DiscoveryViewModel] Refreshed \(channels.count) channels")
         } catch {
             print("❌ Failed to refresh channels: \(error)")
         }
+    }
+
+    func filterChannels(by channelType: ChannelType) {
+        channels = allChannels.filter { $0.channelType == channelType }
+        print("🔍 [DiscoveryViewModel] Filtered to \(channels.count) \(channelType.rawValue) channels")
     }
 }
 
@@ -1239,6 +1425,11 @@ struct ChannelDetailView: View {
     @State private var showingCreatePost = false
     @State private var showingChannelMenu = false
     @State private var showingDeleteConfirmation = false
+    @State private var showingLeaveConfirmation = false
+    @State private var showingRenameDialog = false
+    @State private var showingMemberManagement = false
+    @State private var newChannelName = ""
+    @State private var floatingButtonScale: CGFloat = 1.0
 
     private var isOwnChannel: Bool {
         guard let currentUserId = authManager.currentUser?.id else {
@@ -1248,6 +1439,52 @@ struct ChannelDetailView: View {
         let result = viewModel.channel?.userId == currentUserId
         print("🔍 [ChannelDetailView] isOwnChannel: \(result), currentUserId: \(currentUserId), channelUserId: \(viewModel.channel?.userId ?? "nil")")
         return result
+    }
+
+    private func shouldShowPostButton(for channel: Channel) -> Bool {
+        // 公開チャンネルの場合：誰でも投稿可能
+        if channel.channelType == .shared {
+            return true
+        }
+        // 個人チャンネルの場合：オーナーのみ投稿可能
+        return isOwnChannel
+    }
+
+    private var floatingPostButton: some View {
+        Button(action: {
+            if !authManager.isAuthenticated {
+                showingLoginAlert = true
+                return
+            }
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                floatingButtonScale = 0.85
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                    floatingButtonScale = 1.0
+                }
+            }
+            showingCreatePost = true
+        }) {
+            ZStack {
+                // Background layer with border
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 60, height: 60)
+                    .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 4)
+                    .overlay(
+                        Circle()
+                            .strokeBorder(Color.black.opacity(0.1), lineWidth: 1)
+                            .frame(width: 60, height: 60)
+                    )
+
+                // Icon
+                Image(systemName: "plus")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(.black)
+            }
+        }
+        .scaleEffect(floatingButtonScale)
     }
 
     private var customNavigationBar: some View {
@@ -1268,6 +1505,10 @@ struct ChannelDetailView: View {
             if let channel = viewModel.channel {
                 VStack(spacing: 2) {
                     HStack(spacing: 4) {
+                        // Channel type icon
+                        Image(systemName: channel.channelType == .shared ? "globe" : "person.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(.white)
                         Image(systemName: "music.note.house.fill")
                             .font(.system(size: 10))
                             .foregroundColor(.white)
@@ -1295,9 +1536,15 @@ struct ChannelDetailView: View {
                         Text("・")
                             .font(.caption2)
                             .foregroundColor(.white.opacity(0.4))
-                        Text("\(channel.followerCount ?? 0) フォロワー")
-                            .font(.caption2)
-                            .foregroundColor(.white.opacity(0.6))
+                        if channel.channelType == .shared {
+                            Text("\(channel.followerCount ?? 0)人が参加")
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.6))
+                        } else {
+                            Text("\(channel.followerCount ?? 0)人がフォロー")
+                                .font(.caption2)
+                                .foregroundColor(.white.opacity(0.6))
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -1309,34 +1556,18 @@ struct ChannelDetailView: View {
 
             Spacer()
 
-            // Trailing buttons
-            HStack(spacing: 12) {
-                // Show plus button only for own channel
-                if isOwnChannel {
-                    Button(action: {
-                        print("✅ [ChannelDetailView] Plus button tapped, showingCreatePost = true")
-                        showingCreatePost = true
-                    }) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 44, height: 44)
-                    }
+            // More actions button
+            Button(action: {
+                if !authManager.isAuthenticated {
+                    showingLoginAlert = true
+                    return
                 }
-
-                // More actions button
-                Button(action: {
-                    if !authManager.isAuthenticated {
-                        showingLoginAlert = true
-                        return
-                    }
-                    showingChannelMenu = true
-                }) {
-                    Image(systemName: "ellipsis")
-                        .font(.system(size: 18))
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 44)
-                }
+                showingChannelMenu = true
+            }) {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 18))
+                    .foregroundColor(.white)
+                    .frame(width: 44, height: 44)
             }
         }
         .padding(.horizontal, 8)
@@ -1412,7 +1643,7 @@ struct ChannelDetailView: View {
                                 FollowButton(
                                     channelId: channelId,
                                     isFollowing: channel.isFollowing ?? false,
-                                    buttonText: "チャンネルをフォローする"
+                                    buttonText: channel.channelType == .shared ? "チャンネルに参加する" : "チャンネルをフォローする"
                                 )
                                 .padding(.vertical, 12)
 
@@ -1493,6 +1724,19 @@ struct ChannelDetailView: View {
                     }
                 Spacer()
             }
+
+            // Floating action button
+            if let channel = viewModel.channel, shouldShowPostButton(for: channel) {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        floatingPostButton
+                            .padding(.trailing, 20)
+                            .padding(.bottom, 30)
+                    }
+                }
+            }
         }
         .edgesIgnoringSafeArea(.all)
         .fullScreenCover(isPresented: $showingUserProfile) {
@@ -1520,20 +1764,47 @@ struct ChannelDetailView: View {
         }
         .confirmationDialog(isOwnChannel ? "チャンネル設定" : "チャンネルオプション", isPresented: $showingChannelMenu, titleVisibility: .hidden) {
             if isOwnChannel {
+                Button("チャンネル名を変更") {
+                    showingRenameDialog = true
+                }
+
+                // Show member/follower management for all channels
+                if let channel = viewModel.channel {
+                    let buttonText = channel.channelType == .shared ? "メンバー管理" : "フォロワーをみる"
+                    Button(buttonText) {
+                        showingMemberManagement = true
+                    }
+                }
+
                 Button("チャンネルを削除", role: .destructive) {
                     showingDeleteConfirmation = true
                 }
             } else {
-                // Show follow/unfollow button based on current state
+                // Show member/follower list for all channels
+                if let channel = viewModel.channel {
+                    let buttonText = channel.channelType == .shared ? "参加者をみる" : "フォロワーをみる"
+                    Button(buttonText) {
+                        showingMemberManagement = true
+                    }
+                }
+
+                // Show follow/unfollow or join/leave button based on channel type
                 if let channel = viewModel.channel {
                     if channel.isFollowing == true {
-                        Button("フォロー解除") {
-                            Task {
-                                await unfollowChannel()
+                        if channel.channelType == .shared {
+                            Button("退出する", role: .destructive) {
+                                showingLeaveConfirmation = true
+                            }
+                        } else {
+                            Button("フォロー解除") {
+                                Task {
+                                    await unfollowChannel()
+                                }
                             }
                         }
                     } else {
-                        Button("フォロー") {
+                        let buttonText = channel.channelType == .shared ? "参加する" : "フォロー"
+                        Button(buttonText) {
                             Task {
                                 await followChannel()
                             }
@@ -1562,6 +1833,29 @@ struct ChannelDetailView: View {
         } message: {
             Text("このチャンネルを削除してもよろしいですか？チャンネル内のすべての投稿も削除されます。この操作は取り消せません。")
         }
+        .alert("チャンネルから退出", isPresented: $showingLeaveConfirmation) {
+            Button("キャンセル", role: .cancel) {}
+            Button("退出", role: .destructive) {
+                Task {
+                    await leaveChannel()
+                }
+            }
+        } message: {
+            Text("このチャンネルから退出してもよろしいですか？あなたがこのチャンネルに投稿したすべての投稿（いいねとコメントを含む）が削除されます。この操作は取り消せません。")
+        }
+        .alert("チャンネル名を変更", isPresented: $showingRenameDialog) {
+            TextField("新しいチャンネル名", text: $newChannelName)
+            Button("キャンセル", role: .cancel) {
+                newChannelName = ""
+            }
+            Button("変更") {
+                Task {
+                    await renameChannel()
+                }
+            }
+        } message: {
+            Text("新しいチャンネル名を入力してください（30文字以内）")
+        }
         .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
             Button("はい") {
                 showingLoginSheet = true
@@ -1577,6 +1871,11 @@ struct ChannelDetailView: View {
                     .presentationCornerRadius(20)
             } else {
                 LoginView()
+            }
+        }
+        .sheet(isPresented: $showingMemberManagement) {
+            if let channel = viewModel.channel, let channelId = channel.id {
+                ChannelMemberManagementView(channelId: channelId)
             }
         }
         .alert("ログインが必要です", isPresented: $showingLoginAlert) {
@@ -1665,6 +1964,51 @@ struct ChannelDetailView: View {
             print("❌ Failed to block user: \(error)")
         }
     }
+
+    private func leaveChannel() async {
+        guard authManager.isAuthenticated else {
+            showingLoginPrompt = true
+            return
+        }
+
+        guard let channel = viewModel.channel, let channelId = channel.id else { return }
+
+        do {
+            try await FirestoreChannelManager.shared.leaveChannelAndDeletePosts(channelId: channelId)
+            print("✅ Left channel and deleted posts: \(channelId)")
+            dismiss()
+        } catch {
+            print("❌ Failed to leave channel: \(error)")
+        }
+    }
+
+    private func renameChannel() async {
+        guard let channel = viewModel.channel, let channelId = channel.id else { return }
+
+        let trimmedName = newChannelName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedName.isEmpty, trimmedName.count <= 30 else {
+            newChannelName = ""
+            return
+        }
+
+        do {
+            try await FirestoreChannelManager.shared.updateChannelName(channelId: channelId, name: trimmedName)
+            viewModel.channel?.name = trimmedName
+            newChannelName = ""
+            print("✅ Renamed channel: \(channelId) -> \(trimmedName)")
+
+            // Notify other views to refresh
+            NotificationCenter.default.post(
+                name: Foundation.Notification.Name("ChannelUpdated"),
+                object: nil,
+                userInfo: ["channelId": channelId]
+            )
+        } catch {
+            print("❌ Failed to rename channel: \(error)")
+            newChannelName = ""
+        }
+    }
 }
 
 @MainActor
@@ -1688,6 +2032,23 @@ class ChannelDetailViewModel: ObservableObject {
                channelId == self?.currentChannelId {
                 Task { @MainActor in
                     await self?.loadChannel(channelId: channelId)
+                }
+            }
+        }
+
+        // 投稿作成通知を監視
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name.postCreated,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                print("📥 [ChannelDetailViewModel] Received postCreated notification")
+                if let channelId = self?.currentChannelId {
+                    print("📥 [ChannelDetailViewModel] Current channelId: \(channelId), reloading posts...")
+                    await self?.loadPosts(channelId: channelId, forceRefresh: true)
+                } else {
+                    print("⚠️ [ChannelDetailViewModel] currentChannelId is nil, cannot reload posts")
                 }
             }
         }
@@ -1726,12 +2087,12 @@ class ChannelDetailViewModel: ObservableObject {
         isLoading = false
     }
 
-    func loadPosts(channelId: String) async {
+    func loadPosts(channelId: String, forceRefresh: Bool = false) async {
         isLoadingPosts = true
 
         do {
             // Get all posts for this channel
-            let allPosts = try await FirestorePostManager.shared.getChannelPosts(channelId: channelId)
+            let allPosts = try await FirestorePostManager.shared.getChannelPosts(channelId: channelId, forceRefresh: forceRefresh)
             posts = allPosts
 
             // Initialize like and comment states
@@ -1756,7 +2117,9 @@ class ChannelDetailViewModel: ObservableObject {
 struct ChannelPostCardGrid: View {
     let post: Post
     let channelName: String
+    let channelId: String
     @Binding var showingLoginPrompt: Bool
+    @Binding var showingChannelDetail: Bool
     @ObservedObject var viewModel: ChannelPostsViewModel
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var playbackState = PlaybackStateManager.shared
@@ -1816,10 +2179,28 @@ struct ChannelPostCardGrid: View {
 
             // Content overlay
             VStack(alignment: .leading, spacing: 0) {
-                // Top: Menu button only
+                // Top: Channel button (left) and Menu button (right)
                 HStack {
+                    // チャンネルへボタン
+                    Button(action: {
+                        showingChannelDetail = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "music.note.house.fill")
+                                .font(.system(size: 12))
+                            Text("チャンネルへ")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.5))
+                        .cornerRadius(15)
+                    }
+
                     Spacer()
 
+                    // メニューボタン
                     Button(action: {
                         if !authManager.isAuthenticated {
                             showingLoginPrompt = true
@@ -1896,9 +2277,13 @@ struct ChannelPostCardGrid: View {
                                             .resizable()
                                             .aspectRatio(contentMode: .fill)
                                     } placeholder: {
-                                        Image("recoreco")
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
+                                        Circle()
+                                            .fill(Color.white.opacity(0.1))
+                                            .overlay(
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 10))
+                                                    .foregroundColor(.white.opacity(0.5))
+                                            )
                                     }
                                     .frame(width: 20, height: 20)
                                     .clipShape(Circle())
@@ -1907,11 +2292,14 @@ struct ChannelPostCardGrid: View {
                                         .font(.system(size: 12, weight: .medium))
                                         .foregroundColor(.white.opacity(0.9))
                                 } else {
-                                    Image("recoreco")
-                                        .resizable()
-                                        .aspectRatio(contentMode: .fill)
+                                    Circle()
+                                        .fill(Color.white.opacity(0.1))
                                         .frame(width: 20, height: 20)
-                                        .clipShape(Circle())
+                                        .overlay(
+                                            Image(systemName: "person.fill")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.white.opacity(0.5))
+                                        )
 
                                     Text("Loading...")
                                         .font(.system(size: 12, weight: .medium))
@@ -2218,16 +2606,11 @@ class ChannelPostsViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            var allPosts = try await FirestorePostManager.shared.getChannelPosts(channelId: channelId, limit: 10, forceRefresh: forceRefresh)
+            let allPosts = try await FirestorePostManager.shared.getChannelPosts(channelId: channelId, limit: 10, forceRefresh: forceRefresh)
 
-            // 最新投稿を先頭に移動
-            if let latestIndex = allPosts.firstIndex(where: { $0.id == latestPostId }) {
-                let latestPost = allPosts.remove(at: latestIndex)
-                allPosts.insert(latestPost, at: 0)
-            }
-
+            // Posts are already sorted by createdAt descending from Firestore
             posts = allPosts
-            print("✅ Loaded \(posts.count) posts for channel")
+            print("✅ Loaded \(posts.count) posts for channel (sorted by latest)")
         } catch {
             print("❌ Failed to load channel posts: \(error)")
         }
@@ -2336,8 +2719,61 @@ struct ChannelPostCard: View {
 
                 // Content overlay
                 VStack(alignment: .leading, spacing: 0) {
-                    // Top: Menu button only
-                    HStack {
+                    // Top: User info (left) and Menu button (right)
+                    HStack(alignment: .top) {
+                        // User info - moved to top left
+                        Button(action: {
+                            if !authManager.isAuthenticated {
+                                showingLoginPrompt = true
+                                return
+                            }
+                            showingUserProfile = true
+                        }) {
+                            HStack(spacing: 8) {
+                                if let user = postUser {
+                                    AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
+                                        image
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fill)
+                                    } placeholder: {
+                                        Circle()
+                                            .fill(Color.white.opacity(0.1))
+                                            .overlay(
+                                                Image(systemName: "person.fill")
+                                                    .font(.system(size: 16))
+                                                    .foregroundColor(.white.opacity(0.5))
+                                            )
+                                    }
+                                    .frame(width: 32, height: 32)
+                                    .clipShape(Circle())
+
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(user.displayName)
+                                            .font(.system(size: 15, weight: .semibold))
+                                            .foregroundColor(.white)
+
+                                        Text(formatPostDate(post.createdAt))
+                                            .font(.system(size: 12))
+                                            .foregroundColor(.white.opacity(0.7))
+                                    }
+                                } else {
+                                    Image("recoreco")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                        .frame(width: 32, height: 32)
+                                        .clipShape(Circle())
+
+                                    Text("Loading...")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .background(Color.black.opacity(0.6))
+                            .cornerRadius(20)
+                        }
+
                         Spacer()
 
                         Button(action: {
@@ -2400,56 +2836,6 @@ struct ChannelPostCard: View {
                                 .padding(.vertical, 4)
                                 .background(Color.black.opacity(0.5))
                                 .cornerRadius(6)
-
-                            // User info
-                            Button(action: {
-                                if !authManager.isAuthenticated {
-                                    showingLoginPrompt = true
-                                    return
-                                }
-                                showingUserProfile = true
-                            }) {
-                                HStack(spacing: 6) {
-                                    if let user = postUser {
-                                        AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
-                                            image
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                        } placeholder: {
-                                            Image("recoreco")
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                        }
-                                        .frame(width: 20, height: 20)
-                                        .clipShape(Circle())
-
-                                        Text(user.displayName)
-                                            .font(.system(size: 12, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.9))
-                                    } else {
-                                        Image("recoreco")
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fill)
-                                            .frame(width: 20, height: 20)
-                                            .clipShape(Circle())
-
-                                        Text("Loading...")
-                                            .font(.system(size: 12, weight: .medium))
-                                            .foregroundColor(.white.opacity(0.9))
-                                    }
-
-                                    Text("・")
-                                        .foregroundColor(.white.opacity(0.5))
-
-                                    Text(formatPostDate(post.createdAt))
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.white.opacity(0.6))
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.black.opacity(0.5))
-                                .cornerRadius(6)
-                            }
 
                             // Comment
                             if let comment = post.comment, !comment.isEmpty {
@@ -3008,19 +3394,25 @@ struct CreatePostViewForChannel: View {
                                 .frame(width: 44, height: 44)
                                 .clipShape(Circle())
                         } else {
-                            Image("recoreco")
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
+                            Circle()
+                                .fill(Color.white.opacity(0.1))
                                 .frame(width: 44, height: 44)
-                                .clipShape(Circle())
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 22))
+                                        .foregroundColor(.white.opacity(0.5))
+                                )
                         }
                     }
                 } else {
-                    Image("recoreco")
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
+                    Circle()
+                        .fill(Color.white.opacity(0.1))
                         .frame(width: 44, height: 44)
-                        .clipShape(Circle())
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 22))
+                                .foregroundColor(.white.opacity(0.5))
+                        )
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -3110,5 +3502,447 @@ struct CreatePostViewForChannel: View {
     private func createPost() async {
         viewModel.selectedChannel = channel
         await viewModel.createPost()
+    }
+}
+
+// MARK: - Channel Member Management View
+
+struct ChannelMemberManagementView: View {
+    let channelId: String
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var authManager: AuthManager
+    @StateObject private var viewModel = ChannelMemberViewModel()
+
+    private var isOwner: Bool {
+        authManager.currentUser?.id == viewModel.channelOwnerId
+    }
+
+    private var navigationTitle: String {
+        guard let channel = viewModel.channel else { return "読み込み中..." }
+
+        if channel.channelType == .shared {
+            return isOwner ? "メンバー管理" : "参加者をみる"
+        } else {
+            return "フォロワーをみる"
+        }
+    }
+
+    private var emptyMessage: String {
+        guard let channel = viewModel.channel else { return "読み込み中..." }
+
+        if channel.channelType == .shared {
+            return "メンバーがいません"
+        } else {
+            return "フォロワーがいません"
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+
+                if viewModel.isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                } else if viewModel.members.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "person.2.slash")
+                            .font(.system(size: 60))
+                            .foregroundColor(.white.opacity(0.3))
+                        Text(emptyMessage)
+                            .font(.title3)
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(viewModel.members) { member in
+                                MemberRow(
+                                    member: member,
+                                    isOwner: member.id == viewModel.channelOwnerId,
+                                    canKick: viewModel.channel?.channelType == .shared && isOwner && member.id != viewModel.channelOwnerId
+                                ) {
+                                    Task {
+                                        await viewModel.kickMember(userId: member.id ?? "", channelId: channelId)
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                    }
+                }
+            }
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.black.opacity(0.9), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+        .task {
+            await viewModel.loadMembers(channelId: channelId)
+        }
+    }
+}
+
+struct MemberRow: View {
+    let member: User
+    let isOwner: Bool
+    let canKick: Bool
+    let onKick: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Profile image
+            if let profileImageUrl = member.profileImageUrl, let url = URL(string: profileImageUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Circle()
+                        .fill(Color.white.opacity(0.1))
+                }
+                .frame(width: 50, height: 50)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 50, height: 50)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(member.displayName)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    if isOwner {
+                        Text("オーナー")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.purple)
+                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                }
+
+                Text("@\(member.username)")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+
+            Spacer()
+
+            if canKick {
+                Button(action: onKick) {
+                    Text("キック")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.red.opacity(0.8))
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                }
+            }
+        }
+        .padding()
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+@MainActor
+class ChannelMemberViewModel: ObservableObject {
+    @Published var members: [User] = []
+    @Published var isLoading = false
+    @Published var channelOwnerId: String?
+    @Published var channel: Channel?
+
+    func loadMembers(channelId: String) async {
+        isLoading = true
+
+        do {
+            // Get channel to find owner and type
+            let fetchedChannel = try await FirestoreChannelManager.shared.getChannel(channelId: channelId)
+            channel = fetchedChannel
+            channelOwnerId = fetchedChannel.userId
+
+            // Get channel followers
+            let followers = try await FirestoreChannelManager.shared.getChannelFollowers(channelId: channelId)
+
+            // Load user info for each follower
+            var users: [User] = []
+            for followerId in followers {
+                if let user = try? await FirestoreUserManager.shared.getUser(userId: followerId) {
+                    users.append(user)
+                }
+            }
+
+            // Add owner at the top if not already in list
+            if let ownerId = channelOwnerId, !followers.contains(ownerId) {
+                if let owner = try? await FirestoreUserManager.shared.getUser(userId: ownerId) {
+                    users.insert(owner, at: 0)
+                }
+            } else if let ownerId = channelOwnerId, let ownerIndex = users.firstIndex(where: { $0.id == ownerId }) {
+                // Move owner to the top if already in list
+                let owner = users.remove(at: ownerIndex)
+                users.insert(owner, at: 0)
+            }
+
+            members = users
+        } catch {
+            print("❌ Failed to load members: \(error)")
+        }
+
+        isLoading = false
+    }
+
+    func kickMember(userId: String, channelId: String) async {
+        do {
+            try await FirestoreChannelManager.shared.kickMember(channelId: channelId, userId: userId)
+            members.removeAll { $0.id == userId }
+        } catch {
+            print("❌ Failed to kick member: \(error)")
+        }
+    }
+}
+
+// MARK: - Channel Search View
+
+struct ChannelSearchView: View {
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var viewModel = ChannelSearchViewModel()
+    @EnvironmentObject var authManager: AuthManager
+    
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                VStack(spacing: 0) {
+                    // Search bar
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.white.opacity(0.5))
+                        
+                        TextField("チャンネル名を検索", text: $viewModel.searchQuery)
+                            .foregroundColor(.white)
+                            .autocapitalization(.none)
+                            .submitLabel(.search)
+                            .onSubmit {
+                                Task {
+                                    await viewModel.searchChannels()
+                                }
+                            }
+                        
+                        if !viewModel.searchQuery.isEmpty {
+                            Button(action: {
+                                viewModel.searchQuery = ""
+                                viewModel.searchResults = []
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.white.opacity(0.5))
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(10)
+                    .padding()
+                    
+                    // Results
+                    if viewModel.isSearching {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .padding()
+                    } else if viewModel.searchResults.isEmpty && !viewModel.searchQuery.isEmpty {
+                        VStack(spacing: 16) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 60))
+                                .foregroundColor(.white.opacity(0.3))
+                            Text("チャンネルが見つかりません")
+                                .font(.title3)
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                        .padding()
+                    } else if !viewModel.searchResults.isEmpty {
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                ForEach(viewModel.searchResults) { channel in
+                                    if let channelId = channel.id {
+                                        NavigationLink(destination: ChannelDetailView(channelId: channelId)) {
+                                            ChannelSearchResultRow(channel: channel)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                            }
+                            .padding()
+                        }
+                    } else {
+                        VStack(spacing: 16) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.system(size: 60))
+                                .foregroundColor(.white.opacity(0.3))
+                            Text("チャンネル名を入力してください")
+                                .font(.title3)
+                                .foregroundColor(.white.opacity(0.7))
+                        }
+                    }
+                }
+            }
+            .navigationTitle("チャンネル検索")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("閉じる") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+            .toolbarBackground(.black.opacity(0.9), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+        }
+        .onChange(of: viewModel.searchQuery) { newValue in
+            if !newValue.isEmpty {
+                Task {
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 0.5秒待機
+                    if viewModel.searchQuery == newValue {
+                        await viewModel.searchChannels()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ChannelSearchResultRow: View {
+    let channel: Channel
+    @StateObject private var ownerViewModel = ChannelOwnerViewModel()
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Profile image
+            if let profileImageUrl = ownerViewModel.owner?.profileImageUrl,
+               let url = URL(string: profileImageUrl) {
+                AsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .scaledToFill()
+                } placeholder: {
+                    Circle()
+                        .fill(Color.white.opacity(0.1))
+                }
+                .frame(width: 50, height: 50)
+                .clipShape(Circle())
+            } else {
+                Circle()
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 50, height: 50)
+                    .overlay(
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white.opacity(0.5))
+                    )
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
+                    // Channel type icon
+                    Image(systemName: channel.channelType == .shared ? "globe" : "person.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.7))
+                    Image(systemName: "music.note.house.fill")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.7))
+                    Text(channel.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+                
+                if let owner = ownerViewModel.owner {
+                    Text("@\(owner.username)")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                
+                HStack(spacing: 4) {
+                    Image(systemName: "person.2.fill")
+                        .font(.caption2)
+                    if channel.channelType == .shared {
+                        Text("\(channel.followerCount ?? 0)人が参加")
+                            .font(.caption)
+                    } else {
+                        Text("\(channel.followerCount ?? 0)人がフォロー")
+                            .font(.caption)
+                    }
+                }
+                .foregroundColor(.white.opacity(0.6))
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .task {
+            await ownerViewModel.loadOwner(userId: channel.userId)
+        }
+    }
+}
+
+@MainActor
+class ChannelSearchViewModel: ObservableObject {
+    @Published var searchQuery = ""
+    @Published var searchResults: [Channel] = []
+    @Published var isSearching = false
+    
+    func searchChannels() async {
+        guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            searchResults = []
+            return
+        }
+        
+        isSearching = true
+        
+        do {
+            let channels = try await FirestoreChannelManager.shared.searchChannels(query: searchQuery)
+            searchResults = channels
+        } catch {
+            print("❌ Failed to search channels: \(error)")
+            searchResults = []
+        }
+        
+        isSearching = false
+    }
+}
+
+@MainActor
+class ChannelOwnerViewModel: ObservableObject {
+    @Published var owner: User?
+    
+    func loadOwner(userId: String) async {
+        do {
+            owner = try await FirestoreUserManager.shared.getUser(userId: userId)
+        } catch {
+            print("❌ Failed to load channel owner: \(error)")
+        }
     }
 }

@@ -134,8 +134,20 @@ class UserProfileViewModel: ObservableObject {
 
     func loadChannels(userId: String) async {
         do {
-            channels = try await FirestoreChannelManager.shared.getUserChannels(userId: userId)
-            print("✅ Loaded \(channels.count) channels for user: \(userId)")
+            // Load both own channels and followed channels
+            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: userId)
+            let followedChannels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: userId)
+
+            // Merge and remove duplicates
+            var allChannels = ownChannels
+            for followedChannel in followedChannels {
+                if !allChannels.contains(where: { $0.id == followedChannel.id }) {
+                    allChannels.append(followedChannel)
+                }
+            }
+
+            channels = allChannels
+            print("✅ Loaded \(allChannels.count) channels for user: \(userId) (own: \(ownChannels.count), followed: \(followedChannels.count))")
         } catch {
             errorMessage = "チャンネルの取得に失敗しました"
             print("❌ Failed to load channels: \(error)")

@@ -7,6 +7,16 @@ enum ContentType: String, Codable {
     case website = "website"
 }
 
+enum ChannelType: String, Codable {
+    case personal = "personal"  // Owner only can post
+    case shared = "shared"      // All members can post
+}
+
+enum ChannelAccessType: String, Codable {
+    case `public` = "public"    // Anyone can join
+    case `private` = "private"  // For future expansion
+}
+
 // MARK: - Channel Model
 
 struct Channel: Codable, Identifiable {
@@ -18,6 +28,10 @@ struct Channel: Codable, Identifiable {
     var latestPostId: String?
     var latestPostAt: Date?
     var latestPostArtworkUrl: String?
+
+    // Channel type and access
+    var channelType: ChannelType
+    var accessType: ChannelAccessType
 
     // Computed properties (not stored in Firestore) - fetched dynamically from userId
     var isFollowing: Bool? = nil
@@ -32,6 +46,8 @@ struct Channel: Codable, Identifiable {
         case latestPostId
         case latestPostAt
         case latestPostArtworkUrl
+        case channelType
+        case accessType
     }
 
     init(id: String? = nil,
@@ -41,7 +57,9 @@ struct Channel: Codable, Identifiable {
          updatedAt: Date = Date(),
          latestPostId: String? = nil,
          latestPostAt: Date? = nil,
-         latestPostArtworkUrl: String? = nil) {
+         latestPostArtworkUrl: String? = nil,
+         channelType: ChannelType = .personal,
+         accessType: ChannelAccessType = .`public`) {
         self.id = id
         self.userId = userId
         self.name = name
@@ -50,6 +68,26 @@ struct Channel: Codable, Identifiable {
         self.latestPostId = latestPostId
         self.latestPostAt = latestPostAt
         self.latestPostArtworkUrl = latestPostArtworkUrl
+        self.channelType = channelType
+        self.accessType = accessType
+    }
+
+    // Custom decoder for backward compatibility with existing channels
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        _id = try container.decode(DocumentID<String>.self, forKey: .id)
+        userId = try container.decode(String.self, forKey: .userId)
+        name = try container.decode(String.self, forKey: .name)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        latestPostId = try container.decodeIfPresent(String.self, forKey: .latestPostId)
+        latestPostAt = try container.decodeIfPresent(Date.self, forKey: .latestPostAt)
+        latestPostArtworkUrl = try container.decodeIfPresent(String.self, forKey: .latestPostArtworkUrl)
+
+        // Default to .personal for backward compatibility with existing channels
+        channelType = try container.decodeIfPresent(ChannelType.self, forKey: .channelType) ?? .personal
+        accessType = try container.decodeIfPresent(ChannelAccessType.self, forKey: .accessType) ?? .`public`
     }
 }
 

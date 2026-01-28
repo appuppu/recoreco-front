@@ -19,6 +19,25 @@ class CreatePostViewModel: ObservableObject {
     @Published var isLoadingChannels = false
     @Published var showingCreateChannelSheet = false
     @Published var newChannelName = ""
+    @Published var newChannelType: ChannelType = .personal
+
+    // Computed property: channels that user can post to
+    var postableChannels: [Channel] {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            return []
+        }
+
+        return channels.filter { channel in
+            switch channel.channelType {
+            case .personal:
+                // Can only post to own personal channels
+                return channel.userId == currentUserId
+            case .shared:
+                // Can post to all shared channels (public channels are open to everyone)
+                return true
+            }
+        }
+    }
 
     // Common fields
     @Published var comment = ""
@@ -30,6 +49,7 @@ class CreatePostViewModel: ObservableObject {
     private var searchTask: Task<Void, Never>?
 
     init() {
+        print("🎬 [CreatePostViewModel] init() - Loading channels on initialization")
         // Load user's channels on init
         Task {
             await loadUserChannels()
@@ -42,6 +62,7 @@ class CreatePostViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                print("📥 [CreatePostViewModel] Received ChannelCreated notification")
                 await self?.loadUserChannels()
             }
         }
@@ -52,6 +73,19 @@ class CreatePostViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                print("📥 [CreatePostViewModel] Received ChannelDeleted notification")
+                await self?.loadUserChannels()
+            }
+        }
+
+        // 投稿作成通知を監視（チャンネルのlatestPostAtを更新するため）
+        NotificationCenter.default.addObserver(
+            forName: Foundation.Notification.Name.postCreated,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                print("📥 [CreatePostViewModel] Received postCreated notification, reloading channels to update latestPostAt...")
                 await self?.loadUserChannels()
             }
         }
@@ -233,6 +267,7 @@ class CreatePostViewModel: ObservableObject {
 
 
     func loadUserChannels() async {
+        print("🔄 [CreatePostViewModel] loadUserChannels started")
         isLoadingChannels = true
 
         do {
@@ -240,12 +275,39 @@ class CreatePostViewModel: ObservableObject {
                 isLoadingChannels = false
                 return
             }
+            print("✅ [CreatePostViewModel] Current userId: \(currentUserId)")
 
-            channels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+            // Load both own channels and followed channels
+            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+            print("✅ [CreatePostViewModel] Fetched \(ownChannels.count) own channels")
+            let followedChannels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: currentUserId)
+            print("✅ [CreatePostViewModel] Fetched \(followedChannels.count) followed channels")
 
-            // Auto-select first channel if available
-            if !channels.isEmpty && selectedChannel == nil {
-                selectedChannel = channels[0]
+            // Merge and remove duplicates
+            var allChannels = ownChannels
+            for followedChannel in followedChannels {
+                if !allChannels.contains(where: { $0.id == followedChannel.id }) {
+                    allChannels.append(followedChannel)
+                }
+            }
+
+            channels = allChannels
+
+            // Log channel types breakdown
+            let sharedCount = channels.filter { $0.channelType == .shared }.count
+            let personalCount = channels.filter { $0.channelType == .personal }.count
+            print("✅ [CreatePostViewModel] Total channels: \(channels.count) (shared: \(sharedCount), personal: \(personalCount))")
+
+            // Log personal channels details
+            let personalChannels = channels.filter { $0.channelType == .personal }
+            for channel in personalChannels {
+                let latestPostDate = channel.latestPostAt?.formatted() ?? "No posts"
+                print("📋 [CreatePostViewModel] Personal Channel: \(channel.name) | ID: \(channel.id ?? "nil") | Latest: \(latestPostDate)")
+            }
+
+            // Auto-select first postable channel if available
+            if !postableChannels.isEmpty && selectedChannel == nil {
+                selectedChannel = postableChannels[0]
             }
         } catch {
             print("❌ Failed to load user channels: \(error)")
@@ -302,8 +364,11 @@ class CreatePostViewModel: ObservableObject {
                 return
             }
 
-            // Create channel first
-            let newChannel = try await FirestoreChannelManager.shared.createChannel(name: trimmedChannelName)
+            // Create channel first - pass channelType explicitly
+            let newChannel = try await FirestoreChannelManager.shared.createChannel(
+                name: trimmedChannelName,
+                channelType: newChannelType
+            )
 
             // Get artwork URL
             let artworkUrl = song.artwork?.url(width: 600, height: 600)?.absoluteString
@@ -343,11 +408,16 @@ class CreatePostViewModel: ObservableObject {
             let createdPostId = try await FirestorePostManager.shared.createPost(post)
 
             // Update channel's latest post info
-            try await FirestoreChannelManager.shared.updateChannelLatestPost(
-                channelId: newChannel.id ?? "",
-                postId: createdPostId,
-                artworkUrl: artworkUrl
-            )
+            do {
+                try await FirestoreChannelManager.shared.updateChannelLatestPost(
+                    channelId: newChannel.id ?? "",
+                    postId: createdPostId,
+                    artworkUrl: artworkUrl
+                )
+            } catch {
+                // Log error but don't fail the post creation
+                print("⚠️ Failed to update channel latest post: \(error)")
+            }
 
             // Clear state and mark as created
             stopPreview()
@@ -458,16 +528,47 @@ class CreatePostViewModel: ObservableObject {
                 endTime: 30
             )
 
+            // Debug: Log post details before creating
+            print("🔍 [CreatePostViewModel] Creating post with:")
+            print("   - userId: \(post.userId)")
+            print("   - channelId: \(post.channelId ?? "nil")")
+            print("   - createdAt: \(post.createdAt)")
+            print("   - updatedAt: \(post.updatedAt)")
+            print("   - createdAt type: \(type(of: post.createdAt))")
+            print("   - updatedAt type: \(type(of: post.updatedAt))")
+
             // Create post in Firestore
             let createdPostId = try await FirestorePostManager.shared.createPost(post)
+            print("✅ [CreatePostViewModel] Post created successfully with ID: \(createdPostId)")
 
-            // Update channel's latest post info
-            if let channelId = channel.id {
-                try await FirestoreChannelManager.shared.updateChannelLatestPost(
-                    channelId: channelId,
-                    postId: createdPostId,
-                    artworkUrl: artworkUrl
-                )
+            // Update channel's latest post info (only if user is channel owner)
+            print("🔍 [CreatePostViewModel] Checking channel update condition:")
+            print("   - channelId: \(channel.id ?? "nil")")
+            print("   - channel.userId: \(channel.userId)")
+            print("   - currentUserId: \(currentUserId)")
+            print("   - Condition met: \(channel.id != nil && channel.userId == currentUserId)")
+
+            if let channelId = channel.id, channel.userId == currentUserId {
+                print("✅ [CreatePostViewModel] Updating channel metadata for channelId: \(channelId)")
+                do {
+                    try await FirestoreChannelManager.shared.updateChannelLatestPost(
+                        channelId: channelId,
+                        postId: createdPostId,
+                        artworkUrl: artworkUrl
+                    )
+                    print("✅ [CreatePostViewModel] Channel metadata updated successfully")
+                } catch {
+                    // Log error but don't fail the post creation
+                    print("⚠️ [CreatePostViewModel] Failed to update channel metadata: \(error)")
+                }
+            } else {
+                print("⚠️ [CreatePostViewModel] Skipped channel metadata update - condition not met")
+                if channel.id == nil {
+                    print("   - Reason: channelId is nil")
+                }
+                if channel.userId != currentUserId {
+                    print("   - Reason: channel.userId (\(channel.userId)) != currentUserId (\(currentUserId))")
+                }
             }
 
             // Clear state and mark as created
@@ -476,6 +577,7 @@ class CreatePostViewModel: ObservableObject {
             errorMessage = nil
 
             // フィード更新通知を発行
+            print("📢 [CreatePostViewModel] Posting notification: postCreated for postId: \(createdPostId)")
             NotificationCenter.default.post(name: Foundation.Notification.Name.postCreated, object: nil)
 
             // Reset form

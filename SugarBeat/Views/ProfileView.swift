@@ -8,6 +8,13 @@ struct ProfileView: View {
     @State private var selectedChannelId: String?
     @EnvironmentObject var authManager: AuthManager
     @Binding var selectedTab: Int
+    @State private var profileTab: ProfileTab = .posts
+
+    enum ProfileTab {
+        case posts
+        case sharedChannels
+        case personalChannels
+    }
 
     var body: some View {
         ZStack {
@@ -60,71 +67,71 @@ struct ProfileView: View {
                         }
                         .padding(.top, 16)
 
-                        // Channels Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            HStack {
-                                Text("マイチャンネル")
-                                    .font(.system(size: 20, weight: .bold))
-                                    .foregroundColor(.white)
-                                Spacer()
+                        // Tab switcher
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                withAnimation {
+                                    profileTab = .posts
+                                }
+                            }) {
+                                Text("投稿")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(profileTab == .posts ? .white : .white.opacity(0.6))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(profileTab == .posts ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                                    .cornerRadius(8)
                             }
-                            .padding(.horizontal)
 
-                            if viewModel.isLoadingChannels {
-                                HStack {
-                                    ProgressView()
-                                        .tint(.white)
+                            Button(action: {
+                                withAnimation {
+                                    profileTab = .sharedChannels
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                            } else if viewModel.channels.isEmpty {
-                                VStack(spacing: 12) {
-                                    Image(systemName: "music.note.house")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.white.opacity(0.4))
-                                    Text("まだチャンネルがありません")
-                                        .font(.subheadline)
-                                        .foregroundColor(.white.opacity(0.6))
-                                    Button(action: {
-                                        selectedTab = 2
-                                    }) {
-                                        Text("投稿する")
-                                            .font(.subheadline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.white)
-                                            .padding(.horizontal, 24)
-                                            .padding(.vertical, 10)
-                                            .background(Color.blue)
-                                            .cornerRadius(8)
+                                if viewModel.channels.isEmpty {
+                                    Task {
+                                        await viewModel.loadChannels()
                                     }
                                 }
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 24)
-                            } else {
-                                LazyVStack(spacing: 12) {
-                                    ForEach(viewModel.channels) { channel in
-                                        ChannelListRow(
-                                            channel: channel,
-                                            onTap: {
-                                                selectedChannelId = channel.id
-                                            },
-                                            onEdit: {
-                                                editingChannel = channel
-                                            },
-                                            onDelete: {
-                                                Task {
-                                                    if let channelId = channel.id {
-                                                        await viewModel.deleteChannel(channelId: channelId)
-                                                    }
-                                                }
-                                            }
-                                        )
+                            }) {
+                                Text("参加中")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(profileTab == .sharedChannels ? .white : .white.opacity(0.6))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(profileTab == .sharedChannels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                                    .cornerRadius(8)
+                            }
+
+                            Button(action: {
+                                withAnimation {
+                                    profileTab = .personalChannels
+                                }
+                                if viewModel.channels.isEmpty {
+                                    Task {
+                                        await viewModel.loadChannels()
                                     }
                                 }
-                                .padding(.horizontal)
+                            }) {
+                                Text("個人")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(profileTab == .personalChannels ? .white : .white.opacity(0.6))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(profileTab == .personalChannels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                                    .cornerRadius(8)
                             }
                         }
-                        .padding(.top, 32)
+                        .padding(.horizontal)
+                        .padding(.top, 16)
+
+                        // Content
+                        if profileTab == .posts {
+                            postsContent
+                        } else if profileTab == .sharedChannels {
+                            channelsContent(channelType: .shared)
+                        } else {
+                            channelsContent(channelType: .personal)
+                        }
                     }
                 }
             } else {
@@ -191,6 +198,114 @@ struct ProfileView: View {
         .task {
             await viewModel.loadCurrentUser()
             await viewModel.loadChannels()
+            await viewModel.loadPosts()
+        }
+    }
+
+    // MARK: - Content Views
+
+    @ViewBuilder
+    private var postsContent: some View {
+        if viewModel.isLoadingPosts {
+            HStack {
+                ProgressView()
+                    .tint(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+        } else if viewModel.posts.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "music.note")
+                    .font(.system(size: 40))
+                    .foregroundColor(.white.opacity(0.4))
+                Text("まだ投稿がありません")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.6))
+                Button(action: {
+                    selectedTab = 2
+                }) {
+                    Text("投稿する")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                        .background(Color.blue)
+                        .cornerRadius(8)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+        } else {
+            PostGridView(
+                posts: viewModel.posts,
+                showingLoginPrompt: .constant(false),
+                showUserInfo: false,
+                isLoading: viewModel.isLoadingPosts,
+                onRefresh: {
+                    await viewModel.loadPosts()
+                }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func channelsContent(channelType: ChannelType) -> some View {
+        let filteredChannels = viewModel.channels.filter { $0.channelType == channelType }
+
+        if viewModel.isLoadingChannels {
+            HStack {
+                ProgressView()
+                    .tint(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+        } else if filteredChannels.isEmpty {
+            VStack(spacing: 12) {
+                Image(systemName: "music.note.house")
+                    .font(.system(size: 40))
+                    .foregroundColor(.white.opacity(0.4))
+                Text(channelType == .shared ? "参加中の公開チャンネルはありません" : "個人チャンネルがありません")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.6))
+                Button(action: {
+                    selectedTab = 2
+                }) {
+                    Text("投稿する")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 10)
+                        .background(Color.blue)
+                        .cornerRadius(8)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 24)
+        } else {
+            LazyVStack(spacing: 12) {
+                ForEach(filteredChannels) { channel in
+                    ChannelListRow(
+                        channel: channel,
+                        onTap: {
+                            selectedChannelId = channel.id
+                        },
+                        onEdit: channelType == .personal ? {
+                            editingChannel = channel
+                        } : nil,
+                        onDelete: channelType == .personal ? {
+                            Task {
+                                if let channelId = channel.id {
+                                    await viewModel.deleteChannel(channelId: channelId)
+                                }
+                            }
+                        } : nil
+                    )
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 16)
         }
     }
 }
@@ -244,6 +359,10 @@ struct ChannelCard: View {
             // Channel info
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
+                    // Channel type icon
+                    Image(systemName: channel.channelType == .shared ? "globe" : "person.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.7))
                     Image(systemName: "music.note.house.fill")
                         .font(.system(size: 11))
                         .foregroundColor(.white.opacity(0.7))
@@ -270,8 +389,8 @@ struct ChannelCard: View {
 struct ChannelListRow: View {
     let channel: Channel
     let onTap: () -> Void
-    let onEdit: () -> Void
-    let onDelete: () -> Void
+    let onEdit: (() -> Void)?
+    let onDelete: (() -> Void)?
     @State private var showingDeleteConfirmation = false
 
     var body: some View {
@@ -332,23 +451,27 @@ struct ChannelListRow: View {
 
             Spacer()
 
-            // Edit button
-            Button(action: onEdit) {
-                Image(systemName: "pencil.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(.white.opacity(0.7))
+            // Edit button (only show if onEdit is provided)
+            if let onEdit = onEdit {
+                Button(action: onEdit) {
+                    Image(systemName: "pencil.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+                .buttonStyle(PlainButtonStyle())
             }
-            .buttonStyle(PlainButtonStyle())
 
-            // Delete button
-            Button(action: {
-                showingDeleteConfirmation = true
-            }) {
-                Image(systemName: "trash.circle.fill")
-                    .font(.system(size: 28))
-                    .foregroundColor(.red.opacity(0.7))
+            // Delete button (only show if onDelete is provided)
+            if onDelete != nil {
+                Button(action: {
+                    showingDeleteConfirmation = true
+                }) {
+                    Image(systemName: "trash.circle.fill")
+                        .font(.system(size: 28))
+                        .foregroundColor(.red.opacity(0.7))
+                }
+                .buttonStyle(PlainButtonStyle())
             }
-            .buttonStyle(PlainButtonStyle())
             }
         }
         .buttonStyle(PlainButtonStyle())
@@ -358,7 +481,7 @@ struct ChannelListRow: View {
         .alert("チャンネルを削除", isPresented: $showingDeleteConfirmation) {
             Button("キャンセル", role: .cancel) {}
             Button("削除", role: .destructive) {
-                onDelete()
+                onDelete?()
             }
         } message: {
             Text("このチャンネルを削除してもよろしいですか？チャンネル内のすべての投稿も削除されます。この操作は取り消せません。")
@@ -500,6 +623,8 @@ class ProfileViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var channels: [Channel] = []
     @Published var isLoadingChannels = false
+    @Published var posts: [Post] = []
+    @Published var isLoadingPosts = false
 
     func loadCurrentUser() async {
         isLoading = true
@@ -520,6 +645,25 @@ class ProfileViewModel: ObservableObject {
         isLoading = false
     }
 
+    func loadPosts() async {
+        isLoadingPosts = true
+
+        do {
+            guard let currentUserId = Auth.auth().currentUser?.uid else {
+                isLoadingPosts = false
+                return
+            }
+
+            let (fetchedPosts, _) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId)
+            posts = fetchedPosts
+            print("✅ Loaded \(posts.count) posts")
+        } catch {
+            print("❌ Failed to load posts: \(error)")
+        }
+
+        isLoadingPosts = false
+    }
+
     func loadChannels() async {
         isLoadingChannels = true
 
@@ -529,7 +673,21 @@ class ProfileViewModel: ObservableObject {
                 return
             }
 
-            channels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+            // Get followed channels
+            var followedChannels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: currentUserId)
+
+            // Get own channels
+            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+
+            // Merge and remove duplicates
+            for ownChannel in ownChannels {
+                if !followedChannels.contains(where: { $0.id == ownChannel.id }) {
+                    followedChannels.append(ownChannel)
+                }
+            }
+
+            // Sort by latest post date
+            channels = followedChannels.sorted { ($0.latestPostAt ?? Date.distantPast) > ($1.latestPostAt ?? Date.distantPast) }
             print("✅ Loaded \(channels.count) channels")
         } catch {
             print("❌ Failed to load channels: \(error)")

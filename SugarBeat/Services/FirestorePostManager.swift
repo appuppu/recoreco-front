@@ -45,14 +45,26 @@ class FirestorePostManager {
 
     func createPost(_ post: Post) async throws -> String {
         do {
+            print("🔍 [FirestorePostManager] Starting createPost...")
+            print("   - userId: \(post.userId)")
+            print("   - channelId: \(post.channelId ?? "nil")")
+
             let docRef = try db.collection(postsCollection).addDocument(from: post)
-            print("✅ Post created: \(docRef.documentID)")
+            print("✅ [FirestorePostManager] addDocument succeeded: \(docRef.documentID)")
 
             // Increment user's post count
+            print("🔍 [FirestorePostManager] Incrementing post count for user: \(post.userId)")
             try await FirestoreUserManager.shared.incrementPostCount(userId: post.userId)
+            print("✅ [FirestorePostManager] Post count incremented successfully")
 
+            print("✅ [FirestorePostManager] createPost completed successfully")
             return docRef.documentID
-        } catch {
+        } catch let error as NSError {
+            print("❌ [FirestorePostManager] createPost failed:")
+            print("   - Error domain: \(error.domain)")
+            print("   - Error code: \(error.code)")
+            print("   - Error description: \(error.localizedDescription)")
+            print("   - Error userInfo: \(error.userInfo)")
             throw FirestorePostError.createFailed(error)
         }
     }
@@ -250,6 +262,26 @@ class FirestorePostManager {
         }
     }
 
+    /// Get posts by a specific user in a specific channel
+    func getChannelPosts(channelId: String, userId: String, limit: Int = 1000) async throws -> [Post] {
+        print("📥 [PostManager] getChannelPosts - channelId: \(channelId), userId: \(userId)")
+        do {
+            let query = db.collection(postsCollection)
+                .whereField("channelId", isEqualTo: channelId)
+                .whereField("userId", isEqualTo: userId)
+                .order(by: "createdAt", descending: true)
+                .limit(to: limit)
+
+            let snapshot = try await query.getDocuments(source: .server)
+            print("📥 [PostManager] Fetched \(snapshot.documents.count) posts by user \(userId) in channel \(channelId)")
+            let posts = try snapshot.documents.compactMap { try $0.data(as: Post.self) }
+
+            return posts
+        } catch {
+            throw FirestorePostError.fetchFailed(error)
+        }
+    }
+
     // MARK: - Get Discovery Feed
 
     func getDiscoveryFeed(limit: Int = 20, lastDocument: DocumentSnapshot? = nil) async throws -> ([Post], DocumentSnapshot?) {
@@ -378,8 +410,8 @@ class FirestorePostManager {
     // MARK: - Discovery Channels
 
     /// Get channels ordered by latest post date (denormalization-free)
-    func getDiscoveryChannels(limit: Int = 20) async throws -> [Channel] {
-        print("📥 [PostManager] getDiscoveryChannels - limit: \(limit), FORCING SERVER FETCH")
+    func getDiscoveryChannels(channelType: ChannelType? = nil, limit: Int = 20) async throws -> [Channel] {
+        print("📥 [PostManager] getDiscoveryChannels - channelType: \(channelType?.rawValue ?? "all"), limit: \(limit), FORCING SERVER FETCH")
 
         // Get all block-related users (both blocked and who blocked me)
         let blockedUserIds = (try? await FirestoreBlockManager.shared.getAllBlockRelatedUsers()) ?? []
@@ -431,7 +463,6 @@ class FirestorePostManager {
                 // Secondary sort: by channelId for stable ordering when dates are equal
                 return first.channelId < second.channelId
             }
-            .prefix(limit)
 
         let sortedChannelIds = sortedChannelData.map { $0.channelId }
 
@@ -446,6 +477,12 @@ class FirestorePostManager {
                     continue
                 }
 
+                // Filter by channel type if specified
+                if let channelType = channelType, channel.channelType != channelType {
+                    print("📥 [PostManager] Skipping channel \(channelId) - type mismatch: \(channel.channelType.rawValue) != \(channelType.rawValue)")
+                    continue
+                }
+
                 // Check if current user is following
                 if let currentUserId = Auth.auth().currentUser?.uid {
                     let isFollowing = try await FirestoreChannelManager.shared.checkIfFollowing(channelId: channelId, userId: currentUserId)
@@ -456,10 +493,15 @@ class FirestorePostManager {
                 channel.followerCount = try? await FirestoreChannelManager.shared.getFollowerCount(channelId: channelId)
 
                 channels.append(channel)
+
+                // Apply limit after filtering
+                if channels.count >= limit {
+                    break
+                }
             }
         }
 
-        print("✅ [PostManager] getDiscoveryChannels returning \(channels.count) channels (after bi-directional blocking filter)")
+        print("✅ [PostManager] getDiscoveryChannels returning \(channels.count) channels (after filtering by type: \(channelType?.rawValue ?? "all"))")
         return channels
     }
 }
@@ -470,329 +512,5 @@ extension Array {
         stride(from: 0, to: count, by: size).map {
             Array(self[$0..<Swift.min($0 + size, count)])
         }
-    }
-}
-
-// MARK: - Channel Manager
-
-enum ChannelError: Error {
-    case notAuthenticated
-    case channelNotFound
-    case invalidData
-    case unknown
-}
-
-@MainActor
-class FirestoreChannelManager {
-    static let shared = FirestoreChannelManager()
-    private let db = Firestore.firestore()
-    private let channelsCollection = "channels"
-    private let channelFollowsCollection = "channelFollows"
-
-    private init() {}
-
-    // MARK: - Create Channel
-
-    func createChannel(name: String) async throws -> Channel {
-        guard let currentUser = Auth.auth().currentUser else {
-            throw ChannelError.notAuthenticated
-        }
-
-        guard let userId = currentUser.uid as String? else {
-            throw ChannelError.invalidData
-        }
-
-        // チャンネルにはuserIdのみを保存（ユーザー情報は動的に取得）
-        var channel = Channel(
-            userId: userId,
-            name: name
-        )
-
-        let docRef = try db.collection(channelsCollection).addDocument(from: channel)
-        channel.id = docRef.documentID
-
-        print("✅ Channel created: \(docRef.documentID)")
-
-        return channel
-    }
-
-    // MARK: - Get Channels
-
-    /// Get user's channels
-    func getUserChannels(userId: String, forceRefresh: Bool = false) async throws -> [Channel] {
-        let snapshot = try await db.collection(channelsCollection)
-            .whereField("userId", isEqualTo: userId)
-            .order(by: "createdAt", descending: true)
-            .getDocuments(source: forceRefresh ? .server : .default)
-
-        var channels: [Channel] = []
-        for document in snapshot.documents {
-            if var channel = try? document.data(as: Channel.self) {
-                // Check if current user is following
-                if let currentUserId = Auth.auth().currentUser?.uid {
-                    let isFollowing = try await checkIfFollowing(channelId: channel.id ?? "", userId: currentUserId)
-                    channel.isFollowing = isFollowing
-                }
-
-                // Get follower count dynamically
-                if let channelId = channel.id {
-                    channel.followerCount = try? await getFollowerCount(channelId: channelId)
-                }
-
-                channels.append(channel)
-            }
-        }
-
-        return channels
-    }
-
-    /// Get channel by ID
-    func getChannel(channelId: String) async throws -> Channel {
-        let document = try await db.collection(channelsCollection).document(channelId).getDocument()
-
-        guard var channel = try? document.data(as: Channel.self) else {
-            throw ChannelError.channelNotFound
-        }
-
-        // Check if current user is following
-        if let currentUserId = Auth.auth().currentUser?.uid {
-            let isFollowing = try await checkIfFollowing(channelId: channelId, userId: currentUserId)
-            channel.isFollowing = isFollowing
-        }
-
-        // Get follower count dynamically
-        channel.followerCount = try? await getFollowerCount(channelId: channelId)
-
-        return channel
-    }
-
-    /// Get followed channels for user
-    func getFollowedChannels(userId: String, forceRefresh: Bool = false) async throws -> [Channel] {
-        // Get list of followed channel IDs
-        let followSnapshot = try await db.collection("users")
-            .document(userId)
-            .collection("followingChannels")
-            .order(by: "followedAt", descending: true)
-            .getDocuments(source: forceRefresh ? .server : .default)
-
-        let channelIds = followSnapshot.documents.compactMap { $0.documentID }
-
-        guard !channelIds.isEmpty else {
-            return []
-        }
-
-        // Firestore 'in' query limit is 10, so batch if needed
-        var channels: [Channel] = []
-        let batches = channelIds.chunked(into: 10)
-
-        for batch in batches {
-            let snapshot = try await db.collection(channelsCollection)
-                .whereField(FieldPath.documentID(), in: batch)
-                .getDocuments(source: forceRefresh ? .server : .default)
-
-            for document in snapshot.documents {
-                if var channel = try? document.data(as: Channel.self) {
-                    channel.isFollowing = true
-
-                    // Get follower count dynamically
-                    if let channelId = channel.id {
-                        channel.followerCount = try? await getFollowerCount(channelId: channelId)
-                    }
-
-                    channels.append(channel)
-                }
-            }
-        }
-
-        // Sort by latest post date
-        channels.sort { ($0.latestPostAt ?? Date.distantPast) > ($1.latestPostAt ?? Date.distantPast) }
-
-        return channels
-    }
-
-    /// DEPRECATED: Use FirestoreChannelManager.shared.getRandomChannels() instead
-    /// This old implementation used .shuffled() which caused unstable ordering
-
-    // MARK: - Update Channel
-
-    func updateChannel(channelId: String, name: String) async throws {
-        guard let currentUser = Auth.auth().currentUser else {
-            throw ChannelError.notAuthenticated
-        }
-
-        // Verify ownership
-        let channel = try await getChannel(channelId: channelId)
-        guard channel.userId == currentUser.uid else {
-            throw ChannelError.notAuthenticated
-        }
-
-        try await db.collection(channelsCollection).document(channelId).updateData([
-            "name": name,
-            "updatedAt": Timestamp(date: Date())
-        ])
-
-        print("✅ Channel updated: \(channelId)")
-    }
-
-    /// Update channel's latest post info (called when post is created)
-    func updateChannelLatestPost(channelId: String, postId: String, artworkUrl: String?) async throws {
-        try await db.collection(channelsCollection).document(channelId).updateData([
-            "latestPostId": postId,
-            "latestPostAt": Timestamp(date: Date()),
-            "latestPostArtworkUrl": artworkUrl as Any? ?? NSNull(),
-            "updatedAt": Timestamp(date: Date())
-        ])
-    }
-
-    // MARK: - Delete Channel
-
-    func deleteChannel(channelId: String) async throws {
-        guard let currentUser = Auth.auth().currentUser else {
-            throw ChannelError.notAuthenticated
-        }
-
-        // Verify ownership
-        let channel = try await getChannel(channelId: channelId)
-        guard channel.userId == currentUser.uid else {
-            throw ChannelError.notAuthenticated
-        }
-
-        // Delete all posts in channel
-        let posts = try await FirestorePostManager.shared.getChannelPosts(channelId: channelId, limit: 1000)
-        for post in posts {
-            if let postId = post.id {
-                try? await FirestorePostManager.shared.deletePost(postId: postId)
-            }
-        }
-        print("✅ Deleted \(posts.count) posts from channel")
-
-        // Delete all channel follows from users' followingChannels
-        let followersSnapshot = try await db.collection(channelFollowsCollection)
-            .document(channelId)
-            .collection("followers")
-            .getDocuments()
-
-        let batch = db.batch()
-        for followerDoc in followersSnapshot.documents {
-            let followerId = followerDoc.documentID
-
-            // Delete from user's followingChannels
-            let userFollowingRef = db.collection("users")
-                .document(followerId)
-                .collection("followingChannels")
-                .document(channelId)
-            batch.deleteDocument(userFollowingRef)
-
-            // Delete from channel's followers
-            batch.deleteDocument(followerDoc.reference)
-        }
-
-        // Delete channel document
-        let channelRef = db.collection(channelsCollection).document(channelId)
-        batch.deleteDocument(channelRef)
-
-        try await batch.commit()
-
-        print("✅ Channel deleted: \(channelId)")
-    }
-
-    // MARK: - Follow/Unfollow
-
-    func followChannel(channelId: String) async throws {
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
-            throw ChannelError.notAuthenticated
-        }
-
-        let batch = db.batch()
-
-        // Add to user's following list
-        let userFollowingRef = db.collection("users")
-            .document(currentUserId)
-            .collection("followingChannels")
-            .document(channelId)
-
-        batch.setData([
-            "followedAt": Timestamp(date: Date())
-        ], forDocument: userFollowingRef)
-
-        // Add to channel's followers list
-        let channelFollowerRef = db.collection(channelFollowsCollection)
-            .document(channelId)
-            .collection("followers")
-            .document(currentUserId)
-
-        batch.setData([
-            "followedAt": Timestamp(date: Date())
-        ], forDocument: channelFollowerRef)
-
-        try await batch.commit()
-
-        print("✅ Followed channel: \(channelId)")
-
-        // Create notification for channel owner
-        do {
-            let channel = try await getChannel(channelId: channelId)
-            if channel.userId != currentUserId, // Don't notify yourself
-               let currentUser = try? await FirestoreUserManager.shared.getUser(userId: currentUserId) {
-                let notification = Notification(
-                    from: currentUser,
-                    recipientId: channel.userId,
-                    type: .channelFollow,
-                    postId: channelId, // Store channelId in postId field
-                    artworkUrl: channel.latestPostArtworkUrl
-                )
-                try? await FirestoreNotificationManager.shared.createNotification(notification)
-            }
-        } catch {
-            print("⚠️ Failed to create channel follow notification: \(error)")
-        }
-    }
-
-    func unfollowChannel(channelId: String) async throws {
-        guard let currentUserId = Auth.auth().currentUser?.uid else {
-            throw ChannelError.notAuthenticated
-        }
-
-        let batch = db.batch()
-
-        // Remove from user's following list
-        let userFollowingRef = db.collection("users")
-            .document(currentUserId)
-            .collection("followingChannels")
-            .document(channelId)
-
-        batch.deleteDocument(userFollowingRef)
-
-        // Remove from channel's followers list
-        let channelFollowerRef = db.collection(channelFollowsCollection)
-            .document(channelId)
-            .collection("followers")
-            .document(currentUserId)
-
-        batch.deleteDocument(channelFollowerRef)
-
-        try await batch.commit()
-
-        print("✅ Unfollowed channel: \(channelId)")
-    }
-
-    func checkIfFollowing(channelId: String, userId: String) async throws -> Bool {
-        let document = try await db.collection("users")
-            .document(userId)
-            .collection("followingChannels")
-            .document(channelId)
-            .getDocument()
-
-        return document.exists
-    }
-
-    /// Get follower count for a channel by counting documents in channelFollows/{channelId}/followers
-    func getFollowerCount(channelId: String) async throws -> Int {
-        let snapshot = try await db.collection(channelFollowsCollection)
-            .document(channelId)
-            .collection("followers")
-            .getDocuments()
-
-        return snapshot.documents.count
     }
 }

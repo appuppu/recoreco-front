@@ -731,6 +731,10 @@ struct FeaturedPostCellSimple: View {
                             if let channelId = post.channelId,
                                let channel = postChannel {
                                 HStack(spacing: 4) {
+                                    // Channel type icon
+                                    Image(systemName: channel.channelType == .shared ? "globe" : "person.circle.fill")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white.opacity(0.6))
                                     Image(systemName: "number")
                                         .font(.system(size: 10))
                                         .foregroundColor(.white.opacity(0.6))

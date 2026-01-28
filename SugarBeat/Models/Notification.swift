@@ -12,6 +12,7 @@ struct Notification: Codable, Identifiable {
     let postId: String?
     let artworkUrl: String?
     let channelName: String?
+    let channelType: String? // "shared" or "personal"
     let isRead: Bool
     let createdAt: Date
 
@@ -32,6 +33,7 @@ struct Notification: Codable, Identifiable {
         case postId
         case artworkUrl
         case channelName
+        case channelType
         case isRead
         case createdAt
     }
@@ -46,6 +48,7 @@ struct Notification: Codable, Identifiable {
          postId: String? = nil,
          artworkUrl: String? = nil,
          channelName: String? = nil,
+         channelType: String? = nil,
          isRead: Bool = false,
          createdAt: Date = Date()) {
         self.id = id
@@ -58,6 +61,7 @@ struct Notification: Codable, Identifiable {
         self.postId = postId
         self.artworkUrl = artworkUrl
         self.channelName = channelName
+        self.channelType = channelType
         self.isRead = isRead
         self.createdAt = createdAt
     }
@@ -68,7 +72,8 @@ struct Notification: Codable, Identifiable {
          type: NotificationType,
          postId: String? = nil,
          artworkUrl: String? = nil,
-         channelName: String? = nil) {
+         channelName: String? = nil,
+         channelType: String? = nil) {
         self.init(
             recipientId: recipientId,
             senderId: sender.id ?? "",
@@ -78,7 +83,8 @@ struct Notification: Codable, Identifiable {
             type: type,
             postId: postId,
             artworkUrl: artworkUrl,
-            channelName: channelName
+            channelName: channelName,
+            channelType: channelType
         )
     }
 }

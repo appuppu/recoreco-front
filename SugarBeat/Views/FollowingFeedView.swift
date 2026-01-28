@@ -6,6 +6,7 @@ struct FollowingFeedView: View {
     @StateObject private var viewModel = FollowingFeedViewModel()
     @EnvironmentObject private var authManager: AuthManager
     @State private var showingLoginSheet = false
+    @State private var selectedChannelType: ChannelType = .shared
 
     var body: some View {
         NavigationStack {
@@ -64,10 +65,49 @@ struct FollowingFeedView: View {
                             .multilineTextAlignment(.center)
                     }
                 } else {
-                    ZStack {
-                        GeometryReader { geometry in
-                            ScrollView {
-                                LazyVStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        // Channel type switcher
+                        HStack(spacing: 8) {
+                            Button(action: {
+                                print("🔘 [FollowingFeedView] User tapped '参加中の公開チャンネル' tab")
+                                withAnimation {
+                                    selectedChannelType = .shared
+                                    viewModel.filterChannels(by: .shared)
+                                }
+                            }) {
+                                Text("参加中の公開チャンネル")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(selectedChannelType == .shared ? .white : .white.opacity(0.6))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(selectedChannelType == .shared ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                                    .cornerRadius(8)
+                            }
+
+                            Button(action: {
+                                print("🔘 [FollowingFeedView] User tapped '個人チャンネル' tab")
+                                withAnimation {
+                                    selectedChannelType = .personal
+                                    viewModel.filterChannels(by: .personal)
+                                }
+                            }) {
+                                Text("個人チャンネル")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(selectedChannelType == .personal ? .white : .white.opacity(0.6))
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 8)
+                                    .background(selectedChannelType == .personal ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                                    .cornerRadius(8)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.vertical, 8)
+                        .background(Color.black)
+
+                        ZStack {
+                            GeometryReader { geometry in
+                                ScrollView {
+                                    LazyVStack(spacing: 0) {
                                     ForEach(Array(viewModel.channelsWithPosts.enumerated()), id: \.element.channel.id) { index, item in
                                         if let latestPostId = item.channel.latestPostId {
                                             ChannelDiscoveryCard(
@@ -100,27 +140,31 @@ struct FollowingFeedView: View {
                             }
                             .scrollIndicators(.hidden)
                             .refreshable {
-                                await viewModel.refreshChannels()
+                                await viewModel.refreshChannels(channelType: selectedChannelType)
                             }
                         }
                     }
+                    }
                 }
             }
-            .navigationTitle("フォロー中と自分のチャンネル")
+            .navigationTitle("フォロー中/参加中と自分のチャンネル")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.black.opacity(0.9), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .task {
+            print("🎯 [FollowingFeedView] .task executed - isAuthenticated: \(authManager.isAuthenticated), channelsWithPosts.isEmpty: \(viewModel.channelsWithPosts.isEmpty)")
             if viewModel.channelsWithPosts.isEmpty && authManager.isAuthenticated {
-                await viewModel.loadFollowedChannelsPosts()
+                print("🔄 [FollowingFeedView] Loading initial channels...")
+                await viewModel.loadFollowedChannelsPosts(channelType: .shared)
             }
         }
         .onChange(of: authManager.isAuthenticated) { isAuthenticated in
+            print("🎯 [FollowingFeedView] .onChange(isAuthenticated) - new value: \(isAuthenticated)")
             if isAuthenticated && viewModel.channelsWithPosts.isEmpty {
                 Task {
-                    await viewModel.loadFollowedChannelsPosts()
+                    await viewModel.loadFollowedChannelsPosts(channelType: .shared)
                 }
             }
         }
@@ -141,6 +185,7 @@ class FollowingFeedViewModel: ObservableObject {
     @Published var channelsWithPosts: [ChannelWithPost] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    private var allChannelsWithPosts: [ChannelWithPost] = []
 
     init() {
         // 投稿完了通知を監視
@@ -150,6 +195,7 @@ class FollowingFeedViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                print("📥 [FollowingFeedViewModel] Received postCreated notification, reloading channels...")
                 await self?.loadFollowedChannelsPosts()
             }
         }
@@ -187,6 +233,7 @@ class FollowingFeedViewModel: ObservableObject {
             if let blockedUserId = notification.userInfo?["blockedUserId"] as? String {
                 Task { @MainActor in
                     // ブロックされたユーザーのチャンネルを即座に削除
+                    self?.allChannelsWithPosts.removeAll { $0.channel.userId == blockedUserId }
                     self?.channelsWithPosts.removeAll { $0.channel.userId == blockedUserId }
                     print("🚫 Removed blocked user's channels from following feed: \(blockedUserId)")
                 }
@@ -194,7 +241,8 @@ class FollowingFeedViewModel: ObservableObject {
         }
     }
 
-    func loadFollowedChannelsPosts() async {
+    func loadFollowedChannelsPosts(channelType: ChannelType = .shared) async {
+        print("🔄 [FollowingFeedViewModel] loadFollowedChannelsPosts started - channelType: \(channelType.rawValue)")
         isLoading = true
         errorMessage = nil
 
@@ -204,15 +252,18 @@ class FollowingFeedViewModel: ObservableObject {
                 isLoading = false
                 throw FirestorePostError.notAuthenticated
             }
+            print("✅ [FollowingFeedViewModel] Current userId: \(currentUserId)")
 
             // ブロック関連ユーザーリストを取得（双方向）
             let blockedUserIds = (try? await FirestoreBlockManager.shared.getAllBlockRelatedUsers()) ?? []
 
             // フォロー中のチャンネルを取得
             var channels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: currentUserId)
+            print("✅ [FollowingFeedViewModel] Fetched \(channels.count) followed channels")
 
             // 自分のチャンネルも取得して追加
             let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId)
+            print("✅ [FollowingFeedViewModel] Fetched \(ownChannels.count) own channels")
             channels.append(contentsOf: ownChannels)
 
             // ブロック関連ユーザーのチャンネルを除外（双方向）
@@ -221,10 +272,25 @@ class FollowingFeedViewModel: ObservableObject {
             // 最新の投稿順にソート
             channels.sort { ($0.latestPostAt ?? Date.distantPast) > ($1.latestPostAt ?? Date.distantPast) }
 
-            // チャンネルと投稿のペアを作成
-            channelsWithPosts = channels.map { ChannelWithPost(channel: $0, post: nil) }
+            // Log channel types breakdown
+            let sharedCount = channels.filter { $0.channelType == .shared }.count
+            let personalCount = channels.filter { $0.channelType == .personal }.count
+            print("✅ [FollowingFeedViewModel] Total channels: \(channels.count) (shared: \(sharedCount), personal: \(personalCount))")
 
-            print("📥 Following Feed: Loaded \(channels.count) followed channels")
+            // Log personal channels details
+            let personalChannels = channels.filter { $0.channelType == .personal }
+            for channel in personalChannels {
+                let latestPostDate = channel.latestPostAt?.formatted() ?? "No posts"
+                print("📋 [FollowingFeedViewModel] Personal Channel: \(channel.name) | ID: \(channel.id ?? "nil") | Latest: \(latestPostDate)")
+            }
+
+            // チャンネルと投稿のペアを作成（全チャンネル）
+            allChannelsWithPosts = channels.map { ChannelWithPost(channel: $0, post: nil) }
+
+            // Filter by type
+            filterChannels(by: channelType)
+
+            print("📥 Following Feed: Loaded \(allChannelsWithPosts.count) total channels")
         } catch {
             errorMessage = "読み込みに失敗しました"
             print("❌ Following Feed: Failed to load channels: \(error)")
@@ -233,7 +299,7 @@ class FollowingFeedViewModel: ObservableObject {
         isLoading = false
     }
 
-    func refreshChannels() async {
+    func refreshChannels(channelType: ChannelType) async {
         // Refresh without setting isLoading to avoid double animation
         print("🔄 [FollowingFeedViewModel] refreshChannels called - forcing server fetch")
         errorMessage = nil
@@ -250,7 +316,7 @@ class FollowingFeedViewModel: ObservableObject {
             // フォロー中のチャンネルを取得（強制的にサーバーから）
             var channels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: currentUserId, forceRefresh: true)
 
-            // 自分のチャンネルも取得して追加（強制的にサーバーから）
+            // 自分のチャンネルも取得して追加
             let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: currentUserId, forceRefresh: true)
             channels.append(contentsOf: ownChannels)
 
@@ -260,14 +326,22 @@ class FollowingFeedViewModel: ObservableObject {
             // 最新の投稿順にソート
             channels.sort { ($0.latestPostAt ?? Date.distantPast) > ($1.latestPostAt ?? Date.distantPast) }
 
-            // チャンネルと投稿のペアを作成
-            channelsWithPosts = channels.map { ChannelWithPost(channel: $0, post: nil) }
+            // チャンネルと投稿のペアを作成（全チャンネル）
+            allChannelsWithPosts = channels.map { ChannelWithPost(channel: $0, post: nil) }
 
-            print("📥 Following Feed: Refreshed \(channels.count) followed channels")
+            // Filter by type
+            filterChannels(by: channelType)
+
+            print("📥 Following Feed: Refreshed \(allChannelsWithPosts.count) total channels")
         } catch {
             errorMessage = "読み込みに失敗しました"
             print("❌ Following Feed: Failed to refresh channels: \(error)")
         }
+    }
+
+    func filterChannels(by channelType: ChannelType) {
+        channelsWithPosts = allChannelsWithPosts.filter { $0.channel.channelType == channelType }
+        print("🔍 [FollowingFeedViewModel] Filtered to \(channelsWithPosts.count) \(channelType.rawValue) channels")
     }
 }
 

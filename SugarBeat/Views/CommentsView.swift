@@ -130,9 +130,13 @@ struct CommentsView: View {
                             .resizable()
                             .scaledToFill()
                     } placeholder: {
-                        Image("recoreco")
-                            .resizable()
-                            .scaledToFill()
+                        Circle()
+                            .fill(Color.white.opacity(0.1))
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white.opacity(0.5))
+                            )
                     }
                     .frame(width: 32, height: 32)
                     .clipShape(Circle())
@@ -229,9 +233,13 @@ struct CommentsView: View {
                                 .resizable()
                                 .scaledToFill()
                         } placeholder: {
-                            Image("recoreco")
-                                .resizable()
-                                .scaledToFill()
+                            Circle()
+                                .fill(Color.white.opacity(0.1))
+                                .overlay(
+                                    Image(systemName: "person.fill")
+                                        .font(.system(size: 8))
+                                        .foregroundColor(.white.opacity(0.5))
+                                )
                         }
                         .frame(width: 16, height: 16)
                         .clipShape(Circle())
@@ -604,9 +612,13 @@ struct CommentRepliesView: View {
                             .resizable()
                             .scaledToFill()
                     } placeholder: {
-                        Image("recoreco")
-                            .resizable()
-                            .scaledToFill()
+                        Circle()
+                            .fill(Color.white.opacity(0.1))
+                            .overlay(
+                                Image(systemName: "person.fill")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.white.opacity(0.5))
+                            )
                     }
                     .frame(width: 32, height: 32)
                     .clipShape(Circle())

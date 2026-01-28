@@ -51,6 +51,7 @@
 		6B5108AB7A294A14AC702616 /* FirestoreNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA80433F581F401CB93DE997 /* FirestoreNotificationManager.swift */; };
 		70EBAD49BB23436FA58C8C77 /* FeedAdCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4441A73EE70A4C1A8DBE7B27 /* FeedAdCardView.swift */; };
 		73E2F498A8429AAF556F2666 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 515336BF320DA0FF93EB8617 /* FollowListView.swift */; };
+		7899EBE611E54766AA7BDA02 /* FirestoreChannelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F182774B0DE42D3B8DB0796 /* FirestoreChannelManager.swift */; };
 		7E0D0D7D401DA7C39DFBDF64 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D4536DFDF93BD9B357F9A0D /* LoginView.swift */; };
 		80CB02F5B66A457595F0EC8B /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 94B0F86266FA462086693956 /* GoogleService-Info.plist */; };
 		80F4900014D1D2CA0053AD11 /* UserProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F1C82CDB2FF0F1088058E82 /* UserProfileView.swift */; };
@@ -138,6 +139,7 @@
 		515336BF320DA0FF93EB8617 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
 		5553547BD0C745B6ADB18387 /* FirestoreBlockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreBlockManager.swift; sourceTree = "<group>"; };
 		5EC006309F1FF7C328CBEB44 /* SugarBeatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SugarBeatApp.swift; sourceTree = "<group>"; };
+		5F182774B0DE42D3B8DB0796 /* FirestoreChannelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreChannelManager.swift; sourceTree = "<group>"; };
 		61F5A0F8A7D94CCFBA9DE110 /* FirestoreUserManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreUserManager.swift; sourceTree = "<group>"; };
 		66295254BCCFDF121DDA3015 /* RootViewWithAd.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootViewWithAd.swift; sourceTree = "<group>"; };
 		6817AA6DB43649AB8739BC1E /* Report.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Report.swift; sourceTree = "<group>"; };
@@ -289,6 +291,7 @@
 				C378DB4AD0334A309B2C6297 /* FeedAdManager.swift */,
 				4D6D8310BC484959A5F7DCD3 /* FirebaseStorageManager.swift */,
 				14678FBCA6F74963AB57ACF4 /* FirestoreBlockManager.swift */,
+				5F182774B0DE42D3B8DB0796 /* FirestoreChannelManager.swift */,
 				B64FD796157F437A80FAA710 /* FirestoreCacheManager.swift */,
 				06E956426FBC4CD38102C6FC /* FirestoreCommentManager.swift */,
 				F1CA239D6F174F539DA08A4B /* FirestoreFollowManager.swift */,
@@ -512,6 +515,7 @@
 				FE009FE1056C4A0996174D4F /* FirebaseStorageManager.swift in Sources */,
 				DF02E366AE1C49A9BC973FAE /* FirestoreBlockManager.swift in Sources */,
 				272C1AE4818E4DB98FDD8A1D /* FirestoreCacheManager.swift in Sources */,
+				7899EBE611E54766AA7BDA02 /* FirestoreChannelManager.swift in Sources */,
 				B89991C44AD847489EBA4559 /* FirestoreCommentManager.swift in Sources */,
 				36EE0CB934B64DF08D136554 /* FirestoreFollowManager.swift in Sources */,
 				6999E3AFF3C3414F8811C34B /* FirestoreLikeManager.swift in Sources */,
@@ -642,7 +646,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.8;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sugarbeat.SugarBeat;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
@@ -729,7 +733,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.8;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sugarbeat.SugarBeat;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;

@@ -15,7 +15,8 @@ struct UserProfileView: View {
 
     enum ViewMode {
         case posts
-        case channels
+        case sharedChannels
+        case personalChannels
     }
 
     var isOwnProfile: Bool {
@@ -60,8 +61,10 @@ struct UserProfileView: View {
                                         }
                                     )
                                 }
+                            } else if viewMode == .sharedChannels {
+                                channelsListView(channelType: .shared)
                             } else {
-                                channelsListView
+                                channelsListView(channelType: .personal)
                             }
                         }
                     } else {
@@ -159,9 +162,13 @@ struct UserProfileView: View {
                         .resizable()
                         .scaledToFill()
                 } placeholder: {
-                    Image("recoreco")
-                        .resizable()
-                        .scaledToFill()
+                    Circle()
+                        .fill(Color.white.opacity(0.1))
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.white.opacity(0.5))
+                        )
                 }
                 .frame(width: 60, height: 60)
                 .clipShape(Circle())
@@ -189,7 +196,7 @@ struct UserProfileView: View {
                     }
                 }) {
                     Text("投稿")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(viewMode == .posts ? .white : .white.opacity(0.6))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
@@ -199,7 +206,7 @@ struct UserProfileView: View {
 
                 Button(action: {
                     withAnimation {
-                        viewMode = .channels
+                        viewMode = .sharedChannels
                     }
                     if viewModel.channels.isEmpty {
                         Task {
@@ -207,12 +214,31 @@ struct UserProfileView: View {
                         }
                     }
                 }) {
-                    Text("チャンネル")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(viewMode == .channels ? .white : .white.opacity(0.6))
+                    Text("参加中")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(viewMode == .sharedChannels ? .white : .white.opacity(0.6))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background(viewMode == .channels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                        .background(viewMode == .sharedChannels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                        .cornerRadius(8)
+                }
+
+                Button(action: {
+                    withAnimation {
+                        viewMode = .personalChannels
+                    }
+                    if viewModel.channels.isEmpty {
+                        Task {
+                            await viewModel.loadChannels(userId: userId)
+                        }
+                    }
+                }) {
+                    Text("個人")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(viewMode == .personalChannels ? .white : .white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(viewMode == .personalChannels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
                         .cornerRadius(8)
                 }
             }
@@ -321,13 +347,27 @@ struct UserProfileView: View {
     }
 
     @ViewBuilder
-    private var channelsListView: some View {
-        if viewModel.channels.isEmpty {
+    private func channelsListView(channelType: ChannelType) -> some View {
+        // For personal channels, only show channels owned by this user
+        // For shared channels, show all channels they're part of
+        let filteredChannels = viewModel.channels.filter { channel in
+            if channelType == .personal {
+                // 個人チャンネル: このユーザーが所有しているもののみ
+                let isOwned = channel.userId == userId
+                print("🔍 [UserProfileView] Personal channel filter: \(channel.name) | userId: \(channel.userId) | profileUserId: \(userId) | isOwned: \(isOwned)")
+                return channel.channelType == channelType && isOwned
+            } else {
+                // 共有チャンネル: このユーザーが参加しているもの全て
+                return channel.channelType == channelType
+            }
+        }
+
+        if filteredChannels.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "music.note.house")
                     .font(.system(size: 50))
                     .foregroundColor(.white.opacity(0.4))
-                Text("チャンネルがありません")
+                Text(channelType == .shared ? "参加中の公開チャンネルはありません" : "個人チャンネルがありません")
                     .font(.system(size: 16))
                     .foregroundColor(.white.opacity(0.7))
             }
@@ -335,7 +375,7 @@ struct UserProfileView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(viewModel.channels) { channel in
+                    ForEach(filteredChannels) { channel in
                         if let channelId = channel.id {
                             NavigationLink(destination: ChannelDetailView(channelId: channelId)) {
                                 ChannelRowView(channel: channel)
@@ -392,6 +432,10 @@ struct ChannelRowView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 4) {
+                    // Channel type icon
+                    Image(systemName: channel.channelType == .shared ? "globe" : "person.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.white.opacity(0.7))
                     Image(systemName: "music.note.house.fill")
                         .font(.system(size: 13))
                         .foregroundColor(.white.opacity(0.7))
@@ -403,8 +447,13 @@ struct ChannelRowView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "person.2.fill")
                         .font(.caption2)
-                    Text("\(channel.followerCount ?? 0)")
-                        .font(.caption)
+                    if channel.channelType == .shared {
+                        Text("\(channel.followerCount ?? 0)人が参加")
+                            .font(.caption)
+                    } else {
+                        Text("\(channel.followerCount ?? 0)人がフォロー")
+                            .font(.caption)
+                    }
                 }
                 .foregroundColor(.white.opacity(0.6))
             }

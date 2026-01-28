@@ -278,7 +278,7 @@ struct NotificationRow: View {
                                 .foregroundColor(.white)
                         }
 
-                        Text("フォローしました")
+                        Text(notification.channelType == "shared" ? "参加しました" : "フォローしました")
                             .font(.system(size: 15))
                             .foregroundColor(.white)
                     }
@@ -351,11 +351,12 @@ struct NotificationRow: View {
         case .comment:
             return "\(displayName)さんがあなたの投稿にコメントしました"
         case .channelFollow:
+            let actionText = notification.channelType == "shared" ? "参加しました" : "フォローしました"
             // Use loaded channel name first, then notification's channel name, then fallback
             if let name = channelName ?? notification.channelName {
-                return "\(displayName)さんが\(name)をフォローしました"
+                return "\(displayName)さんが\(name)を\(actionText)"
             } else {
-                return "\(displayName)さんがあなたのチャンネルをフォローしました"
+                return "\(displayName)さんがあなたのチャンネルを\(actionText)"
             }
         }
     }

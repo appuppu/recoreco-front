@@ -26,7 +26,8 @@ struct MyProfileView: View {
 
     enum ViewMode {
         case posts
-        case channels
+        case sharedChannels
+        case personalChannels
     }
 
     struct GridType: Identifiable {
@@ -134,8 +135,10 @@ struct MyProfileView: View {
                         )
                         .environmentObject(authManager)
                     }
+                } else if viewMode == .sharedChannels {
+                    channelsListView(channelType: .shared)
                 } else {
-                    channelsListView
+                    channelsListView(channelType: .personal)
                 }
             }
         }
@@ -409,9 +412,13 @@ struct MyProfileView: View {
                         .resizable()
                         .scaledToFill()
                 } placeholder: {
-                    Image("recoreco")
-                        .resizable()
-                        .scaledToFill()
+                    Circle()
+                        .fill(Color.white.opacity(0.1))
+                        .overlay(
+                            Image(systemName: "person.fill")
+                                .font(.system(size: 28))
+                                .foregroundColor(.white.opacity(0.5))
+                        )
                 }
                 .frame(width: 60, height: 60)
                 .clipShape(Circle())
@@ -458,7 +465,7 @@ struct MyProfileView: View {
 
                 Button(action: {
                     withAnimation {
-                        viewMode = .channels
+                        viewMode = .sharedChannels
                     }
                     if viewModel.channels.isEmpty, let userId = authManager.currentUser?.id {
                         Task {
@@ -466,12 +473,31 @@ struct MyProfileView: View {
                         }
                     }
                 }) {
-                    Text("チャンネル")
+                    Text("参加中")
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(viewMode == .channels ? .white : .white.opacity(0.6))
+                        .foregroundColor(viewMode == .sharedChannels ? .white : .white.opacity(0.6))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
-                        .background(viewMode == .channels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                        .background(viewMode == .sharedChannels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                        .cornerRadius(8)
+                }
+
+                Button(action: {
+                    withAnimation {
+                        viewMode = .personalChannels
+                    }
+                    if viewModel.channels.isEmpty, let userId = authManager.currentUser?.id {
+                        Task {
+                            await viewModel.loadChannels(userId: userId)
+                        }
+                    }
+                }) {
+                    Text("個人")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(viewMode == .personalChannels ? .white : .white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(viewMode == .personalChannels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
                         .cornerRadius(8)
                 }
             }
@@ -479,13 +505,29 @@ struct MyProfileView: View {
     }
 
     @ViewBuilder
-    private var channelsListView: some View {
-        if viewModel.channels.isEmpty {
+    private func channelsListView(channelType: ChannelType) -> some View {
+        let currentUserId = authManager.currentUser?.id ?? ""
+
+        // For personal channels, only show channels owned by the current user
+        // For shared channels, show all followed channels
+        let filteredChannels = viewModel.channels.filter { channel in
+            if channelType == .personal {
+                // 個人チャンネル: 自分が所有しているもののみ
+                let isOwned = channel.userId == currentUserId
+                print("🔍 [MyProfileView] Personal channel filter: \(channel.name) | userId: \(channel.userId) | currentUserId: \(currentUserId) | isOwned: \(isOwned)")
+                return channel.channelType == channelType && isOwned
+            } else {
+                // 共有チャンネル: フォロー中のもの全て
+                return channel.channelType == channelType
+            }
+        }
+
+        if filteredChannels.isEmpty {
             VStack(spacing: 12) {
                 Image(systemName: "music.note.house")
                     .font(.system(size: 50))
                     .foregroundColor(.white.opacity(0.4))
-                Text("チャンネルがありません")
+                Text(channelType == .shared ? "参加中のチャンネルがありません" : "個人チャンネルがありません")
                     .font(.system(size: 16))
                     .foregroundColor(.white.opacity(0.7))
             }
@@ -493,7 +535,7 @@ struct MyProfileView: View {
         } else {
             ScrollView {
                 LazyVStack(spacing: 12) {
-                    ForEach(viewModel.channels) { channel in
+                    ForEach(filteredChannels) { channel in
                         if let channelId = channel.id {
                             ZStack(alignment: .trailing) {
                                 NavigationLink(destination: ChannelDetailView(channelId: channelId)) {
@@ -501,16 +543,18 @@ struct MyProfileView: View {
                                 }
                                 .buttonStyle(PlainButtonStyle())
 
-                                // 編集ボタンを上に重ねる
-                                Button(action: {
-                                    viewModel.editingChannel = channel
-                                    viewModel.editingChannelName = channel.name
-                                    viewModel.showEditChannelSheet = true
-                                }) {
-                                    Image(systemName: "pencil.circle.fill")
-                                        .font(.system(size: 28))
-                                        .foregroundColor(.white.opacity(0.7))
-                                        .padding(.trailing, 16)
+                                // 編集ボタンを上に重ねる（自分が作成したチャンネルのみ）
+                                if channel.userId == authManager.currentUser?.id {
+                                    Button(action: {
+                                        viewModel.editingChannel = channel
+                                        viewModel.editingChannelName = channel.name
+                                        viewModel.showEditChannelSheet = true
+                                    }) {
+                                        Image(systemName: "pencil.circle.fill")
+                                            .font(.system(size: 28))
+                                            .foregroundColor(.white.opacity(0.7))
+                                            .padding(.trailing, 16)
+                                    }
                                 }
                             }
                         } else {
@@ -889,6 +933,7 @@ class MyProfileViewModel: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                print("📥 [MyProfileViewModel] Received postCreated notification, reloading posts...")
                 await self?.loadPosts(forceRefresh: true)
             }
         }
@@ -937,9 +982,11 @@ class MyProfileViewModel: ObservableObject {
 
         do {
             // 自分の投稿を取得（新しい順）
+            print("🔄 [MyProfileViewModel] Fetching posts for userId: \(currentUserId), forceRefresh: \(forceRefresh)")
             let (fetchedPosts, _) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId, limit: 50)
             posts = fetchedPosts.sorted { $0.createdAt > $1.createdAt }
             lastFetchTime = Date()
+            print("✅ [MyProfileViewModel] Fetched \(posts.count) posts for user")
         } catch let error as NSError {
             // キャンセルエラー(-999)は無視
             if error.code == NSURLErrorCancelled {
@@ -963,8 +1010,20 @@ class MyProfileViewModel: ObservableObject {
 
     func loadChannels(userId: String) async {
         do {
-            channels = try await FirestoreChannelManager.shared.getUserChannels(userId: userId)
-            print("✅ Loaded \(channels.count) channels for user: \(userId)")
+            // Load both own channels and followed channels
+            let ownChannels = try await FirestoreChannelManager.shared.getUserChannels(userId: userId)
+            let followedChannels = try await FirestoreChannelManager.shared.getFollowedChannels(userId: userId)
+
+            // Merge and remove duplicates
+            var allChannels = ownChannels
+            for followedChannel in followedChannels {
+                if !allChannels.contains(where: { $0.id == followedChannel.id }) {
+                    allChannels.append(followedChannel)
+                }
+            }
+
+            channels = allChannels
+            print("✅ Loaded \(allChannels.count) channels for user: \(userId) (own: \(ownChannels.count), followed: \(followedChannels.count))")
         } catch {
             errorMessage = "チャンネルの取得に失敗しました"
             print("❌ Failed to load channels: \(error)")

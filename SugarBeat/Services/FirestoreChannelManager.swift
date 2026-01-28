@@ -6,6 +6,8 @@ enum ChannelError: Error {
     case notAuthenticated
     case channelNotFound
     case invalidData
+    case notAuthorized
+    case cannotDeleteChannelWithMembers
     case unknown
 }
 
@@ -19,7 +21,7 @@ class FirestoreChannelManager {
 
     // MARK: - Create Channel
 
-    func createChannel(name: String) async throws -> Channel {
+    func createChannel(name: String, channelType: ChannelType = .personal, accessType: ChannelAccessType = .`public`) async throws -> Channel {
         guard let currentUser = Auth.auth().currentUser else {
             throw ChannelError.notAuthenticated
         }
@@ -31,15 +33,62 @@ class FirestoreChannelManager {
         // チャンネルにはuserIdのみを保存（ユーザー情報は動的に取得）
         var channel = Channel(
             userId: userId,
-            name: name
+            name: name,
+            channelType: channelType,
+            accessType: accessType
         )
 
         let docRef = try db.collection(channelsCollection).addDocument(from: channel)
         channel.id = docRef.documentID
 
-        print("✅ Channel created: \(docRef.documentID)")
+        print("✅ Channel created: \(docRef.documentID) - Type: \(channelType.rawValue)")
 
         return channel
+    }
+
+    // MARK: - Channel Permissions
+
+    /// Check if a user can post to a channel
+    func canPostToChannel(channelId: String, userId: String) async throws -> Bool {
+        let channel = try await getChannel(channelId: channelId)
+
+        switch channel.channelType {
+        case .personal:
+            // Only owner can post to personal channels
+            return channel.userId == userId
+        case .shared:
+            // Members (followers) can post to shared channels
+            // Also check if user is the owner
+            if channel.userId == userId {
+                return true
+            }
+            return try await checkIfFollowing(channelId: channelId, userId: userId)
+        }
+    }
+
+    /// Leave a channel and delete all user's posts in that channel
+    func leaveChannelAndDeletePosts(channelId: String) async throws {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            throw ChannelError.notAuthenticated
+        }
+
+        print("🚪 [ChannelManager] User \(currentUserId) leaving channel \(channelId)")
+
+        // 1. Get all user's posts in this channel
+        let posts = try await FirestorePostManager.shared.getChannelPosts(channelId: channelId, userId: currentUserId)
+        print("📋 [ChannelManager] Found \(posts.count) posts to delete")
+
+        // 2. Delete each post (likes/comments will be auto-deleted by deletePost)
+        for post in posts {
+            if let postId = post.id {
+                try await FirestorePostManager.shared.deletePost(postId: postId)
+                print("🗑️ [ChannelManager] Deleted post \(postId)")
+            }
+        }
+
+        // 3. Unfollow the channel
+        try await unfollowChannel(channelId: channelId)
+        print("✅ [ChannelManager] User left channel and deleted \(posts.count) posts")
     }
 
     // MARK: - Get Channels
@@ -162,13 +211,12 @@ class FirestoreChannelManager {
 
         for document in postsSnapshot.documents {
             if let post = try? document.data(as: Post.self),
-               let channelId = post.channelId,
-               let createdAt = post.createdAt {
+               let channelId = post.channelId {
                 // Only keep the first (latest) post for each channel
                 if !seenChannels.contains(channelId) {
                     seenChannels.insert(channelId)
-                    channelLatestPostsArray.append((channelId: channelId, date: createdAt))
-                    print("📊 [ChannelManager] Channel \(channelId): latest post at \(createdAt)")
+                    channelLatestPostsArray.append((channelId: channelId, date: post.createdAt))
+                    print("📊 [ChannelManager] Channel \(channelId): latest post at \(post.createdAt)")
                 }
             }
         }
@@ -221,6 +269,11 @@ class FirestoreChannelManager {
     // MARK: - Update Channel
 
     func updateChannel(channelId: String, name: String) async throws {
+        try await updateChannelName(channelId: channelId, name: name)
+    }
+
+    /// Update channel name (owner only)
+    func updateChannelName(channelId: String, name: String) async throws {
         guard let currentUser = Auth.auth().currentUser else {
             throw ChannelError.notAuthenticated
         }
@@ -228,7 +281,7 @@ class FirestoreChannelManager {
         // Verify ownership
         let channel = try await getChannel(channelId: channelId)
         guard channel.userId == currentUser.uid else {
-            throw ChannelError.notAuthenticated
+            throw ChannelError.notAuthorized
         }
 
         try await db.collection(channelsCollection).document(channelId).updateData([
@@ -236,7 +289,79 @@ class FirestoreChannelManager {
             "updatedAt": Timestamp(date: Date())
         ])
 
-        print("✅ Channel updated: \(channelId)")
+        print("✅ Channel name updated: \(channelId) -> \(name)")
+    }
+
+    /// Update channel access type (owner only)
+    func updateAccessType(channelId: String, accessType: ChannelAccessType) async throws {
+        guard let currentUser = Auth.auth().currentUser else {
+            throw ChannelError.notAuthenticated
+        }
+
+        // Verify ownership
+        let channel = try await getChannel(channelId: channelId)
+        guard channel.userId == currentUser.uid else {
+            throw ChannelError.notAuthorized
+        }
+
+        try await db.collection(channelsCollection).document(channelId).updateData([
+            "accessType": accessType.rawValue,
+            "updatedAt": Timestamp(date: Date())
+        ])
+
+        print("✅ Channel access type updated: \(channelId) -> \(accessType.rawValue)")
+    }
+
+    /// Kick a member from the channel (owner only)
+    func kickMember(channelId: String, userId: String) async throws {
+        guard let currentUser = Auth.auth().currentUser else {
+            throw ChannelError.notAuthenticated
+        }
+
+        // Verify ownership
+        let channel = try await getChannel(channelId: channelId)
+        guard channel.userId == currentUser.uid else {
+            throw ChannelError.notAuthorized
+        }
+
+        // Cannot kick yourself
+        guard userId != currentUser.uid else {
+            throw ChannelError.invalidData
+        }
+
+        print("👢 [ChannelManager] Owner \(currentUser.uid) kicking user \(userId) from channel \(channelId)")
+
+        // 1. Get all kicked user's posts in this channel
+        let posts = try await FirestorePostManager.shared.getChannelPosts(channelId: channelId, userId: userId)
+        print("📋 [ChannelManager] Found \(posts.count) posts by user \(userId) to delete")
+
+        // 2. Delete each post
+        for post in posts {
+            if let postId = post.id {
+                try await FirestorePostManager.shared.deletePost(postId: postId)
+                print("🗑️ [ChannelManager] Deleted post \(postId)")
+            }
+        }
+
+        // 3. Remove user's follow relationship
+        let batch = db.batch()
+
+        // Remove from user's followingChannels
+        let userFollowingRef = db.collection("users")
+            .document(userId)
+            .collection("followingChannels")
+            .document(channelId)
+        batch.deleteDocument(userFollowingRef)
+
+        // Remove from channel's followers
+        let channelFollowerRef = db.collection(channelFollowsCollection)
+            .document(channelId)
+            .collection("followers")
+            .document(userId)
+        batch.deleteDocument(channelFollowerRef)
+
+        try await batch.commit()
+        print("✅ [ChannelManager] User \(userId) kicked from channel and \(posts.count) posts deleted")
     }
 
     /// Update channel's latest post info (called when post is created)
@@ -259,8 +384,25 @@ class FirestoreChannelManager {
         // Verify ownership
         let channel = try await getChannel(channelId: channelId)
         guard channel.userId == currentUser.uid else {
-            throw ChannelError.notAuthenticated
+            throw ChannelError.notAuthorized
         }
+
+        // Check if there are other members (followers excluding owner)
+        let followerCount = try await getFollowerCount(channelId: channelId)
+
+        // If channel is shared and has other members, cannot delete
+        if channel.channelType == .shared && followerCount > 0 {
+            // Check if owner is also a follower (owner might follow their own channel)
+            let ownerIsFollower = try await checkIfFollowing(channelId: channelId, userId: currentUser.uid)
+            let otherMembersCount = ownerIsFollower ? followerCount - 1 : followerCount
+
+            if otherMembersCount > 0 {
+                print("❌ [ChannelManager] Cannot delete channel with \(otherMembersCount) other members")
+                throw ChannelError.cannotDeleteChannelWithMembers
+            }
+        }
+
+        print("🗑️ [ChannelManager] Deleting channel \(channelId)")
 
         // Delete all posts in channel
         let posts = try await FirestorePostManager.shared.getChannelPosts(channelId: channelId, limit: 1000)
@@ -345,7 +487,8 @@ class FirestoreChannelManager {
                     type: .channelFollow,
                     postId: channelId, // Store channelId in postId field
                     artworkUrl: channel.latestPostArtworkUrl,
-                    channelName: channel.name
+                    channelName: channel.name,
+                    channelType: channel.channelType.rawValue
                 )
                 try? await FirestoreNotificationManager.shared.createNotification(notification)
             }
@@ -401,14 +544,69 @@ class FirestoreChannelManager {
 
         return snapshot.documents.count
     }
-}
 
-// MARK: - Helper Extensions
+    /// Get list of follower user IDs for a channel
+    func getChannelFollowers(channelId: String) async throws -> [String] {
+        let snapshot = try await db.collection(channelFollowsCollection)
+            .document(channelId)
+            .collection("followers")
+            .getDocuments()
 
-extension Array {
-    func chunked(into size: Int) -> [[Element]] {
-        return stride(from: 0, to: count, by: size).map {
-            Array(self[$0 ..< Swift.min($0 + size, count)])
+        return snapshot.documents.map { $0.documentID }
+    }
+
+    /// Search channels by name (case-insensitive prefix match)
+    func searchChannels(query: String, limit: Int = 50) async throws -> [Channel] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        guard !trimmedQuery.isEmpty else {
+            return []
         }
+
+        // Firestore doesn't support case-insensitive search or LIKE queries
+        // We'll fetch all channels and filter client-side for better UX
+        // For production with many channels, consider using Algolia or similar
+        let snapshot = try await db.collection(channelsCollection)
+            .order(by: "createdAt", descending: true)
+            .limit(to: 500) // Limit to recent channels
+            .getDocuments()
+
+        var channels: [Channel] = []
+        for document in snapshot.documents {
+            if var channel = try? document.data(as: Channel.self) {
+                // Case-insensitive partial match
+                if channel.name.lowercased().contains(trimmedQuery) {
+                    // Check if current user is following
+                    if let currentUserId = Auth.auth().currentUser?.uid {
+                        let isFollowing = try await checkIfFollowing(channelId: channel.id ?? "", userId: currentUserId)
+                        channel.isFollowing = isFollowing
+                    }
+
+                    // Get follower count dynamically
+                    if let channelId = channel.id {
+                        channel.followerCount = try? await getFollowerCount(channelId: channelId)
+                    }
+
+                    channels.append(channel)
+                }
+            }
+        }
+
+        // Sort by relevance: exact match first, then by follower count
+        channels.sort { first, second in
+            let firstExact = first.name.lowercased() == trimmedQuery
+            let secondExact = second.name.lowercased() == trimmedQuery
+
+            if firstExact && !secondExact {
+                return true
+            } else if !firstExact && secondExact {
+                return false
+            } else {
+                // Both exact or both not exact, sort by follower count
+                return (first.followerCount ?? 0) > (second.followerCount ?? 0)
+            }
+        }
+
+        return Array(channels.prefix(limit))
     }
 }

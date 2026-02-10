@@ -104,6 +104,9 @@
 		F1F8A637CF27E3AF82C4B7C5 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7929B89469BBAABBB60C28FA /* APIClient.swift */; };
 		FE009FE1056C4A0996174D4F /* FirebaseStorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC092033DAFE4866822BB94B /* FirebaseStorageManager.swift */; };
 		FE287FF3B2E7401EB21ADA89 /* FirestorePostManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50665AC366864756833172F5 /* FirestorePostManager.swift */; };
+		33A06108-75F6-434B-A5F2-67DB42B46B1E /* InterstitialAdManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 34DC81A8-FC5D-4202-8E84-3DAD1F827313 /* InterstitialAdManager.swift */; };
+		2D5D1C6E-F3E3-418E-9F49-EF76C0D51E65 /* Compose42ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC140366-D742-4D35-A3DE-E46C3954E377 /* Compose42ViewModel.swift */; };
+		EE6FA748-4E06-442B-BE00-79A39B5D0A64 /* Compose42View.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB77E7BC-606D-4ED3-9585-5862AED6451D /* Compose42View.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -203,6 +206,9 @@
 		FA80433F581F401CB93DE997 /* FirestoreNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreNotificationManager.swift; sourceTree = "<group>"; };
 		FADD45EA0EE661AA341F1AD0 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
 		FC092033DAFE4866822BB94B /* FirebaseStorageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseStorageManager.swift; sourceTree = "<group>"; };
+		34DC81A8-FC5D-4202-8E84-3DAD1F827313 /* InterstitialAdManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InterstitialAdManager.swift; sourceTree = "<group>"; };
+		EC140366-D742-4D35-A3DE-E46C3954E377 /* Compose42ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Compose42ViewModel.swift; sourceTree = "<group>"; };
+		CB77E7BC-606D-4ED3-9585-5862AED6451D /* Compose42View.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Compose42View.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -289,6 +295,7 @@
 				7DF565896700D09A709FBDCF /* PlaybackStateManager.swift */,
 				7F7F5DCDAD85A75EB1E0E4CB /* UnreadPostsManager.swift */,
 				C378DB4AD0334A309B2C6297 /* FeedAdManager.swift */,
+				34DC81A8-FC5D-4202-8E84-3DAD1F827313 /* InterstitialAdManager.swift */,
 				4D6D8310BC484959A5F7DCD3 /* FirebaseStorageManager.swift */,
 				14678FBCA6F74963AB57ACF4 /* FirestoreBlockManager.swift */,
 				5F182774B0DE42D3B8DB0796 /* FirestoreChannelManager.swift */,
@@ -342,6 +349,7 @@
 				CBA3C1D2A8D24C6CB34D70B7 /* Ads */,
 				F5701DF1321EE3E818035EE7 /* BlockedUsersView.swift */,
 				8068C89D91EAD287FBF886EE /* CommentsView.swift */,
+				CB77E7BC-606D-4ED3-9585-5862AED6451D /* Compose42View.swift */,
 				DD72D37F34C087EDA9BBCBDF /* ContentView.swift */,
 				C415517CCB48A5524C16BEFC /* CreatePostView.swift */,
 				0914B2CB716E6FF21D53C94C /* FollowingFeedView.swift */,
@@ -397,6 +405,7 @@
 			isa = PBXGroup;
 			children = (
 				768D8C22E45F8AE834820E74 /* CreatePostViewModel.swift */,
+				EC140366-D742-4D35-A3DE-E46C3954E377 /* Compose42ViewModel.swift */,
 				97B170ADCF486B7113F37C76 /* FeedViewModel.swift */,
 				250136EC4050EE8B36C510F0 /* SearchViewModel.swift */,
 				C81162C40CE0C846263B8F88 /* UserProfileViewModel.swift */,
@@ -568,6 +577,9 @@
 				16BA92C92F7746728D9F6E9E /* NativeAdViewWrapper.swift in Sources */,
 				A08CE987CDC74749AE99FB24 /* DeepLinkManager.swift in Sources */,
 				AA9CC3D52A6C4F22A418DB4A /* ProfileShareView.swift in Sources */,
+				33A06108-75F6-434B-A5F2-67DB42B46B1E /* InterstitialAdManager.swift in Sources */,
+				2D5D1C6E-F3E3-418E-9F49-EF76C0D51E65 /* Compose42ViewModel.swift in Sources */,
+				EE6FA748-4E06-442B-BE00-79A39B5D0A64 /* Compose42View.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

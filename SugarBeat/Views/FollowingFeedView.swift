@@ -7,10 +7,11 @@ struct FollowingFeedView: View {
     @EnvironmentObject private var authManager: AuthManager
     @State private var showingLoginSheet = false
     @State private var selectedChannelType: ChannelType = .shared
+    @State private var showingCompose42 = false
 
     var body: some View {
         NavigationStack {
-            ZStack {
+            ZStack(alignment: .bottomLeading) {
                 Color.black.ignoresSafeArea()
 
                 if !authManager.isAuthenticated {
@@ -146,12 +147,42 @@ struct FollowingFeedView: View {
                     }
                     }
                 }
+
+                // Floating "私を構成する42枚" button
+                Button {
+                    showingCompose42 = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.note.list")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("私を構成する42枚")
+                            .font(.system(size: 14, weight: .semibold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.purple, Color.pink],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .cornerRadius(25)
+                    .shadow(color: .black.opacity(0.3), radius: 8, x: 0, y: 4)
+                }
+                .padding(.leading, 8)
+                .padding(.bottom, 20) // Above tab bar
             }
             .navigationTitle("フォロー中/参加中と自分のチャンネル")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.black.opacity(0.9), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
+            .fullScreenCover(isPresented: $showingCompose42) {
+                Compose42View()
+                    .environmentObject(authManager)
+            }
         }
         .task {
             print("🎯 [FollowingFeedView] .task executed - isAuthenticated: \(authManager.isAuthenticated), channelsWithPosts.isEmpty: \(viewModel.channelsWithPosts.isEmpty)")

@@ -84,6 +84,8 @@ struct SugarBeatApp: App {
             // 初期化完了後にフィード広告をプリロード
             Task { @MainActor in
                 FeedAdManager.shared.loadAds(count: 5)
+                // インタースティシャル広告もプリロード
+                InterstitialAdManager.shared.load()
             }
         }
     }

@@ -16,20 +16,7 @@ struct FollowingFeedView: View {
 
                 if !authManager.isAuthenticated {
                     // 未ログイン状態
-                    VStack(spacing: 20) {
-                        Image(systemName: "heart.slash")
-                            .font(.system(size: 60))
-                            .foregroundColor(.white.opacity(0.4))
-                        Text("ログインしてフォロー中の\nチャンネルの投稿を見る")
-                            .font(.headline)
-                            .foregroundColor(.white.opacity(0.7))
-                            .multilineTextAlignment(.center)
-                        Button("ログイン") {
-                            showingLoginSheet = true
-                        }
-                        .foregroundColor(.purple)
-                        .font(.headline)
-                    }
+                    LoginRequiredView(showingLoginSheet: $showingLoginSheet, message: "フォロー中の投稿を見るには\nログインしてください")
                 } else if viewModel.isLoading && viewModel.channelsWithPosts.isEmpty {
                     VStack {
                         ProgressView()

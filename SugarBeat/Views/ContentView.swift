@@ -54,7 +54,7 @@ struct ContentView: View {
                                 print("🔍 [ContentView] Post tab (tag:2) appeared - CreatePostView is being displayed")
                             }
                     } else {
-                        LoginRequiredView(showingLoginSheet: $showingLoginSheet)
+                        LoginRequiredView(showingLoginSheet: $showingLoginSheet, message: "投稿するには\nログインしてください")
                             .navigationTitle("投稿")
                             .navigationBarTitleDisplayMode(.inline)
                             .toolbarBackground(Color.black, for: .navigationBar)
@@ -76,7 +76,7 @@ struct ContentView: View {
                             .toolbarBackground(Color.black, for: .navigationBar)
                             .toolbarBackground(.visible, for: .navigationBar)
                     } else {
-                        LoginRequiredView(showingLoginSheet: $showingLoginSheet)
+                        LoginRequiredView(showingLoginSheet: $showingLoginSheet, message: "通知を見るには\nログインしてください")
                             .navigationTitle("通知")
                             .navigationBarTitleDisplayMode(.inline)
                             .toolbarBackground(Color.black, for: .navigationBar)
@@ -101,7 +101,7 @@ struct ContentView: View {
                         .tag(4)
                 } else {
                     NavigationStack {
-                        LoginRequiredView(showingLoginSheet: $showingLoginSheet)
+                        LoginRequiredView(showingLoginSheet: $showingLoginSheet, message: "プロフィールを表示するには\nログインしてください")
                             .navigationTitle("プロフィール")
                             .navigationBarTitleDisplayMode(.inline)
                             .toolbarBackground(Color.black, for: .navigationBar)
@@ -296,6 +296,7 @@ struct ContentView: View {
 // ログインが必要な画面
 struct LoginRequiredView: View {
     @Binding var showingLoginSheet: Bool
+    let message: String
 
     var body: some View {
         ZStack {
@@ -310,7 +311,7 @@ struct LoginRequiredView: View {
                     .font(.title2)
                     .foregroundColor(.white)
 
-                Text("プロフィールを表示するには\nログインしてください")
+                Text(message)
                     .font(.body)
                     .foregroundColor(.white.opacity(0.7))
                     .multilineTextAlignment(.center)

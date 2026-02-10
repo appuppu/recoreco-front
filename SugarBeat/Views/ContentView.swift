@@ -744,39 +744,49 @@ struct DiscoveryView: View {
 
     @ViewBuilder
     private var channelTypeSwitcher: some View {
-        HStack(spacing: 8) {
-            Button(action: {
-                withAnimation {
-                    selectedChannelType = .shared
-                    viewModel.filterChannels(by: .shared)
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Button(action: {
+                    withAnimation {
+                        selectedChannelType = .shared
+                        viewModel.filterChannels(by: .shared)
+                    }
+                }) {
+                    Text("公開チャンネル")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(selectedChannelType == .shared ? .white : .white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(selectedChannelType == .shared ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                        .cornerRadius(8)
                 }
-            }) {
-                Text("公開チャンネル")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(selectedChannelType == .shared ? .white : .white.opacity(0.6))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(selectedChannelType == .shared ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
-                    .cornerRadius(8)
-            }
 
-            Button(action: {
-                withAnimation {
-                    selectedChannelType = .personal
-                    viewModel.filterChannels(by: .personal)
+                Button(action: {
+                    withAnimation {
+                        selectedChannelType = .personal
+                        viewModel.filterChannels(by: .personal)
+                    }
+                }) {
+                    Text("個人チャンネル")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(selectedChannelType == .personal ? .white : .white.opacity(0.6))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(selectedChannelType == .personal ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
+                        .cornerRadius(8)
                 }
-            }) {
-                Text("個人チャンネル")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(selectedChannelType == .personal ? .white : .white.opacity(0.6))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(selectedChannelType == .personal ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
-                    .cornerRadius(8)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+
+            // ローディングインジケーター
+            if viewModel.isSwitching {
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(0.8)
+                    .padding(.bottom, 4)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
         .background(Color.black)
     }
 
@@ -1346,7 +1356,12 @@ struct FollowButton: View {
 class DiscoveryViewModel: ObservableObject {
     @Published var channels: [Channel] = []
     @Published var isLoading = false
+    @Published var isSwitching = false
     private var currentChannelType: ChannelType = .shared
+
+    // キャッシュ
+    private var sharedChannels: [Channel] = []
+    private var personalChannels: [Channel] = []
 
     init() {
         // Listen for post created notifications
@@ -1372,6 +1387,8 @@ class DiscoveryViewModel: ObservableObject {
         ) { [weak self] notification in
             if let blockedUserId = notification.userInfo?["blockedUserId"] as? String {
                 Task { @MainActor in
+                    self?.sharedChannels.removeAll { $0.userId == blockedUserId }
+                    self?.personalChannels.removeAll { $0.userId == blockedUserId }
                     self?.channels.removeAll { $0.userId == blockedUserId }
                     print("🚫 Removed blocked user's channels from discovery: \(blockedUserId)")
                 }
@@ -1385,22 +1402,43 @@ class DiscoveryViewModel: ObservableObject {
         defer { isLoading = false }
 
         do {
-            // Fetch channels filtered by type directly from Firestore
-            channels = try await FirestorePostManager.shared.getDiscoveryChannels(channelType: channelType, limit: 100)
-            print("✅ [DiscoveryViewModel] Loaded \(channels.count) \(channelType.rawValue) channels")
+            // 両方のチャンネルタイプを並行して取得
+            async let sharedResult = FirestorePostManager.shared.getDiscoveryChannels(channelType: .shared, limit: 100)
+            async let personalResult = FirestorePostManager.shared.getDiscoveryChannels(channelType: .personal, limit: 100)
+
+            let (shared, personal) = try await (sharedResult, personalResult)
+
+            sharedChannels = shared
+            personalChannels = personal
+
+            // 現在選択されているタイプのチャンネルを表示
+            channels = channelType == .shared ? sharedChannels : personalChannels
+
+            print("✅ [DiscoveryViewModel] Loaded \(sharedChannels.count) shared and \(personalChannels.count) personal channels")
         } catch {
             print("❌ Failed to load channels: \(error)")
         }
     }
 
     func refreshChannels(channelType: ChannelType) async {
-        // Refresh without setting isLoading to avoid double animation
+        // バックグラウンドで更新（ローディング表示なし）
         print("🔄 [DiscoveryViewModel] refreshChannels called for type: \(channelType.rawValue)")
         currentChannelType = channelType
+
         do {
-            // Fetch channels filtered by type directly from Firestore
-            channels = try await FirestorePostManager.shared.getDiscoveryChannels(channelType: channelType, limit: 100)
-            print("✅ [DiscoveryViewModel] Refreshed \(channels.count) \(channelType.rawValue) channels")
+            // 両方のタイプを並行して取得
+            async let sharedResult = FirestorePostManager.shared.getDiscoveryChannels(channelType: .shared, limit: 100)
+            async let personalResult = FirestorePostManager.shared.getDiscoveryChannels(channelType: .personal, limit: 100)
+
+            let (shared, personal) = try await (sharedResult, personalResult)
+
+            sharedChannels = shared
+            personalChannels = personal
+
+            // 現在選択されているタイプのチャンネルを更新
+            channels = channelType == .shared ? sharedChannels : personalChannels
+
+            print("✅ [DiscoveryViewModel] Refreshed \(sharedChannels.count) shared and \(personalChannels.count) personal channels")
         } catch {
             print("❌ Failed to refresh channels: \(error)")
         }
@@ -1408,8 +1446,21 @@ class DiscoveryViewModel: ObservableObject {
 
     func filterChannels(by channelType: ChannelType) {
         currentChannelType = channelType
-        Task {
-            await refreshChannels(channelType: channelType)
+
+        // キャッシュがある場合は即座に表示
+        let cachedChannels = channelType == .shared ? sharedChannels : personalChannels
+
+        if !cachedChannels.isEmpty {
+            print("⚡️ [DiscoveryViewModel] Using cached \(channelType.rawValue) channels (\(cachedChannels.count) items)")
+            channels = cachedChannels
+        } else {
+            // キャッシュがない場合はローディング表示して取得
+            print("🔄 [DiscoveryViewModel] No cache, fetching \(channelType.rawValue) channels")
+            isSwitching = true
+            Task {
+                await refreshChannels(channelType: channelType)
+                isSwitching = false
+            }
         }
     }
 }

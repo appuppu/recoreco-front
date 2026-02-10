@@ -1,5 +1,126 @@
 import SwiftUI
 import FirebaseAuth
+import UIKit
+
+// MARK: - ScrollableView (UIScrollViewラッパー)
+
+/// UIScrollViewをラップしたSwiftUIビュー（スクロールオフセット検出機能付き）
+struct ScrollableView<Content: View>: UIViewControllerRepresentable {
+    let content: Content
+    let onScroll: (CGFloat) -> Void
+    let resetTrigger: Int // スクロール位置をリセットするトリガー
+
+    init(@ViewBuilder content: () -> Content, onScroll: @escaping (CGFloat) -> Void, resetTrigger: Int = 0) {
+        self.content = content()
+        self.onScroll = onScroll
+        self.resetTrigger = resetTrigger
+    }
+
+    func makeUIViewController(context: Context) -> ScrollViewController<Content> {
+        let viewController = ScrollViewController(content: content, onScroll: onScroll)
+        return viewController
+    }
+
+    func updateUIViewController(_ uiViewController: ScrollViewController<Content>, context: Context) {
+        uiViewController.updateContent(content)
+
+        // resetTriggerが変わったらスクロール位置をリセット
+        if context.coordinator.lastResetTrigger != resetTrigger {
+            context.coordinator.lastResetTrigger = resetTrigger
+            uiViewController.resetScrollPosition()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator {
+        var lastResetTrigger: Int = 0
+    }
+}
+
+class ScrollViewController<Content: View>: UIViewController, UIScrollViewDelegate {
+    private let scrollView = UIScrollView()
+    private var hostingController: UIHostingController<Content>?
+    private let onScroll: (CGFloat) -> Void
+    private var hasInitiallyResetScroll = false // 初回スクロールリセットフラグ
+
+    init(content: Content, onScroll: @escaping (CGFloat) -> Void) {
+        self.onScroll = onScroll
+        super.init(nibName: nil, bundle: nil)
+
+        // ScrollViewのセットアップ
+        scrollView.delegate = self
+        scrollView.backgroundColor = .black
+        scrollView.contentInsetAdjustmentBehavior = .never
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.showsHorizontalScrollIndicator = false
+
+        view.addSubview(scrollView)
+
+        // ホスティングコントローラーのセットアップ
+        let hosting = UIHostingController(rootView: content)
+        hosting.view.backgroundColor = .clear
+        addChild(hosting)
+        scrollView.addSubview(hosting.view)
+        hosting.didMove(toParent: self)
+        hostingController = hosting
+
+        // 初期スクロールオフセット(0)を通知
+        onScroll(0)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+
+        // frameベースのレイアウト
+        scrollView.frame = view.bounds
+
+        if let hostingView = hostingController?.view {
+            let contentSize = hostingController?.sizeThatFits(in: view.bounds.size) ?? view.bounds.size
+            hostingView.frame = CGRect(origin: .zero, size: contentSize)
+            scrollView.contentSize = contentSize
+
+            print("📐 [ScrollViewController] scrollView.frame: \(scrollView.frame)")
+            print("📐 [ScrollViewController] contentSize: \(contentSize)")
+            print("📐 [ScrollViewController] contentOffset: \(scrollView.contentOffset)")
+
+            // 初回レイアウト完了後、スクロール位置を0に確実に設定（一度だけ）
+            if !hasInitiallyResetScroll && scrollView.contentSize.height > 0 {
+                scrollView.contentOffset = .zero
+                onScroll(0)
+                hasInitiallyResetScroll = true
+                print("📐 [ScrollViewController] Initial scroll reset to 0")
+            }
+        }
+    }
+
+    func updateContent(_ newContent: Content) {
+        hostingController?.rootView = newContent
+        view.setNeedsLayout()
+    }
+
+    func resetScrollPosition() {
+        print("🔄 [ScrollViewController] resetScrollPosition called")
+        scrollView.setContentOffset(.zero, animated: false)
+        onScroll(0)
+        print("🔄 [ScrollViewController] Scroll reset to zero, onScroll(0) called")
+    }
+
+    // MARK: - UIScrollViewDelegate
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        let offset = scrollView.contentOffset.y
+        onScroll(max(0, offset))
+    }
+}
+
+// MARK: - PostGridView
 
 /// 再利用可能な投稿グリッドレイアウト
 /// - 最初の投稿を大きなセルで表示
@@ -13,7 +134,10 @@ struct PostGridView: View {
     var isLoadingMore: Bool = false // 追加読み込み中のローディング表示
     var onRefresh: (() async -> Void)? = nil // リフレッシュコールバック
     var onLoadMore: (() async -> Void)? = nil // 追加読み込みコールバック
+    var onScrollOffsetChange: ((CGFloat) -> Void)? = nil // スクロールオフセットコールバック
+    var topPadding: CGFloat = 0 // 上部のパディング（ヘッダー用）
     var respectNavigationBar: Bool = false // NavigationBarの下に表示するかどうか
+    var scrollResetTrigger: Int = 0 // スクロール位置をリセットするトリガー
 
     @StateObject private var screenshotMode = ScreenshotModeManager.shared
     @ObservedObject private var playbackState = PlaybackStateManager.shared
@@ -50,75 +174,150 @@ struct PostGridView: View {
             ZStack(alignment: .top) {
                 Color.black
 
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        // 一番上のグリッド: スクショモード時はユーザー情報、通常時は投稿
-                        if screenshotMode.isScreenshotMode {
-                            // スクショモード: ユーザー情報セル
-                            UserInfoCell(width: screenWidth, height: featuredHeight)
-                                .environmentObject(authManager)
-                        } else if let post = displayPost {
-                            // 通常モード: 投稿セル
-                            FeaturedPostCellSimple(
-                                post: post,
-                                width: screenWidth,
-                                height: featuredHeight,
-                                showingLoginPrompt: $showingLoginPrompt,
-                                isScreenshotMode: screenshotMode.isScreenshotMode,
-                                showUserInfo: showUserInfo,
-                                safeAreaTop: safeAreaTop
-                            )
-                            .id("\(post.id ?? "nil")_\(featuredCellKey.uuidString)")  // 完全に再作成
-                            .frame(width: screenWidth, height: featuredHeight)
-                        }
+                if onScrollOffsetChange != nil {
+                    // スクロール検出が必要な場合はScrollableViewを使用
+                    ScrollableView(
+                        content: {
+                            LazyVStack(spacing: 0) {
+                                // ヘッダー用のスペース
+                                Color.clear
+                                    .frame(height: topPadding)
+                                    .onAppear {
+                                        print("📏 [PostGridView] topPadding applied: \(topPadding)")
+                                    }
 
-                        // 残りのグリッド
-                        if posts.count > 1 {
-                            gridLayout(posts: Array(posts.dropFirst()), screenWidth: screenWidth, spacing: spacing)
-                                .padding(.top, spacing)
-                        }
+                                // 一番上のグリッド: スクショモード時はユーザー情報、通常時は投稿
+                                if screenshotMode.isScreenshotMode {
+                                    // スクショモード: ユーザー情報セル
+                                    UserInfoCell(width: screenWidth, height: featuredHeight)
+                                        .environmentObject(authManager)
+                                } else if let post = displayPost {
+                                    // 通常モード: 投稿セル
+                                    FeaturedPostCellSimple(
+                                        post: post,
+                                        width: screenWidth,
+                                        height: featuredHeight,
+                                        showingLoginPrompt: $showingLoginPrompt,
+                                        isScreenshotMode: screenshotMode.isScreenshotMode,
+                                        showUserInfo: showUserInfo,
+                                        safeAreaTop: safeAreaTop
+                                    )
+                                    .id("\(post.id ?? "nil")_\(featuredCellKey.uuidString)")
+                                    .frame(width: screenWidth, height: featuredHeight)
+                                }
 
-                        // 追加読み込みインジケータ
-                        if isLoadingMore {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                    .tint(.white)
-                                    .padding()
-                                Spacer()
+                                // 残りのグリッド
+                                if posts.count > 1 {
+                                    gridLayout(posts: Array(posts.dropFirst()), screenWidth: screenWidth, spacing: spacing)
+                                        .padding(.top, spacing)
+                                }
+
+                                // 追加読み込みインジケータ
+                                if isLoadingMore {
+                                    HStack {
+                                        Spacer()
+                                        ProgressView()
+                                            .tint(.white)
+                                            .padding()
+                                        Spacer()
+                                    }
+                                } else if onLoadMore != nil {
+                                    Color.clear
+                                        .frame(height: 50)
+                                        .onAppear {
+                                            Task {
+                                                await onLoadMore?()
+                                            }
+                                        }
+                                }
                             }
-                        } else if onLoadMore != nil {
-                            // Trigger load more when this view appears
+                            .padding(.bottom, 100)
+                        },
+                        onScroll: { offset in
+                            onScrollOffsetChange?(offset)
+                        },
+                        resetTrigger: scrollResetTrigger
+                    )
+                    .id(scrollResetTrigger) // resetTriggerが変わったらScrollableViewを完全に再作成
+                    .onAppear {
+                        // 表示された時に必ずスクロール位置を0に通知
+                        DispatchQueue.main.async {
+                            onScrollOffsetChange?(0)
+                        }
+                    }
+                } else {
+                    // スクロール検出が不要な場合は通常のScrollViewを使用
+                    ScrollView {
+                        LazyVStack(spacing: 0) {
+                            // ヘッダー用のスペース
                             Color.clear
-                                .frame(height: 50)
-                                .onAppear {
-                                    Task {
-                                        await onLoadMore?()
+                                .frame(height: topPadding)
+
+                            // 一番上のグリッド
+                            if screenshotMode.isScreenshotMode {
+                                UserInfoCell(width: screenWidth, height: featuredHeight)
+                                    .environmentObject(authManager)
+                            } else if let post = displayPost {
+                                FeaturedPostCellSimple(
+                                    post: post,
+                                    width: screenWidth,
+                                    height: featuredHeight,
+                                    showingLoginPrompt: $showingLoginPrompt,
+                                    isScreenshotMode: screenshotMode.isScreenshotMode,
+                                    showUserInfo: showUserInfo,
+                                    safeAreaTop: safeAreaTop
+                                )
+                                .id("\(post.id ?? "nil")_\(featuredCellKey.uuidString)")
+                                .frame(width: screenWidth, height: featuredHeight)
+                            }
+
+                            // 残りのグリッド
+                            if posts.count > 1 {
+                                gridLayout(posts: Array(posts.dropFirst()), screenWidth: screenWidth, spacing: spacing)
+                                    .padding(.top, spacing)
+                            }
+
+                            // 追加読み込みインジケータ
+                            if isLoadingMore {
+                                HStack {
+                                    Spacer()
+                                    ProgressView()
+                                        .tint(.white)
+                                        .padding()
+                                    Spacer()
+                                }
+                            } else if onLoadMore != nil {
+                                Color.clear
+                                    .frame(height: 50)
+                                    .onAppear {
+                                        Task {
+                                            await onLoadMore?()
+                                        }
+                                    }
+                            }
+                        }
+                        .padding(.bottom, 100)
+                    }
+                    .refreshable {
+                        if let refresh = onRefresh {
+                            await refresh()
+                        }
+                    }
+                    .tint(.white)
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded { _ in
+                                if screenshotMode.isScreenshotMode {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        screenshotMode.isScreenshotMode = false
                                     }
                                 }
-                        }
-                    }
-                    .padding(.bottom, 100)
-                }
-                .refreshable {
-                    if let refresh = onRefresh {
-                        await refresh()
-                    }
-                }
-                .tint(.white)
-                .simultaneousGesture(
-                    TapGesture()
-                        .onEnded { _ in
-                            if screenshotMode.isScreenshotMode {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    screenshotMode.isScreenshotMode = false
-                                }
                             }
-                        }
-                )
+                    )
+                }
 
-                // リフレッシュ中のローディングオーバーレイ
-                if isLoading {
+                // リフレッシュ中のローディングオーバーレイ（投稿が空の時のみ）
+                if isLoading && posts.isEmpty {
                     Color.black.opacity(0.5)
                         .ignoresSafeArea()
                     ProgressView()
@@ -129,6 +328,10 @@ struct PostGridView: View {
             .ignoresSafeArea(respectNavigationBar ? [] : .all)
         }
         .toolbar(screenshotMode.isScreenshotMode ? .hidden : .visible, for: .tabBar)
+        .onAppear {
+            // タブに戻ってきたときに画像を強制的に再読み込み
+            featuredCellKey = UUID()
+        }
         .onChange(of: displayPost?.id) { newPostId in
             // Featured cellを完全に再作成するためにキーを更新
             featuredCellKey = UUID()

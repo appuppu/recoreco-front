@@ -12,6 +12,8 @@ struct UserProfileView: View {
     @State private var showingProfileEdit = false
     @State private var viewMode: ViewMode = .posts
     @State private var showingUserMenu = false
+    @State private var scrollOffset: CGFloat = 0
+    @State private var headerHeight: CGFloat = 0
 
     enum ViewMode {
         case posts
@@ -39,13 +41,7 @@ struct UserProfileView: View {
                     blockedByViewWithClose
                 } else if let user = viewModel.user {
                     if canViewPosts(user: user) {
-                        VStack(spacing: 0) {
-                            // ユーザー情報ヘッダー
-                            userInfoHeader(user: user)
-                                .padding(.horizontal, 16)
-                                .padding(.top, 8)
-                                .padding(.bottom, 12)
-
+                        ZStack(alignment: .top) {
                             // コンテンツ
                             if viewMode == .posts {
                                 if viewModel.posts.isEmpty {
@@ -62,14 +58,58 @@ struct UserProfileView: View {
                                         },
                                         onLoadMore: {
                                             await viewModel.loadMorePosts(userId: userId)
-                                        }
+                                        },
+                                        onScrollOffsetChange: { offset in
+                                            scrollOffset = offset
+                                            print("📊 [UserProfile] Scroll offset: \(offset), headerHeight: \(headerHeight)")
+                                        },
+                                        topPadding: headerHeight,
+                                        scrollResetTrigger: 0 // 使用しない
                                     )
+                                    .id("posts-grid") // 投稿タブのときは固定のID
                                 }
                             } else if viewMode == .sharedChannels {
                                 channelsListView(channelType: .shared)
+                                    .id("shared-channels") // 参加中タブのID
                             } else {
                                 channelsListView(channelType: .personal)
+                                    .id("personal-channels") // 個人タブのID
                             }
+
+                            // ユーザー情報ヘッダー (オーバーレイ)
+                            VStack(spacing: 0) {
+                                userInfoHeader(user: user)
+                                    .padding(.horizontal, 16)
+                                    .padding(.top, 8)
+                                    .padding(.bottom, 12)
+                                    .background(Color.black)
+                                    .background(
+                                        GeometryReader { geo in
+                                            Color.clear
+                                                .onAppear {
+                                                    headerHeight = geo.size.height
+                                                    print("🔍 [UserProfile] Header height measured: \(headerHeight)")
+                                                }
+                                                .onChange(of: geo.size) { newSize in
+                                                    headerHeight = newSize.height
+                                                    print("🔍 [UserProfile] Header height changed: \(headerHeight)")
+                                                }
+                                        }
+                                    )
+
+                                Spacer()
+                            }
+                            .offset(y: {
+                                let offsetY = viewMode == .posts && !viewModel.posts.isEmpty ? -min(scrollOffset, headerHeight) : 0
+                                if viewMode == .posts && !viewModel.posts.isEmpty {
+                                    print("📍 [UserProfile Header] offset calculation - scrollOffset: \(scrollOffset), headerHeight: \(headerHeight), resulting offsetY: \(offsetY)")
+                                }
+                                return offsetY
+                            }())
+                        }
+                        .onChange(of: viewMode) { newMode in
+                            scrollOffset = 0
+                            print("🔄 [UserProfile] ViewMode changed to: \(newMode), resetting scroll offset")
                         }
                     } else {
                         privateAccountView(user: user)
@@ -92,46 +132,46 @@ struct UserProfileView: View {
             }
             .navigationBarHidden(true)
             .presentationDragIndicator(.visible)
-        }
-        .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
-            Button("はい") {
-                showingLoginSheet = true
+            .alert("ログインが必要です", isPresented: $showingLoginPrompt) {
+                Button("はい") {
+                    showingLoginSheet = true
+                }
+                Button("キャンセル", role: .cancel) {}
+            } message: {
+                Text("この機能を使用するにはログインが必要です")
             }
-            Button("キャンセル", role: .cancel) {}
-        } message: {
-            Text("この機能を使用するにはログインが必要です")
-        }
-        .fullScreenCover(isPresented: $showingLoginSheet) {
-            if #available(iOS 16.4, *) {
-                LoginView()
-                    .presentationBackground(Color.black)
-                    .presentationCornerRadius(20)
-            } else {
-                LoginView()
-            }
-        }
-        .sheet(isPresented: $showingProfileEdit) {
-            if let currentUser = authManager.currentUser {
+            .fullScreenCover(isPresented: $showingLoginSheet) {
                 if #available(iOS 16.4, *) {
-                    ProfileEditView(currentUser: currentUser)
+                    LoginView()
                         .presentationBackground(Color.black)
                         .presentationCornerRadius(20)
                 } else {
-                    ProfileEditView(currentUser: currentUser)
+                    LoginView()
                 }
             }
-        }
-        .confirmationDialog("ユーザーオプション", isPresented: $showingUserMenu, titleVisibility: .hidden) {
-            Button("ユーザーをブロック", role: .destructive) {
-                Task {
-                    await viewModel.blockUser(userId: userId)
-                    dismiss()
+            .sheet(isPresented: $showingProfileEdit) {
+                if let currentUser = authManager.currentUser {
+                    if #available(iOS 16.4, *) {
+                        ProfileEditView(currentUser: currentUser)
+                            .presentationBackground(Color.black)
+                            .presentationCornerRadius(20)
+                    } else {
+                        ProfileEditView(currentUser: currentUser)
+                    }
                 }
             }
-            Button("キャンセル", role: .cancel) {}
-        }
-        .task {
-            await viewModel.loadUser(userId: userId)
+            .confirmationDialog("ユーザーオプション", isPresented: $showingUserMenu, titleVisibility: .hidden) {
+                Button("ユーザーをブロック", role: .destructive) {
+                    Task {
+                        await viewModel.blockUser(userId: userId)
+                        dismiss()
+                    }
+                }
+                Button("キャンセル", role: .cancel) {}
+            }
+            .task {
+                await viewModel.loadUser(userId: userId)
+            }
         }
     }
 
@@ -358,7 +398,6 @@ struct UserProfileView: View {
             if channelType == .personal {
                 // 個人チャンネル: このユーザーが所有しているもののみ
                 let isOwned = channel.userId == userId
-                print("🔍 [UserProfileView] Personal channel filter: \(channel.name) | userId: \(channel.userId) | profileUserId: \(userId) | isOwned: \(isOwned)")
                 return channel.channelType == channelType && isOwned
             } else {
                 // 共有チャンネル: このユーザーが参加しているもの全て
@@ -376,6 +415,7 @@ struct UserProfileView: View {
                     .foregroundColor(.white.opacity(0.7))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, headerHeight)
         } else {
             ScrollView {
                 LazyVStack(spacing: 12) {
@@ -391,7 +431,7 @@ struct UserProfileView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, headerHeight + 8)
                 .padding(.bottom, 100)
             }
         }
@@ -477,6 +517,14 @@ struct ChannelRowView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.white.opacity(0.1))
         .cornerRadius(12)
+    }
+}
+
+// MARK: - UserProfileHeaderHeightPreferenceKey
+struct UserProfileHeaderHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

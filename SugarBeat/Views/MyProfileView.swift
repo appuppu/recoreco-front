@@ -18,6 +18,8 @@ struct MyProfileView: View {
     @State private var showingShareScreen = false
     @State private var isArtworkOnlyMode = false
     @State private var viewMode: ViewMode = .posts
+    @State private var scrollOffset: CGFloat = 0
+    @State private var headerHeight: CGFloat = 0
 
     // Screenshot grid selection
     @State private var showingGridSelection = false
@@ -36,9 +38,20 @@ struct MyProfileView: View {
         let count: Int
         let rows: Int
         let columns: Int
+        let isOriginalGrid: Bool
+
+        init(count: Int, rows: Int, columns: Int, isOriginalGrid: Bool = false) {
+            self.count = count
+            self.rows = rows
+            self.columns = columns
+            self.isOriginalGrid = isOriginalGrid
+        }
 
         var displayText: String {
-            "\(count)(\(columns)×\(rows))"
+            if isOriginalGrid {
+                return "オリジナル(\(count))"
+            }
+            return "\(count)(\(columns)×\(rows))"
         }
 
         static let availableTypes: [GridType] = [
@@ -51,7 +64,8 @@ struct MyProfileView: View {
             GridType(count: 20, rows: 5, columns: 4),
             GridType(count: 25, rows: 5, columns: 5),
             GridType(count: 36, rows: 6, columns: 6),
-            GridType(count: 42, rows: 7, columns: 6)
+            GridType(count: 42, rows: 7, columns: 6),
+            GridType(count: 47, rows: 0, columns: 0, isOriginalGrid: true)
         ]
     }
 
@@ -79,12 +93,13 @@ struct MyProfileView: View {
             }
         } else {
             VStack(spacing: 0) {
-                // プロフィール情報ヘッダー
+                // ヘッダー
                 if let currentUser = authManager.currentUser {
                     userInfoHeader(user: currentUser)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
                         .padding(.bottom, 12)
+                        .background(Color.black)
                 }
 
                 // コンテンツ
@@ -136,15 +151,23 @@ struct MyProfileView: View {
                             },
                             onLoadMore: {
                                 await viewModel.loadMorePosts()
-                            }
+                            },
+                            topPadding: 0
                         )
                         .environmentObject(authManager)
+                        .id("posts-grid") // 投稿タブのときは固定のID
                     }
                 } else if viewMode == .sharedChannels {
                     channelsListView(channelType: .shared)
+                        .id("shared-channels") // 参加中タブのID
                 } else {
                     channelsListView(channelType: .personal)
+                        .id("personal-channels") // 個人タブのID
                 }
+            }
+            .onChange(of: viewMode) { newMode in
+                scrollOffset = 0
+                print("🔄 ViewMode changed to: \(newMode), resetting scroll offset")
             }
         }
     }
@@ -152,7 +175,7 @@ struct MyProfileView: View {
     @ViewBuilder
     private var artworkOnlyGrid: some View {
         if let gridType = selectedGridType, !selectedPosts.isEmpty {
-            DynamicArtworkGrid(posts: selectedPosts, columns: gridType.columns, rows: gridType.rows)
+            DynamicArtworkGrid(posts: selectedPosts, columns: gridType.columns, rows: gridType.rows, gridType: gridType)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     // スクショモードを終了して共有画面を表示
@@ -164,7 +187,7 @@ struct MyProfileView: View {
                 }
         } else {
             // Fallback: 全投稿を3x3で表示
-            DynamicArtworkGrid(posts: viewModel.posts, columns: 3, rows: 3)
+            DynamicArtworkGrid(posts: viewModel.posts, columns: 3, rows: 3, gridType: nil)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     withAnimation {
@@ -265,6 +288,10 @@ struct MyProfileView: View {
                             // 前回の選択状態をリセット
                             selectedPosts = []
                             selectedGridType = nil
+                            // 投稿数を取得
+                            Task {
+                                await viewModel.fetchPostCount()
+                            }
                             // グリッド選択画面を表示
                             showingGridSelection = true
                         }) {
@@ -292,19 +319,15 @@ struct MyProfileView: View {
                 }
             }
             .onAppear {
-                print("📱 [MyProfileView] onAppear - viewMode: \(viewMode), isAuthenticated: \(authManager.isAuthenticated), posts.isEmpty: \(viewModel.posts.isEmpty)")
-                if viewModel.posts.isEmpty && authManager.isAuthenticated {
-                    print("📱 [MyProfileView] Loading posts from onAppear...")
+                if authManager.isAuthenticated {
                     Task {
-                        await viewModel.loadPosts()
+                        // 投稿が空の場合、または最後のfetchから30秒以上経過している場合はリロード
+                        if viewModel.posts.isEmpty {
+                            await viewModel.loadPosts()
+                        } else if viewModel.shouldRefreshPosts() {
+                            await viewModel.loadPosts(forceRefresh: true)
+                        }
                     }
-                }
-            }
-            .task {
-                print("📱 [MyProfileView] .task executed - isAuthenticated: \(authManager.isAuthenticated), posts.isEmpty: \(viewModel.posts.isEmpty)")
-                if viewModel.posts.isEmpty && authManager.isAuthenticated {
-                    print("📱 [MyProfileView] Loading posts...")
-                    await viewModel.loadPosts()
                 }
             }
             .onChange(of: authManager.isAuthenticated) { isAuthenticated in
@@ -359,7 +382,7 @@ struct MyProfileView: View {
             }
             .fullScreenCover(isPresented: $showingGridSelection) {
                 GridTypeSelectionView(
-                    totalPosts: viewModel.posts.count,
+                    totalPosts: viewModel.postCount,
                     selectedGridType: $selectedGridType,
                     selectedPosts: $selectedPosts,
                     showingGridSelection: $showingGridSelection,
@@ -369,7 +392,7 @@ struct MyProfileView: View {
             .fullScreenCover(isPresented: $showingPostSelection) {
                 if let gridType = selectedGridType {
                     PostSelectionView(
-                        posts: viewModel.posts,
+                        viewModel: viewModel,
                         gridType: gridType,
                         selectedPosts: $selectedPosts,
                         selectedGridType: $selectedGridType,
@@ -451,6 +474,14 @@ struct MyProfileView: View {
                         .foregroundColor(.white.opacity(0.7))
                 }
             }
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear {
+                            print("📏 [Header] Profile info section height: \(geo.size.height)")
+                        }
+                }
+            )
 
             // 切り替えボタン
             HStack(spacing: 8) {
@@ -506,7 +537,23 @@ struct MyProfileView: View {
                         .cornerRadius(8)
                 }
             }
+            .background(
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear {
+                            print("📏 [Header] Tab buttons section height: \(geo.size.height)")
+                        }
+                }
+            )
         }
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onAppear {
+                        print("📏 [Header] Total VStack height (before padding): \(geo.size.height)")
+                    }
+            }
+        )
     }
 
     @ViewBuilder
@@ -519,7 +566,6 @@ struct MyProfileView: View {
             if channelType == .personal {
                 // 個人チャンネル: 自分が所有しているもののみ
                 let isOwned = channel.userId == currentUserId
-                print("🔍 [MyProfileView] Personal channel filter: \(channel.name) | userId: \(channel.userId) | currentUserId: \(currentUserId) | isOwned: \(isOwned)")
                 return channel.channelType == channelType && isOwned
             } else {
                 // 共有チャンネル: フォロー中のもの全て
@@ -537,6 +583,7 @@ struct MyProfileView: View {
                     .foregroundColor(.white.opacity(0.7))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.top, headerHeight)
         } else {
             ScrollView {
                 LazyVStack(spacing: 12) {
@@ -568,7 +615,7 @@ struct MyProfileView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, headerHeight + 8)
                 .padding(.bottom, 100)
             }
             .sheet(isPresented: $viewModel.showEditChannelSheet) {
@@ -609,6 +656,85 @@ struct MyProfileView: View {
 
             rootViewController.present(activityController, animated: true)
             print("✅ [MyProfileView] Sharing profile URL: \(url.absoluteString)")
+        }
+    }
+}
+
+// MARK: - Original Grid Mini Preview
+struct OriginalGridMiniPreview: View {
+    let isAvailable: Bool
+
+    var body: some View {
+        let cellSize: CGFloat = 6
+        let spacing: CGFloat = 1.5
+        let mergedSize = cellSize * 2 + spacing
+
+        VStack(spacing: spacing) {
+            // Rows 1-2: 6列グリッド with merged cell
+            HStack(alignment: .top, spacing: spacing) {
+                VStack(spacing: spacing) {
+                    HStack(spacing: spacing) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Rectangle()
+                                .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                                .frame(width: cellSize, height: cellSize)
+                        }
+                    }
+                    HStack(spacing: spacing) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Rectangle()
+                                .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                                .frame(width: cellSize, height: cellSize)
+                        }
+                    }
+                }
+
+                Rectangle()
+                    .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                    .frame(width: mergedSize, height: mergedSize)
+
+                VStack(spacing: spacing) {
+                    Rectangle()
+                        .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                        .frame(width: cellSize, height: cellSize)
+                    Rectangle()
+                        .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                        .frame(width: cellSize, height: cellSize)
+                }
+            }
+
+            // Rows 3-4: 5列グリッド with merged cell
+            HStack(alignment: .top, spacing: spacing) {
+                Rectangle()
+                    .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                    .frame(width: mergedSize, height: mergedSize)
+
+                VStack(spacing: spacing) {
+                    HStack(spacing: spacing) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Rectangle()
+                                .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                                .frame(width: cellSize, height: cellSize)
+                        }
+                    }
+                    HStack(spacing: spacing) {
+                        ForEach(0..<3, id: \.self) { _ in
+                            Rectangle()
+                                .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                                .frame(width: cellSize, height: cellSize)
+                        }
+                    }
+                }
+            }
+
+            // Row 5: 6列 single row
+            HStack(spacing: spacing) {
+                ForEach(0..<6, id: \.self) { _ in
+                    Rectangle()
+                        .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                        .frame(width: cellSize, height: cellSize)
+                }
+            }
         }
     }
 }
@@ -669,13 +795,17 @@ struct GridTypeSelectionView: View {
                                         .foregroundColor(isAvailable ? .white : .white.opacity(0.3))
 
                                     // Mini preview grid
-                                    VStack(spacing: 2) {
-                                        ForEach(0..<gridType.rows, id: \.self) { _ in
-                                            HStack(spacing: 2) {
-                                                ForEach(0..<gridType.columns, id: \.self) { _ in
-                                                    Rectangle()
-                                                        .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
-                                                        .frame(width: 8, height: 8)
+                                    if gridType.isOriginalGrid {
+                                        OriginalGridMiniPreview(isAvailable: isAvailable)
+                                    } else {
+                                        VStack(spacing: 2) {
+                                            ForEach(0..<gridType.rows, id: \.self) { _ in
+                                                HStack(spacing: 2) {
+                                                    ForEach(0..<gridType.columns, id: \.self) { _ in
+                                                        Rectangle()
+                                                            .fill(isAvailable ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                                                            .frame(width: 8, height: 8)
+                                                    }
                                                 }
                                             }
                                         }
@@ -740,7 +870,7 @@ struct GridTypeSelectionView: View {
 
 // MARK: - Post Selection View
 struct PostSelectionView: View {
-    let posts: [Post]
+    @ObservedObject var viewModel: MyProfileViewModel
     let gridType: MyProfileView.GridType
     @Binding var selectedPosts: [Post]
     @Binding var selectedGridType: MyProfileView.GridType?
@@ -748,7 +878,16 @@ struct PostSelectionView: View {
     @Binding var isArtworkOnlyMode: Bool
     @Binding var screenshotMode: Bool
 
-    @State private var localPosts: [Post] = []
+    init(viewModel: MyProfileViewModel, gridType: MyProfileView.GridType, selectedPosts: Binding<[Post]>, selectedGridType: Binding<MyProfileView.GridType?>, showingPostSelection: Binding<Bool>, isArtworkOnlyMode: Binding<Bool>, screenshotMode: Binding<Bool>) {
+        self.viewModel = viewModel
+        self.gridType = gridType
+        self._selectedPosts = selectedPosts
+        self._selectedGridType = selectedGridType
+        self._showingPostSelection = showingPostSelection
+        self._isArtworkOnlyMode = isArtworkOnlyMode
+        self._screenshotMode = screenshotMode
+        print("🎬 [PostSelectionView] Initialized with \(viewModel.posts.count) posts")
+    }
 
     var body: some View {
         let spacing: CGFloat = 2
@@ -790,12 +929,12 @@ struct PostSelectionView: View {
                 ScrollView {
                     let columns = Array(repeating: GridItem(.fixed(itemWidth), spacing: spacing), count: 3)
                     LazyVStack(spacing: 0) {
-                        ForEach(0..<Int(ceil(Double(localPosts.count) / 3.0)), id: \.self) { rowIndex in
+                        ForEach(0..<Int(ceil(Double(viewModel.posts.count) / 3.0)), id: \.self) { rowIndex in
                             HStack(spacing: spacing) {
                                 ForEach(0..<3, id: \.self) { colIndex in
                                     let index = rowIndex * 3 + colIndex
-                                    if index < localPosts.count {
-                                        let post = localPosts[index]
+                                    if index < viewModel.posts.count {
+                                        let post = viewModel.posts[index]
                                         Button(action: {
                                             togglePostSelection(post)
                                         }) {
@@ -832,6 +971,28 @@ struct PostSelectionView: View {
                                 }
                             }
                         }
+
+                        // 追加読み込みトリガー
+                        if !viewModel.isLoadingMore && viewModel.posts.count < viewModel.postCount {
+                            Color.clear
+                                .frame(height: 50)
+                                .onAppear {
+                                    Task {
+                                        await viewModel.loadMorePosts()
+                                    }
+                                }
+                        }
+
+                        // ローディングインジケータ
+                        if viewModel.isLoadingMore {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                    .tint(.white)
+                                    .padding()
+                                Spacer()
+                            }
+                        }
                     }
                     .padding(.horizontal)
                 }
@@ -862,12 +1023,6 @@ struct PostSelectionView: View {
                 }
             }
         }
-        .onAppear {
-            // 親Viewの再レンダリングの影響を受けないよう、postsをローカルにコピー
-            if localPosts.isEmpty {
-                localPosts = posts
-            }
-        }
     }
 
     private func togglePostSelection(_ post: Post) {
@@ -884,27 +1039,173 @@ struct DynamicArtworkGrid: View {
     let posts: [Post]
     let columns: Int
     let rows: Int
+    let gridType: MyProfileView.GridType?
+
+    var body: some View {
+        if gridType?.isOriginalGrid == true {
+            // オリジナルグリッド: PostGridViewの複雑なレイアウトを使用
+            OriginalGridLayoutView(posts: posts)
+        } else {
+            // 通常グリッド: 均等な格子レイアウト
+            GeometryReader { geometry in
+                let spacing: CGFloat = 2
+                let totalWidth = geometry.size.width
+                let itemWidth = (totalWidth - spacing * CGFloat(columns - 1)) / CGFloat(columns)
+
+                ScrollView(showsIndicators: false) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns), spacing: spacing) {
+                        ForEach(posts.prefix(columns * rows)) { post in
+                            if let artworkUrl = post.artworkUrl, let url = URL(string: artworkUrl) {
+                                AsyncImage(url: url) { image in
+                                    image
+                                        .resizable()
+                                        .scaledToFill()
+                                } placeholder: {
+                                    Rectangle()
+                                        .fill(Color.gray.opacity(0.3))
+                                }
+                                .frame(width: itemWidth, height: itemWidth)
+                                .clipped()
+                            }
+                        }
+                    }
+                    .padding(.bottom, 100)
+                }
+            }
+            .ignoresSafeArea(edges: .bottom)
+            .persistentSystemOverlays(.hidden)
+        }
+    }
+}
+
+// MARK: - Original Grid Layout View
+struct OriginalGridLayoutView: View {
+    let posts: [Post]
 
     var body: some View {
         GeometryReader { geometry in
             let spacing: CGFloat = 2
-            let totalWidth = geometry.size.width
-            let itemWidth = (totalWidth - spacing * CGFloat(columns - 1)) / CGFloat(columns)
+            let screenWidth = geometry.size.width
+
+            // セルサイズの計算
+            let columns6Width = (screenWidth - spacing * 5) / 6
+            let columns5Width = (screenWidth - spacing * 4) / 5
+            let mergedCellWidth6 = columns6Width * 2 + spacing
+            let mergedCellHeight6 = columns6Width * 2 + spacing
+            let mergedCellWidth5 = columns5Width * 2 + spacing
+            let mergedCellHeight5 = columns5Width * 2 + spacing
 
             ScrollView(showsIndicators: false) {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns), spacing: spacing) {
-                    ForEach(posts.prefix(columns * rows)) { post in
-                        if let artworkUrl = post.artworkUrl, let url = URL(string: artworkUrl) {
-                            AsyncImage(url: url) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                            } placeholder: {
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.3))
+                VStack(spacing: spacing) {
+                    // Rows 1-2: 6列グリッド with merged cell (9投稿: indices 0-8)
+                    HStack(alignment: .top, spacing: spacing) {
+                        VStack(spacing: spacing) {
+                            HStack(spacing: spacing) {
+                                ForEach(0..<3, id: \.self) { index in
+                                    artworkCell(index: index, width: columns6Width, height: columns6Width)
+                                }
                             }
-                            .frame(width: itemWidth, height: itemWidth)
-                            .clipped()
+                            HStack(spacing: spacing) {
+                                ForEach(5..<8, id: \.self) { index in
+                                    artworkCell(index: index, width: columns6Width, height: columns6Width)
+                                }
+                            }
+                        }
+
+                        artworkCell(index: 3, width: mergedCellWidth6, height: mergedCellHeight6)
+
+                        VStack(spacing: spacing) {
+                            artworkCell(index: 4, width: columns6Width, height: columns6Width)
+                            artworkCell(index: 8, width: columns6Width, height: columns6Width)
+                        }
+                    }
+
+                    // Rows 3-4: 5列グリッド with merged cell (7投稿: indices 9-15)
+                    HStack(alignment: .top, spacing: spacing) {
+                        artworkCell(index: 9, width: mergedCellWidth5, height: mergedCellHeight5)
+
+                        VStack(spacing: spacing) {
+                            HStack(spacing: spacing) {
+                                ForEach(10..<13, id: \.self) { index in
+                                    artworkCell(index: index, width: columns5Width, height: columns5Width)
+                                }
+                            }
+                            HStack(spacing: spacing) {
+                                ForEach(13..<16, id: \.self) { index in
+                                    artworkCell(index: index, width: columns5Width, height: columns5Width)
+                                }
+                            }
+                        }
+                    }
+
+                    // Row 5: 6列 single row (6投稿: indices 16-21)
+                    HStack(spacing: spacing) {
+                        ForEach(16..<22, id: \.self) { index in
+                            artworkCell(index: index, width: columns6Width, height: columns6Width)
+                        }
+                    }
+
+                    // Rows 6-7: 6列グリッド with merged cell (9投稿: indices 22-30)
+                    HStack(alignment: .top, spacing: spacing) {
+                        VStack(spacing: spacing) {
+                            HStack(spacing: spacing) {
+                                ForEach(22..<25, id: \.self) { index in
+                                    artworkCell(index: index, width: columns6Width, height: columns6Width)
+                                }
+                            }
+                            HStack(spacing: spacing) {
+                                ForEach(27..<30, id: \.self) { index in
+                                    artworkCell(index: index, width: columns6Width, height: columns6Width)
+                                }
+                            }
+                        }
+
+                        artworkCell(index: 25, width: mergedCellWidth6, height: mergedCellHeight6)
+
+                        VStack(spacing: spacing) {
+                            artworkCell(index: 26, width: columns6Width, height: columns6Width)
+                            artworkCell(index: 30, width: columns6Width, height: columns6Width)
+                        }
+                    }
+
+                    // Rows 8-9: 5列グリッド with merged cell (7投稿: indices 31-37)
+                    HStack(alignment: .top, spacing: spacing) {
+                        artworkCell(index: 31, width: mergedCellWidth5, height: mergedCellHeight5)
+
+                        VStack(spacing: spacing) {
+                            HStack(spacing: spacing) {
+                                ForEach(32..<35, id: \.self) { index in
+                                    artworkCell(index: index, width: columns5Width, height: columns5Width)
+                                }
+                            }
+                            HStack(spacing: spacing) {
+                                ForEach(35..<38, id: \.self) { index in
+                                    artworkCell(index: index, width: columns5Width, height: columns5Width)
+                                }
+                            }
+                        }
+                    }
+
+                    // Rows 10-11: 6列グリッド with merged cell (9投稿: indices 38-46)
+                    HStack(alignment: .top, spacing: spacing) {
+                        VStack(spacing: spacing) {
+                            HStack(spacing: spacing) {
+                                ForEach(38..<41, id: \.self) { index in
+                                    artworkCell(index: index, width: columns6Width, height: columns6Width)
+                                }
+                            }
+                            HStack(spacing: spacing) {
+                                ForEach(43..<46, id: \.self) { index in
+                                    artworkCell(index: index, width: columns6Width, height: columns6Width)
+                                }
+                            }
+                        }
+
+                        artworkCell(index: 41, width: mergedCellWidth6, height: mergedCellHeight6)
+
+                        VStack(spacing: spacing) {
+                            artworkCell(index: 42, width: columns6Width, height: columns6Width)
+                            artworkCell(index: 46, width: columns6Width, height: columns6Width)
                         }
                     }
                 }
@@ -913,6 +1214,26 @@ struct DynamicArtworkGrid: View {
         }
         .ignoresSafeArea(edges: .bottom)
         .persistentSystemOverlays(.hidden)
+    }
+
+    @ViewBuilder
+    private func artworkCell(index: Int, width: CGFloat, height: CGFloat) -> some View {
+        if index < posts.count, let artworkUrl = posts[index].artworkUrl, let url = URL(string: artworkUrl) {
+            AsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .scaledToFill()
+            } placeholder: {
+                Rectangle()
+                    .fill(Color.gray.opacity(0.3))
+            }
+            .frame(width: width, height: height)
+            .clipped()
+        } else {
+            Rectangle()
+                .fill(Color.gray.opacity(0.1))
+                .frame(width: width, height: height)
+        }
     }
 }
 
@@ -927,6 +1248,7 @@ class MyProfileViewModel: ObservableObject {
     @Published var showEditChannelSheet = false
     @Published var editingChannel: Channel?
     @Published var editingChannelName: String = ""
+    @Published var postCount: Int = 0
 
     private var lastFetchTime: Date?
     private let cacheValidDuration: TimeInterval = 30 // 30秒キャッシュ
@@ -1102,6 +1424,31 @@ class MyProfileViewModel: ObservableObject {
             print("❌ Failed to update channel name: \(error)")
         }
     }
+
+    func shouldRefreshPosts() -> Bool {
+        guard let lastFetch = lastFetchTime else {
+            return true // まだfetchしていない
+        }
+        let elapsed = Date().timeIntervalSince(lastFetch)
+        return elapsed >= cacheValidDuration
+    }
+
+    func fetchPostCount() async {
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("⚠️ [MyProfileViewModel] fetchPostCount: User not authenticated")
+            return
+        }
+
+        do {
+            let user = try await FirestoreUserManager.shared.getUser(userId: currentUserId, useCache: false, fetchCounts: true)
+            postCount = user.postCount ?? 0
+            print("✅ [MyProfileViewModel] Fetched post count: \(postCount)")
+        } catch {
+            print("❌ [MyProfileViewModel] Failed to fetch post count: \(error)")
+            // Fallback to loaded posts count
+            postCount = posts.count
+        }
+    }
 }
 
 // MARK: - Edit Channel Name Sheet
@@ -1180,5 +1527,13 @@ struct EditChannelNameSheet: View {
             }
         }
         .presentationDetents([.height(300)])
+    }
+}
+
+// MARK: - HeaderHeightPreferenceKey
+struct HeaderHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }

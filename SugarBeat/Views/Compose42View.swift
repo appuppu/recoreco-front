@@ -13,6 +13,7 @@ struct Compose42View: View {
 
     @State private var showingCloseConfirmation = false
     @State private var showingLoginPromotion = false
+    @State private var isLoadingAd = false
 
     var body: some View {
         ZStack {
@@ -31,14 +32,27 @@ struct Compose42View: View {
                 SelectionView(
                     viewModel: viewModel,
                     onClose: {
-                        showingCloseConfirmation = true
+                        // 編集画面のバツボタン: 直接広告を表示して閉じる
+                        print("🎬 [Compose42View] SelectionView close button pressed")
+                        handleClose()
                     }
                 )
             }
+
+            // Loading indicator
+            if isLoadingAd {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                ProgressView()
+                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    .scaleEffect(1.5)
+            }
         }
         .confirmationDialog("", isPresented: $showingCloseConfirmation, titleVisibility: .hidden) {
-            Button("戻る") {
-                viewModel.isShowingPreview = false
+            if viewModel.isShowingPreview {
+                Button("戻る") {
+                    viewModel.isShowingPreview = false
+                }
             }
             Button("閉じる", role: .destructive) {
                 handleClose()
@@ -49,33 +63,66 @@ struct Compose42View: View {
                 showAdAndDismiss()
             }
         } message: {
-            Text("ログインすると自分の投稿の中からいつでも私を構成する42枚を作成できて検索の手間がなくなるよ！")
+            Text("ログインすると投稿した音楽から私を構成する42枚が作成できます！")
         }
     }
 
     private func handleClose() {
+        print("🎬 [Compose42View] handleClose called, isAuthenticated: \(authManager.isAuthenticated)")
         if authManager.isAuthenticated {
             // ログイン済み: 直接広告表示
             showAdAndDismiss()
         } else {
             // 未ログイン: ログイン促進メッセージ表示
+            print("🎬 [Compose42View] Showing login promotion alert")
             showingLoginPromotion = true
         }
     }
 
     private func showAdAndDismiss() {
-        // Load and show interstitial ad
+        print("🎬 [Compose42View] showAdAndDismiss called")
         let adManager = InterstitialAdManager.shared
-        adManager.load()
+        print("🎬 [Compose42View] Ad manager isLoading: \(adManager.isLoading), isAdReady: \(adManager.isAdReady)")
 
-        // Wait briefly for ad to load, then show
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            if let rootVC = adManager.getRootViewController() {
-                adManager.show(from: rootVC)
-            }
-            // Dismiss after showing ad or if ad fails
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                dismiss()
+        // ローディング表示
+        isLoadingAd = true
+        print("🎬 [Compose42View] Loading indicator shown")
+
+        // 0.3秒後に画面を閉じる
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            print("🎬 [Compose42View] Dismissing view")
+            self.dismiss()
+        }
+
+        // 画面が完全に閉じるのを待ってから広告を表示（1.5秒待機）
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            print("🎬 [Compose42View] Attempting to show ad after dismiss")
+
+            // 広告が既にロード済みの場合はすぐに表示
+            if adManager.isAdReady {
+                print("🎬 [Compose42View] Ad is ready, showing immediately")
+                if let rootVC = adManager.getRootViewController() {
+                    adManager.show(from: rootVC)
+                    print("🎬 [Compose42View] Ad show requested")
+                } else {
+                    print("🎬 [Compose42View] ❌ rootViewController is nil")
+                }
+            } else {
+                // 広告をロードして表示
+                print("🎬 [Compose42View] Ad not ready, loading...")
+                adManager.load()
+
+                // ロード完了を待って表示
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                    print("🎬 [Compose42View] After load wait, isAdReady: \(adManager.isAdReady)")
+
+                    if adManager.isAdReady, let rootVC = adManager.getRootViewController() {
+                        adManager.show(from: rootVC)
+                        print("🎬 [Compose42View] Ad show requested after load")
+                    } else {
+                        print("🎬 [Compose42View] ❌ Ad not ready after load or rootVC is nil")
+                    }
+                }
             }
         }
     }

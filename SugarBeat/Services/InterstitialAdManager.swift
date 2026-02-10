@@ -19,8 +19,8 @@ class InterstitialAdManager: NSObject, ObservableObject {
 
     private override init() {
         #if DEBUG
-        // テスト用のUnit ID
-        adUnitID = "ca-app-pub-3940256099942544/4411468910"
+        // テスト用のUnit ID (Compose42用)
+        adUnitID = "ca-app-pub-3940256099942544/1033173712"
         print("🎬 [InterstitialAdManager] Initialized with TEST Ad Unit ID: \(adUnitID)")
         #else
         // 本番用のUnit ID

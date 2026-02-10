@@ -568,7 +568,7 @@ struct HorizontalLayoutView: View {
     private let rows = 6
 
     var body: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 2) {
             // Grid (left side, 70% width - 7 columns × 6 rows, will be 6×7 after rotation)
             let spacing: CGFloat = 2
             let gridWidth = screenSize.width * 0.7
@@ -599,7 +599,6 @@ struct HorizontalLayoutView: View {
                     }
                 }
             }
-            .frame(width: gridWidth, height: availableHeight, alignment: .leading)
 
             // Track Info (right side, 30% width - 6 row groups, each group shows 7 tracks vertically)
             VStack(alignment: .leading, spacing: spacing) {
@@ -624,19 +623,13 @@ struct HorizontalLayoutView: View {
                                         .lineLimit(1)
                                 }
                                 .frame(width: cellSize * 3, height: trackHeight, alignment: .leading) // 高さを均等に配置
-                                .background(Color.red.opacity(0.1)) // デバッグ用の背景色
-                                .onAppear {
-                                    if col == 0 && row == 0 {
-                                        print("🎨 [HorizontalLayoutView] First track frame: width=\(cellSize * 3), height=\(trackHeight)")
-                                    }
-                                }
                             }
                         }
                     }
                     .frame(height: cellSize, alignment: .top) // 各行グループを cellSize の高さに固定
                 }
             }
-            .frame(width: screenSize.width * 0.3, height: availableHeight, alignment: .topLeading)
+            .frame(height: availableHeight, alignment: .topLeading)
         }
         .frame(width: screenSize.width, height: screenSize.height)
         .onAppear {

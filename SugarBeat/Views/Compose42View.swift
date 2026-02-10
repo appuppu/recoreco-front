@@ -169,7 +169,11 @@ struct SelectionView: View {
                                     .foregroundColor(.white)
                                     .frame(maxWidth: .infinity)
                                     .padding(.vertical, 16)
-                                    .background(viewModel.canComplete ? Color.green : Color.gray)
+                                    .background(
+                                        viewModel.canComplete
+                                        ? LinearGradient(colors: [Color.purple, Color.pink], startPoint: .leading, endPoint: .trailing)
+                                        : LinearGradient(colors: [Color.gray, Color.gray], startPoint: .leading, endPoint: .trailing)
+                                    )
                                     .cornerRadius(12)
                             }
                             .disabled(!viewModel.canComplete)
@@ -536,7 +540,9 @@ struct VerticalLayoutView: View {
                                     Text(track.artist)
                                         .font(.system(size: 7))
                                         .foregroundColor(.white.opacity(0.6))
-                                        .lineLimit(1)
+                                        .lineLimit(2)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                        .frame(height: 7 * 2 + 1, alignment: .top) // 2行分の固定高さ
                                 }
                                 .padding(.vertical, 1)
                             }
@@ -593,17 +599,21 @@ struct HorizontalLayoutView: View {
                     }
                 }
             }
-            .frame(width: gridWidth, height: availableHeight, alignment: .center)
+            .frame(width: gridWidth, height: availableHeight, alignment: .leading)
 
-            // Track Info (right side, 30% width - 7 row groups, each group shows 6 tracks vertically)
-            VStack(alignment: .leading, spacing: 0) {
-                ForEach(0..<columns, id: \.self) { col in
-                    HStack(alignment: .top, spacing: 2) {
-                        ForEach(0..<rows, id: \.self) { row in
-                            let index = row + col * rows
+            // Track Info (right side, 30% width - 6 row groups, each group shows 7 tracks vertically)
+            VStack(alignment: .leading, spacing: spacing) {
+                ForEach(0..<rows, id: \.self) { row in
+                    // 各行内の7つの曲を均等配置するための高さ計算
+                    let trackHeight = (cellSize - 2 * CGFloat(columns - 1)) / CGFloat(columns)
+                    let _ = print("🎨 [HorizontalLayoutView] Row \(row): cellSize=\(cellSize), trackHeight=\(trackHeight), calculation: (\(cellSize) - 2 * \(columns - 1)) / \(columns)")
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(0..<columns, id: \.self) { col in
+                            let index = col + row * columns
                             if index < tracks.count {
                                 let track = tracks[index]
-                                VStack(alignment: .leading, spacing: 1) {
+                                HStack(spacing: 4) {
                                     Text(track.title)
                                         .font(.system(size: 6))
                                         .foregroundColor(.white)
@@ -613,11 +623,17 @@ struct HorizontalLayoutView: View {
                                         .foregroundColor(.white.opacity(0.6))
                                         .lineLimit(1)
                                 }
-                                .frame(maxWidth: (screenSize.width * 0.3) / CGFloat(rows)) // 横幅を制限
+                                .frame(width: cellSize * 3, height: trackHeight, alignment: .leading) // 高さを均等に配置
+                                .background(Color.red.opacity(0.1)) // デバッグ用の背景色
+                                .onAppear {
+                                    if col == 0 && row == 0 {
+                                        print("🎨 [HorizontalLayoutView] First track frame: width=\(cellSize * 3), height=\(trackHeight)")
+                                    }
+                                }
                             }
                         }
                     }
-                    .frame(height: cellSize, alignment: .leading) // 各行グループを cellSize の高さに固定
+                    .frame(height: cellSize, alignment: .top) // 各行グループを cellSize の高さに固定
                 }
             }
             .frame(width: screenSize.width * 0.3, height: availableHeight, alignment: .topLeading)

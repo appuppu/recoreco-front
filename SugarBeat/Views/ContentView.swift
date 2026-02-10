@@ -918,7 +918,9 @@ struct DiscoveryView: View {
                                         .padding(.vertical, 4)
                                 }
 
-                                if (index + 1) % 2 == 0 && AdConfig.shouldShowAds {
+                                // パターン: ch0 → ad → ch1,2 → ad → ch3 → ad → ch4,5 → ad → ...
+                                let shouldShowAd = (index == 0) || ((index - 1) % 3 == 2)
+                                if shouldShowAd && AdConfig.shouldShowAds {
                                     FeedAdCardView()
                                         .id("discovery_ad_\(index)")
                                         .padding(.vertical, 8)
@@ -1343,7 +1345,7 @@ struct FollowButton: View {
 class DiscoveryViewModel: ObservableObject {
     @Published var channels: [Channel] = []
     @Published var isLoading = false
-    private var allChannels: [Channel] = []
+    private var currentChannelType: ChannelType = .shared
 
     init() {
         // Listen for post created notifications
@@ -1356,11 +1358,8 @@ class DiscoveryViewModel: ObservableObject {
                 guard let self = self else { return }
                 print("📥 [DiscoveryViewModel] Received postCreated notification")
                 // Reload channels to get updated latestPostId
-                if !self.channels.isEmpty {
-                    let currentType = self.channels.first?.channelType ?? .shared
-                    print("🔄 [DiscoveryViewModel] Refreshing channels for type: \(currentType.rawValue)")
-                    await self.refreshChannels(channelType: currentType)
-                }
+                print("🔄 [DiscoveryViewModel] Refreshing channels for type: \(self.currentChannelType.rawValue)")
+                await self.refreshChannels(channelType: self.currentChannelType)
             }
         }
 
@@ -1372,7 +1371,6 @@ class DiscoveryViewModel: ObservableObject {
         ) { [weak self] notification in
             if let blockedUserId = notification.userInfo?["blockedUserId"] as? String {
                 Task { @MainActor in
-                    self?.allChannels.removeAll { $0.userId == blockedUserId }
                     self?.channels.removeAll { $0.userId == blockedUserId }
                     print("🚫 Removed blocked user's channels from discovery: \(blockedUserId)")
                 }
@@ -1382,13 +1380,13 @@ class DiscoveryViewModel: ObservableObject {
 
     func loadChannels(channelType: ChannelType = .shared) async {
         isLoading = true
+        currentChannelType = channelType
         defer { isLoading = false }
 
         do {
-            // Fetch all channels in latest post order
-            allChannels = try await FirestorePostManager.shared.getDiscoveryChannels(channelType: nil, limit: 100)
-            // Filter by type
-            filterChannels(by: channelType)
+            // Fetch channels filtered by type directly from Firestore
+            channels = try await FirestorePostManager.shared.getDiscoveryChannels(channelType: channelType, limit: 100)
+            print("✅ [DiscoveryViewModel] Loaded \(channels.count) \(channelType.rawValue) channels")
         } catch {
             print("❌ Failed to load channels: \(error)")
         }
@@ -1396,21 +1394,22 @@ class DiscoveryViewModel: ObservableObject {
 
     func refreshChannels(channelType: ChannelType) async {
         // Refresh without setting isLoading to avoid double animation
-        print("🔄 [DiscoveryViewModel] refreshChannels called")
+        print("🔄 [DiscoveryViewModel] refreshChannels called for type: \(channelType.rawValue)")
+        currentChannelType = channelType
         do {
-            // Fetch all channels in latest post order
-            allChannels = try await FirestorePostManager.shared.getDiscoveryChannels(channelType: nil, limit: 100)
-            // Filter by type
-            filterChannels(by: channelType)
-            print("✅ [DiscoveryViewModel] Refreshed \(channels.count) channels")
+            // Fetch channels filtered by type directly from Firestore
+            channels = try await FirestorePostManager.shared.getDiscoveryChannels(channelType: channelType, limit: 100)
+            print("✅ [DiscoveryViewModel] Refreshed \(channels.count) \(channelType.rawValue) channels")
         } catch {
             print("❌ Failed to refresh channels: \(error)")
         }
     }
 
     func filterChannels(by channelType: ChannelType) {
-        channels = allChannels.filter { $0.channelType == channelType }
-        print("🔍 [DiscoveryViewModel] Filtered to \(channels.count) \(channelType.rawValue) channels")
+        currentChannelType = channelType
+        Task {
+            await refreshChannels(channelType: channelType)
+        }
     }
 }
 

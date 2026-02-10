@@ -107,6 +107,7 @@ struct SelectionView: View {
                     if !viewModel.searchResults.isEmpty {
                         SearchResultsListView(
                             results: viewModel.searchResults,
+                            selectedTracks: viewModel.selectedTracks,
                             currentPlayingId: viewModel.currentPlayingTrackId,
                             onAdd: { song in
                                 viewModel.addTrack(song)
@@ -237,6 +238,7 @@ struct SearchBarView: View {
 // MARK: - Search Results List View
 struct SearchResultsListView: View {
     let results: [Song]
+    let selectedTracks: [SelectedTrack]
     let currentPlayingId: String?
     let onAdd: (Song) -> Void
     let onPlay: (Song) -> Void
@@ -253,8 +255,10 @@ struct SearchResultsListView: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(results, id: \.id) { song in
+                        let isAdded = selectedTracks.contains(where: { $0.id == song.id.rawValue })
                         SearchResultRow(
                             song: song,
+                            isAdded: isAdded,
                             isPlaying: currentPlayingId == song.id.rawValue,
                             onAdd: { onAdd(song) },
                             onPlay: {
@@ -278,6 +282,7 @@ struct SearchResultsListView: View {
 // MARK: - Search Result Row
 struct SearchResultRow: View {
     let song: Song
+    let isAdded: Bool
     let isPlaying: Bool
     let onAdd: () -> Void
     let onPlay: () -> Void
@@ -328,10 +333,15 @@ struct SearchResultRow: View {
             Button {
                 onAdd()
             } label: {
-                Image(systemName: "plus.circle.fill")
+                Image(systemName: isAdded ? "checkmark.circle.fill" : "plus.circle.fill")
                     .font(.system(size: 24))
-                    .foregroundColor(.green)
+                    .foregroundStyle(
+                        isAdded
+                        ? LinearGradient(colors: [Color.gray, Color.gray], startPoint: .leading, endPoint: .trailing)
+                        : LinearGradient(colors: [Color.purple, Color.pink], startPoint: .leading, endPoint: .trailing)
+                    )
             }
+            .disabled(isAdded)
         }
     }
 }
@@ -509,7 +519,7 @@ struct VerticalLayoutView: View {
             }
 
             // Track Info (6 columns, each column shows 7 tracks vertically)
-            HStack(alignment: .top, spacing: 0) {
+            HStack(alignment: .top, spacing: 2) {
                 ForEach(0..<columns, id: \.self) { col in
                     VStack(alignment: .leading, spacing: 2) {
                         ForEach(0..<rows, id: \.self) { row in
@@ -521,13 +531,13 @@ struct VerticalLayoutView: View {
                                         .font(.system(size: 8))
                                         .foregroundColor(.white)
                                         .lineLimit(2)
+                                        .fixedSize(horizontal: false, vertical: true)
                                         .frame(height: 8 * 2 + 1, alignment: .top) // 2行分の固定高さ
                                     Text(track.artist)
                                         .font(.system(size: 7))
                                         .foregroundColor(.white.opacity(0.6))
                                         .lineLimit(1)
                                 }
-                                .frame(width: cellSize, alignment: .leading) // 列幅に収める
                                 .padding(.vertical, 1)
                             }
                         }
@@ -536,7 +546,6 @@ struct VerticalLayoutView: View {
                 }
             }
             .padding(.top, 8)
-            .padding(.horizontal, 2)
 
             Spacer()
         }
@@ -586,34 +595,32 @@ struct HorizontalLayoutView: View {
             }
             .frame(width: gridWidth, height: availableHeight, alignment: .center)
 
-            // Track Info (right side, 30% width - 6 rows, each row shows 7 tracks vertically)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(0..<rows, id: \.self) { row in
-                        VStack(alignment: .leading, spacing: 0) {
-                            ForEach(0..<columns, id: \.self) { col in
-                                let index = col + row * columns
-                                if index < tracks.count {
-                                    let track = tracks[index]
-                                    HStack(spacing: 2) {
-                                        Text(track.title)
-                                            .font(.system(size: 7))
-                                            .foregroundColor(.white)
-                                            .lineLimit(1)
-                                        Text(track.artist)
-                                            .font(.system(size: 6))
-                                            .foregroundColor(.white.opacity(0.6))
-                                            .lineLimit(1)
-                                    }
-                                    .frame(height: cellSize / CGFloat(columns), alignment: .leading) // 各曲が行の高さ内に収まるように
+            // Track Info (right side, 30% width - 7 row groups, each group shows 6 tracks vertically)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(0..<columns, id: \.self) { col in
+                    HStack(alignment: .top, spacing: 2) {
+                        ForEach(0..<rows, id: \.self) { row in
+                            let index = row + col * rows
+                            if index < tracks.count {
+                                let track = tracks[index]
+                                VStack(alignment: .leading, spacing: 1) {
+                                    Text(track.title)
+                                        .font(.system(size: 6))
+                                        .foregroundColor(.white)
+                                        .lineLimit(1)
+                                    Text(track.artist)
+                                        .font(.system(size: 5))
+                                        .foregroundColor(.white.opacity(0.6))
+                                        .lineLimit(1)
                                 }
+                                .frame(maxWidth: (screenSize.width * 0.3) / CGFloat(rows)) // 横幅を制限
                             }
                         }
-                        .frame(height: cellSize, alignment: .top)
                     }
+                    .frame(height: cellSize, alignment: .leading) // 各行グループを cellSize の高さに固定
                 }
             }
-            .frame(width: screenSize.width * 0.3, height: availableHeight)
+            .frame(width: screenSize.width * 0.3, height: availableHeight, alignment: .topLeading)
         }
         .frame(width: screenSize.width, height: screenSize.height)
         .onAppear {

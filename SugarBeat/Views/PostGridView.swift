@@ -143,9 +143,8 @@ struct PostGridView: View {
     @ObservedObject private var playbackState = PlaybackStateManager.shared
     @EnvironmentObject var authManager: AuthManager
 
-    // Dynamic user and channel info cache
+    // Dynamic user info cache
     @State private var postUserCache: [String: User] = [:]  // postId -> User
-    @State private var postChannelCache: [String: Channel] = [:]  // postId -> Channel
     @State private var featuredCellKey = UUID() // Featured cellを強制再作成するためのキー
 
     /// 再生中の投稿（先頭以外で再生中の場合のみ）
@@ -723,7 +722,6 @@ struct FeaturedPostCellSimple: View {
     @ObservedObject private var likeState = LikeStateManager.shared
     @ObservedObject private var commentState = CommentStateManager.shared
     @State private var postUser: User? = nil  // Post owner user info
-    @State private var postChannel: Channel? = nil  // Post channel info
 
     var isPlaying: Bool {
         guard let postId = post.id else { return false }
@@ -743,6 +741,132 @@ struct FeaturedPostCellSimple: View {
     var commentCount: Int {
         guard let postId = post.id else { return 0 }
         return commentState.getCommentCount(postId)
+    }
+
+    // Left column: content type badge, title, description, user info, comment
+    @ViewBuilder
+    private var trackInfoColumn: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Content type badge
+            if let type = post.contentType {
+                if type == ContentType.youtube.rawValue {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.rectangle.fill")
+                            .foregroundColor(.red)
+                            .font(.system(size: 14))
+                        Text("YouTube")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.red)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.red.opacity(0.15))
+                    .cornerRadius(6)
+                } else if type == ContentType.website.rawValue {
+                    HStack(spacing: 6) {
+                        Image(systemName: "safari")
+                            .foregroundColor(.blue)
+                            .font(.system(size: 14))
+                        Text("Website")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.blue)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.15))
+                    .cornerRadius(6)
+                }
+            }
+
+            HStack(spacing: 6) {
+                Text(post.contentTitle ?? post.trackName ?? "")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+
+                // Waveform animation when playing (only for music)
+                if isPlaying && (post.contentType == nil || post.contentType == ContentType.music.rawValue) {
+                    MiniWaveformView()
+                        .frame(width: 30, height: 20)
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.5))
+            .cornerRadius(6)
+
+            Text(post.contentDescription ?? post.artistName ?? "")
+                .font(.system(size: 14))
+                .foregroundColor(.white.opacity(0.95))
+                .lineLimit(1)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.black.opacity(0.5))
+                .cornerRadius(6)
+
+            // User info + post date (showUserInfoがtrueの場合のみ)
+            if showUserInfo {
+                Button(action: {
+                    if !authManager.isAuthenticated {
+                        showingLoginPrompt = true
+                        return
+                    }
+                    showingUserProfile = true
+                }) {
+                    HStack(spacing: 6) {
+                        if let user = postUser {
+                            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            } placeholder: {
+                                Image("recoreco")
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            }
+                            .frame(width: 20, height: 20)
+                            .clipShape(Circle())
+
+                            Text(user.displayName)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
+                        } else {
+                            Image("recoreco")
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 20, height: 20)
+                                .clipShape(Circle())
+
+                            Text("Loading...")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
+                        }
+
+                        Text("・")
+                            .foregroundColor(.white.opacity(0.5))
+
+                        Text(formatPostDate(post.createdAt))
+                            .font(.system(size: 11))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.5))
+                    .cornerRadius(6)
+                }
+            }
+
+            if let comment = post.comment, !comment.isEmpty {
+                Text(comment)
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.9))
+                    .lineLimit(2)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.5))
+                    .cornerRadius(6)
+            }
+        }
     }
 
     var body: some View {
@@ -831,148 +955,7 @@ struct FeaturedPostCellSimple: View {
                 if !isScreenshotMode {
                     HStack(alignment: .bottom, spacing: 12) {
                         // Left: Track info with background shadow
-                        VStack(alignment: .leading, spacing: 4) {
-                            // Content type badge
-                            if let type = post.contentType {
-                                if type == ContentType.youtube.rawValue {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "play.rectangle.fill")
-                                            .foregroundColor(.red)
-                                            .font(.system(size: 14))
-                                        Text("YouTube")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundColor(.red)
-                                    }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.red.opacity(0.15))
-                                    .cornerRadius(6)
-                                } else if type == ContentType.website.rawValue {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "safari")
-                                            .foregroundColor(.blue)
-                                            .font(.system(size: 14))
-                                        Text("Website")
-                                            .font(.system(size: 11, weight: .semibold))
-                                            .foregroundColor(.blue)
-                                    }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.blue.opacity(0.15))
-                                    .cornerRadius(6)
-                                }
-                            }
-
-                            HStack(spacing: 6) {
-                                Text(post.contentTitle ?? post.trackName ?? "")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.white)
-                                    .lineLimit(1)
-
-                                // Waveform animation when playing (only for music)
-                                if isPlaying && (post.contentType == nil || post.contentType == ContentType.music.rawValue) {
-                                    MiniWaveformView()
-                                        .frame(width: 30, height: 20)
-                                }
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.black.opacity(0.5))
-                            .cornerRadius(6)
-
-                            Text(post.contentDescription ?? post.artistName ?? "")
-                                .font(.system(size: 14))
-                                .foregroundColor(.white.opacity(0.95))
-                                .lineLimit(1)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.black.opacity(0.5))
-                                .cornerRadius(6)
-
-                            // User info + post date (showUserInfoがtrueの場合のみ)
-                            if showUserInfo {
-                                Button(action: {
-                                    if !authManager.isAuthenticated {
-                                        showingLoginPrompt = true
-                                        return
-                                    }
-                                    showingUserProfile = true
-                                }) {
-                                    HStack(spacing: 6) {
-                                        if let user = postUser {
-                                            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
-                                                image
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fill)
-                                            } placeholder: {
-                                                Image("recoreco")
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fill)
-                                            }
-                                            .frame(width: 20, height: 20)
-                                            .clipShape(Circle())
-
-                                            Text(user.displayName)
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundColor(.white.opacity(0.9))
-                                        } else {
-                                            Image("recoreco")
-                                                .resizable()
-                                                .aspectRatio(contentMode: .fill)
-                                                .frame(width: 20, height: 20)
-                                                .clipShape(Circle())
-
-                                            Text("Loading...")
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundColor(.white.opacity(0.9))
-                                        }
-
-                                        Text("・")
-                                            .foregroundColor(.white.opacity(0.5))
-
-                                        Text(formatPostDate(post.createdAt))
-                                            .font(.system(size: 11))
-                                            .foregroundColor(.white.opacity(0.6))
-                                    }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.black.opacity(0.5))
-                                    .cornerRadius(6)
-                                }
-                            }
-
-                            if let comment = post.comment, !comment.isEmpty {
-                                Text(comment)
-                                    .font(.system(size: 13))
-                                    .foregroundColor(.white.opacity(0.9))
-                                    .lineLimit(2)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(Color.black.opacity(0.5))
-                                    .cornerRadius(6)
-                            }
-
-                            // Channel name
-                            if let channelId = post.channelId,
-                               let channel = postChannel {
-                                HStack(spacing: 4) {
-                                    // Channel type icon
-                                    Image(systemName: channel.channelType == .shared ? "globe" : "person.circle.fill")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.white.opacity(0.6))
-                                    Image(systemName: "number")
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.white.opacity(0.6))
-                                    Text(channel.name)
-                                        .font(.system(size: 11))
-                                        .foregroundColor(.white.opacity(0.7))
-                                }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.black.opacity(0.5))
-                                .cornerRadius(6)
-                            }
-                        }
+                        trackInfoColumn
 
                         Spacer()
 
@@ -1109,16 +1092,10 @@ struct FeaturedPostCellSimple: View {
                 commentState.initialize(postId: postId, count: post.commentCount ?? 0)
             }
         }
-        .task(id: "\(post.id ?? "")_\(post.channelId ?? "")") {
-            // Load user and channel info for the displayed post
-            // Load user info
+        .task(id: post.id ?? "") {
+            // Load user info for the displayed post
             if postUser == nil {
                 postUser = try? await FirestoreUserManager.shared.getUser(userId: post.userId)
-            }
-
-            // Load channel info - always refresh to get latest channel name
-            if let channelId = post.channelId {
-                postChannel = try? await FirestoreChannelManager.shared.getChannel(channelId: channelId)
             }
         }
     }

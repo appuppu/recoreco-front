@@ -7,26 +7,26 @@ struct OnboardingView: View {
     private let pages: [OnboardingPage] = [
         OnboardingPage(
             icon: "music.note.house.fill",
-            title: "チャンネルで音楽を紹介",
-            description: "チャンネルを作成して、テーマに沿った音楽を投稿できます。\n好きなジャンルやムードのチャンネルを作りましょう。",
+            title: "好きな音楽をシェア",
+            description: "お気に入りの曲やおすすめの音楽を投稿して、みんなと共有しましょう。\n30秒のプレビューと一緒にコメントを添えられます。",
             gradient: [Color.purple, Color.blue]
         ),
         OnboardingPage(
             icon: "person.2.fill",
-            title: "チャンネルをフォロー",
-            description: "気になるチャンネルをフォローすると、「フォロー中」タブで最新の投稿をチェックできます。\n自分のチャンネルも作成して投稿しましょう。",
+            title: "気になる人をフォロー",
+            description: "気になるユーザーをフォローすると、「フォロー中」タブで最新の投稿をチェックできます。",
             gradient: [Color.blue, Color.cyan]
         ),
         OnboardingPage(
             icon: "safari",
-            title: "すべてのチャンネルを探索",
-            description: "「すべて」タブでは、全ユーザーのチャンネルを探索できます。\n投稿が新しい順に表示されるので、トレンドをチェック！",
+            title: "すべての投稿を探索",
+            description: "「すべて」タブでは、全ユーザーの投稿を探索できます。\n新しい音楽との出会いを楽しみましょう！",
             gradient: [Color.cyan, Color.green]
         ),
         OnboardingPage(
             icon: "music.note",
             title: "音楽を投稿して楽しむ",
-            description: "チャンネルに音楽を投稿して、おすすめの曲をシェアしましょう。\n30秒のプレビューと一緒にコメントを添えられます。",
+            description: "お気に入りの音楽を投稿して、おすすめの曲をシェアしましょう。\n30秒のプレビューと一緒にコメントを添えられます。",
             gradient: [Color.green, Color.yellow]
         )
     ]

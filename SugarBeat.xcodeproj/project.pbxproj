@@ -36,6 +36,8 @@
 		491FE0B773339BE0A5BE1522 /* AdBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3EB603CD42D8CCE67308F60 /* AdBannerView.swift */; };
 		4CABBE25B7EF099BB3BF10BA /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200803D3C80571A5A7547AB /* NotificationsView.swift */; };
 		4DFA5E2032F7D459A2F331C0 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */; };
+		AA0100012F70000000000001 /* AppVersionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100002F70000000000001 /* AppVersionManager.swift */; };
+		AA0100012F70000000000002 /* ForceUpdateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100002F70000000000002 /* ForceUpdateView.swift */; };
 		500539CDF61D417F811B0300 /* FirebaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0039B45C8875427DBFAABAC0 /* FirebaseConfig.swift */; };
 		5293E5DCAF836184BA11806E /* CommentStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3351B47836AD31B921B1AA /* CommentStateManager.swift */; };
 		54E4C722674ADCAC481A8229 /* UserProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81162C40CE0C846263B8F88 /* UserProfileViewModel.swift */; };
@@ -89,6 +91,8 @@
 		D425E0382F155D9F00AC4B7F /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = D425E0372F155D9F00AC4B7F /* FirebaseStorage */; };
 		D425E03B2F155DC500AC4B7F /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = D425E03A2F155DC500AC4B7F /* GoogleSignIn */; };
 		D425E03D2F155DC500AC4B7F /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = D425E03C2F155DC500AC4B7F /* GoogleSignInSwift */; };
+		D4BCD18F2F62FA2500459896 /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4BCD18D2F62FA2500459896 /* DiscoveryView.swift */; };
+		D4BCD1902F62FA2500459896 /* VerticalSwipeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4BCD18E2F62FA2500459896 /* VerticalSwipeFeedView.swift */; };
 		D4E527E02F15625800948DCE /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = D4E527DF2F15625800948DCE /* GoogleMobileAds */; };
 		D4FF4B6A7713A74DCB7DC183 /* Post.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183B04A2417F147ACECAFADA /* Post.swift */; };
 		D502C95F7423366F343221A6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2C11195FE0D38EC0C1838891 /* Assets.xcassets */; };
@@ -179,6 +183,8 @@
 		B67DBDFBDE6E03EEC51C977B /* UserPostsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsListView.swift; sourceTree = "<group>"; };
 		B9B44FE0D813461990375E22 /* FirestoreUserManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreUserManager.swift; sourceTree = "<group>"; };
 		BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
+		AA0100002F70000000000001 /* AppVersionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersionManager.swift; sourceTree = "<group>"; };
+		AA0100002F70000000000002 /* ForceUpdateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForceUpdateView.swift; sourceTree = "<group>"; };
 		C378DB4AD0334A309B2C6297 /* FeedAdManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedAdManager.swift; sourceTree = "<group>"; };
 		C415517CCB48A5524C16BEFC /* CreatePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostView.swift; sourceTree = "<group>"; };
 		C81162C40CE0C846263B8F88 /* UserProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileViewModel.swift; sourceTree = "<group>"; };
@@ -187,6 +193,8 @@
 		D2CC4517F9FF4FD6B5BE9FCD /* CreateCommentRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateCommentRequest.swift; sourceTree = "<group>"; };
 		D34F631468D04C8497FC7263 /* FirestoreNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreNotificationManager.swift; sourceTree = "<group>"; };
 		D46DAA9E2F22662E00122C0E /* SugarBeatRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SugarBeatRelease.entitlements; sourceTree = "<group>"; };
+		D4BCD18D2F62FA2500459896 /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
+		D4BCD18E2F62FA2500459896 /* VerticalSwipeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalSwipeFeedView.swift; sourceTree = "<group>"; };
 		D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LikeStateManager.swift; sourceTree = "<group>"; };
 		D7B4E6C4D8014EB3BF04BBAC /* FirestoreLikeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreLikeManager.swift; sourceTree = "<group>"; };
 		DC45BE2338DF44DDAF75CC2B /* ReportChannelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportChannelView.swift; sourceTree = "<group>"; };
@@ -289,6 +297,7 @@
 			children = (
 				7929B89469BBAABBB60C28FA /* APIClient.swift */,
 				BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */,
+				AA0100002F70000000000001 /* AppVersionManager.swift */,
 				EA3351B47836AD31B921B1AA /* CommentStateManager.swift */,
 				D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */,
 				B26CCED5DF000501172A4A27 /* MusicKitManager.swift */,
@@ -352,6 +361,8 @@
 				"CB77E7BC-606D-4ED3-9585-5862AED6451D" /* Compose42View.swift */,
 				DD72D37F34C087EDA9BBCBDF /* ContentView.swift */,
 				C415517CCB48A5524C16BEFC /* CreatePostView.swift */,
+				D4BCD18D2F62FA2500459896 /* DiscoveryView.swift */,
+				D4BCD18E2F62FA2500459896 /* VerticalSwipeFeedView.swift */,
 				0914B2CB716E6FF21D53C94C /* FollowingFeedView.swift */,
 				515336BF320DA0FF93EB8617 /* FollowListView.swift */,
 				6D4536DFDF93BD9B357F9A0D /* LoginView.swift */,
@@ -359,6 +370,7 @@
 				1E7FFC5D62E6356FD7140323 /* MyProfileView.swift */,
 				2200803D3C80571A5A7547AB /* NotificationsView.swift */,
 				A92F93301DAFB6745816E80D /* OnboardingView.swift */,
+				AA0100002F70000000000002 /* ForceUpdateView.swift */,
 				238FBCE3F4B305379B59F270 /* PostGridView.swift */,
 				6BC5939D8752E981B2440B2C /* ProfileEditView.swift */,
 				7C0A5F9CF0CC4A9FA02FF35A /* ProfileShareView.swift */,
@@ -492,6 +504,8 @@
 				491FE0B773339BE0A5BE1522 /* AdBannerView.swift in Sources */,
 				F1D18CD476513F063C9521EF /* AdConfig.swift in Sources */,
 				4DFA5E2032F7D459A2F331C0 /* AuthManager.swift in Sources */,
+				AA0100012F70000000000001 /* AppVersionManager.swift in Sources */,
+				AA0100012F70000000000002 /* ForceUpdateView.swift in Sources */,
 				423A8DAC58D7DCD6A6EB95C5 /* AuthModels.swift in Sources */,
 				0862D93BCC4CDE338D028FDE /* BlockedUsersView.swift in Sources */,
 				4330CF90B8BC7F5DCFD7B3EE /* Comment.swift in Sources */,
@@ -543,6 +557,8 @@
 				7E0D0D7D401DA7C39DFBDF64 /* LoginView.swift in Sources */,
 				4698B03E006E9296A0426AAD /* MusicKitManager.swift in Sources */,
 				5839C234EB4D5E683531E46D /* MusicModels.swift in Sources */,
+				D4BCD18F2F62FA2500459896 /* DiscoveryView.swift in Sources */,
+				D4BCD1902F62FA2500459896 /* VerticalSwipeFeedView.swift in Sources */,
 				9C709029DD57A854F520B5EB /* MusicPermissionView.swift in Sources */,
 				C4A97CB4B122827D67F55494 /* MyProfileView.swift in Sources */,
 				D6FEF7D0C3D16E08FCAE573C /* Notification.swift in Sources */,
@@ -658,7 +674,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.2;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sugarbeat.SugarBeat;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;
@@ -745,7 +761,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1.2;
+				MARKETING_VERSION = 1.2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sugarbeat.SugarBeat;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 5.9;

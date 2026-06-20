@@ -17,7 +17,6 @@ struct MyProfileView: View {
     @State private var showingSettings = false
     @State private var showingShareScreen = false
     @State private var isArtworkOnlyMode = false
-    @State private var viewMode: ViewMode = .posts
     @State private var scrollOffset: CGFloat = 0
     @State private var headerHeight: CGFloat = 0
 
@@ -27,11 +26,6 @@ struct MyProfileView: View {
     @State private var selectedGridType: GridType?
     @State private var selectedPosts: [Post] = []
 
-    enum ViewMode {
-        case posts
-        case sharedChannels
-        case personalChannels
-    }
 
     struct GridType: Identifiable {
         let id = UUID()
@@ -103,7 +97,7 @@ struct MyProfileView: View {
                 }
 
                 // コンテンツ
-                if viewMode == .posts {
+                Group {
                     if viewModel.isLoading && viewModel.posts.isEmpty {
                         ProgressView()
                             .tint(.white)
@@ -157,17 +151,7 @@ struct MyProfileView: View {
                         .environmentObject(authManager)
                         .id("posts-grid") // 投稿タブのときは固定のID
                     }
-                } else if viewMode == .sharedChannels {
-                    channelsListView(channelType: .shared)
-                        .id("shared-channels") // 参加中タブのID
-                } else {
-                    channelsListView(channelType: .personal)
-                        .id("personal-channels") // 個人タブのID
                 }
-            }
-            .onChange(of: viewMode) { newMode in
-                scrollOffset = 0
-                print("🔄 ViewMode changed to: \(newMode), resetting scroll offset")
             }
         }
     }
@@ -483,68 +467,6 @@ struct MyProfileView: View {
                 }
             )
 
-            // 切り替えボタン
-            HStack(spacing: 8) {
-                Button(action: {
-                    withAnimation {
-                        viewMode = .posts
-                    }
-                }) {
-                    Text("投稿")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(viewMode == .posts ? .white : .white.opacity(0.6))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(viewMode == .posts ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
-                        .cornerRadius(8)
-                }
-
-                Button(action: {
-                    withAnimation {
-                        viewMode = .sharedChannels
-                    }
-                    if viewModel.channels.isEmpty, let userId = authManager.currentUser?.id {
-                        Task {
-                            await viewModel.loadChannels(userId: userId)
-                        }
-                    }
-                }) {
-                    Text("参加中")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(viewMode == .sharedChannels ? .white : .white.opacity(0.6))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(viewMode == .sharedChannels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
-                        .cornerRadius(8)
-                }
-
-                Button(action: {
-                    withAnimation {
-                        viewMode = .personalChannels
-                    }
-                    if viewModel.channels.isEmpty, let userId = authManager.currentUser?.id {
-                        Task {
-                            await viewModel.loadChannels(userId: userId)
-                        }
-                    }
-                }) {
-                    Text("個人")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(viewMode == .personalChannels ? .white : .white.opacity(0.6))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                        .background(viewMode == .personalChannels ? Color.white.opacity(0.2) : Color.white.opacity(0.05))
-                        .cornerRadius(8)
-                }
-            }
-            .background(
-                GeometryReader { geo in
-                    Color.clear
-                        .onAppear {
-                            print("📏 [Header] Tab buttons section height: \(geo.size.height)")
-                        }
-                }
-            )
         }
         .background(
             GeometryReader { geo in
@@ -554,81 +476,6 @@ struct MyProfileView: View {
                     }
             }
         )
-    }
-
-    @ViewBuilder
-    private func channelsListView(channelType: ChannelType) -> some View {
-        let currentUserId = authManager.currentUser?.id ?? ""
-
-        // For personal channels, only show channels owned by the current user
-        // For shared channels, show all followed channels
-        let filteredChannels = viewModel.channels.filter { channel in
-            if channelType == .personal {
-                // 個人チャンネル: 自分が所有しているもののみ
-                let isOwned = channel.userId == currentUserId
-                return channel.channelType == channelType && isOwned
-            } else {
-                // 共有チャンネル: フォロー中のもの全て
-                return channel.channelType == channelType
-            }
-        }
-
-        if filteredChannels.isEmpty {
-            VStack(spacing: 12) {
-                Image(systemName: "music.note.house")
-                    .font(.system(size: 50))
-                    .foregroundColor(.white.opacity(0.4))
-                Text(channelType == .shared ? "参加中のチャンネルがありません" : "個人チャンネルがありません")
-                    .font(.system(size: 16))
-                    .foregroundColor(.white.opacity(0.7))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.top, headerHeight)
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(filteredChannels) { channel in
-                        if let channelId = channel.id {
-                            ZStack(alignment: .trailing) {
-                                NavigationLink(destination: ChannelDetailView(channelId: channelId)) {
-                                    ChannelRowView(channel: channel, isEditable: false)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-
-                                // 編集ボタンを上に重ねる（自分が作成したチャンネルのみ）
-                                if channel.userId == authManager.currentUser?.id {
-                                    Button(action: {
-                                        viewModel.editingChannel = channel
-                                        viewModel.editingChannelName = channel.name
-                                        viewModel.showEditChannelSheet = true
-                                    }) {
-                                        Image(systemName: "pencil.circle.fill")
-                                            .font(.system(size: 28))
-                                            .foregroundColor(.white.opacity(0.7))
-                                            .padding(.trailing, 16)
-                                    }
-                                }
-                            }
-                        } else {
-                            ChannelRowView(channel: channel)
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.top, headerHeight + 8)
-                .padding(.bottom, 100)
-            }
-            .sheet(isPresented: $viewModel.showEditChannelSheet) {
-                EditChannelNameSheet(
-                    channelName: $viewModel.editingChannelName,
-                    onSave: {
-                        Task {
-                            await viewModel.updateChannelName()
-                        }
-                    }
-                )
-            }
-        }
     }
 
     private func shareProfileLink() {
@@ -1241,13 +1088,9 @@ struct OriginalGridLayoutView: View {
 @MainActor
 class MyProfileViewModel: ObservableObject {
     @Published var posts: [Post] = []
-    @Published var channels: [Channel] = []
     @Published var isLoading = false
     @Published var isLoadingMore = false
     @Published var errorMessage: String?
-    @Published var showEditChannelSheet = false
-    @Published var editingChannel: Channel?
-    @Published var editingChannelName: String = ""
     @Published var postCount: Int = 0
 
     private var lastFetchTime: Date?
@@ -1374,57 +1217,6 @@ class MyProfileViewModel: ObservableObject {
         isLoadingMore = false
     }
 
-    func loadChannels(userId: String) async {
-        do {
-            // Load both own channels and followed channels in parallel
-            async let ownChannelsTask = FirestoreChannelManager.shared.getUserChannels(userId: userId)
-            async let followedChannelsTask = FirestoreChannelManager.shared.getFollowedChannels(userId: userId)
-
-            let (ownChannels, followedChannels) = try await (ownChannelsTask, followedChannelsTask)
-
-            // Merge and remove duplicates
-            var allChannels = ownChannels
-            for followedChannel in followedChannels {
-                if !allChannels.contains(where: { $0.id == followedChannel.id }) {
-                    allChannels.append(followedChannel)
-                }
-            }
-
-            channels = allChannels
-            print("✅ Loaded \(allChannels.count) channels for user: \(userId) (own: \(ownChannels.count), followed: \(followedChannels.count))")
-        } catch {
-            errorMessage = "チャンネルの取得に失敗しました"
-            print("❌ Failed to load channels: \(error)")
-        }
-    }
-
-    func updateChannelName() async {
-        guard let channelId = editingChannel?.id,
-              !editingChannelName.isEmpty else {
-            print("❌ Invalid channel data for update")
-            return
-        }
-
-        do {
-            try await FirestoreChannelManager.shared.updateChannel(channelId: channelId, name: editingChannelName)
-
-            // ローカルでチャンネル名を更新
-            if let index = channels.firstIndex(where: { $0.id == channelId }) {
-                channels[index].name = editingChannelName
-            }
-
-            // シートを閉じる
-            showEditChannelSheet = false
-            editingChannel = nil
-            editingChannelName = ""
-
-            print("✅ Channel name updated successfully")
-        } catch {
-            errorMessage = "チャンネル名の更新に失敗しました"
-            print("❌ Failed to update channel name: \(error)")
-        }
-    }
-
     func shouldRefreshPosts() -> Bool {
         guard let lastFetch = lastFetchTime else {
             return true // まだfetchしていない
@@ -1448,85 +1240,6 @@ class MyProfileViewModel: ObservableObject {
             // Fallback to loaded posts count
             postCount = posts.count
         }
-    }
-}
-
-// MARK: - Edit Channel Name Sheet
-struct EditChannelNameSheet: View {
-    @Environment(\.dismiss) var dismiss
-    @Binding var channelName: String
-    let onSave: () -> Void
-    @FocusState private var isTextFieldFocused: Bool
-
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                Color.black
-                    .ignoresSafeArea()
-
-                VStack(spacing: 24) {
-                    VStack(spacing: 8) {
-                        Text("チャンネル名を編集")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-
-                        Text("新しいチャンネル名を入力してください")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-
-                    TextField("チャンネル名", text: $channelName)
-                        .textFieldStyle(.plain)
-                        .font(.body)
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.white.opacity(0.1))
-                        .cornerRadius(12)
-                        .focused($isTextFieldFocused)
-
-                    HStack(spacing: 12) {
-                        Button(action: {
-                            dismiss()
-                        }) {
-                            Text("キャンセル")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(Color.white.opacity(0.2))
-                                .cornerRadius(12)
-                        }
-
-                        Button(action: {
-                            onSave()
-                            dismiss()
-                        }) {
-                            Text("保存")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    LinearGradient(
-                                        gradient: Gradient(colors: [Color(hex: "cc208e"), Color(hex: "6713d2")]),
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                                .cornerRadius(12)
-                        }
-                        .disabled(channelName.isEmpty)
-                        .opacity(channelName.isEmpty ? 0.5 : 1.0)
-                    }
-                }
-                .padding(24)
-            }
-            .onAppear {
-                isTextFieldFocused = true
-            }
-        }
-        .presentationDetents([.height(300)])
     }
 }
 

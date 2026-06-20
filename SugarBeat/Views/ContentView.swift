@@ -52,7 +52,7 @@ struct ContentView: View {
                 DiscoveryView(reloadTrigger: discoveryReloadTrigger)
                     .tabItem {
                         Image(systemName: "safari")
-                        Text("すべて")
+                        Text("発見")
                     }
                     .tag(0)
 

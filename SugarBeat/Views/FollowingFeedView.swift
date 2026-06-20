@@ -40,9 +40,8 @@ struct FollowingFeedView: View {
             .navigationBarHidden(true)
         }
         .onChange(of: reloadTrigger) { _ in
-            // タブ再タップ: 一番上へスクロール + 更新
+            // タブ再タップ: 一番上へスクロールするだけ（更新はしない）
             scrollToTopTrigger += 1
-            Task { await viewModel.refreshPosts() }
         }
         .task {
             if authManager.isAuthenticated && viewModel.posts.isEmpty {

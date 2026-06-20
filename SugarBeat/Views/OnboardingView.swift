@@ -19,8 +19,8 @@ struct OnboardingView: View {
         ),
         OnboardingPage(
             icon: "safari",
-            title: "すべての投稿を探索",
-            description: "「すべて」タブでは、全ユーザーの投稿を探索できます。\n新しい音楽との出会いを楽しみましょう！",
+            title: "投稿を発見しよう",
+            description: "「発見」タブでは、全ユーザーの投稿を探索できます。\n新しい音楽との出会いを楽しみましょう！",
             gradient: [Color.cyan, Color.green]
         ),
         OnboardingPage(

@@ -100,6 +100,13 @@ class UserProfileViewModel: ObservableObject {
         isLoading = false
     }
 
+    /// フォロー/解除後にフォロー数・フォロワー数だけを最新化する（キャッシュを使わない）
+    func refreshCounts(userId: String) async {
+        if let fresh = try? await FirestoreUserManager.shared.getUser(userId: userId, useCache: false, fetchCounts: true) {
+            user = fresh
+        }
+    }
+
     func blockUser(userId: String) async {
         do {
             try await FirestoreBlockManager.shared.blockUser(userId: userId)

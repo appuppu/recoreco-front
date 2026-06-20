@@ -39,9 +39,8 @@ struct DiscoveryView: View {
             }
         }
         .onChange(of: reloadTrigger) { _ in
-            // タブ再タップ: まず一番上へスクロール、その後そっと更新
+            // タブ再タップ: 一番上へスクロールするだけ（更新はしない）
             scrollToTopTrigger += 1
-            Task { await viewModel.refreshPosts() }
         }
     }
 }

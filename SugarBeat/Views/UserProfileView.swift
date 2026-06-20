@@ -239,7 +239,7 @@ struct UserProfileView: View {
             // 下段: フォローボタン（自分以外）
             if !isOwnProfile, let userId = user.id {
                 FollowButton(userId: userId, onChange: { _ in
-                    Task { await viewModel.loadUser(userId: userId) }
+                    Task { await viewModel.refreshCounts(userId: userId) }
                 })
                 .frame(maxWidth: .infinity)
             }

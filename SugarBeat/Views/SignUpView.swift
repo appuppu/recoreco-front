@@ -21,8 +21,9 @@ struct SignUpView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Background - flowing artwork grid
-                FlowingArtworkBackground()
+                // Background - simple black
+                Color.black
+                    .ignoresSafeArea()
 
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {

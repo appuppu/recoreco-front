@@ -15,6 +15,7 @@ struct FollowButton: View {
     @State private var isFollowing = false
     @State private var isLoading = true
     @State private var isProcessing = false
+    @State private var showingUnfollowConfirmation = false
 
     private var isSelf: Bool {
         Auth.auth().currentUser?.uid == userId
@@ -25,7 +26,7 @@ struct FollowButton: View {
             if isSelf {
                 EmptyView()
             } else {
-                Button(action: toggleFollow) {
+                Button(action: handleTap) {
                     Text(isFollowing ? "フォロー中" : "フォロー")
                         .font(.system(size: compact ? 13 : 14, weight: .semibold))
                         .foregroundColor(isFollowing ? .white.opacity(0.9) : .white)
@@ -57,6 +58,22 @@ struct FollowButton: View {
         .task {
             await loadFollowState()
         }
+        .confirmationDialog("フォローを解除しますか？", isPresented: $showingUnfollowConfirmation, titleVisibility: .visible) {
+            Button("フォロー解除", role: .destructive) {
+                performToggle(wasFollowing: true)
+            }
+            Button("キャンセル", role: .cancel) {}
+        }
+    }
+
+    /// タップ時: フォロー中なら確認ダイアログ、未フォローなら即フォロー
+    private func handleTap() {
+        guard !isProcessing else { return }
+        if isFollowing {
+            showingUnfollowConfirmation = true
+        } else {
+            performToggle(wasFollowing: false)
+        }
     }
 
     private func loadFollowState() async {
@@ -65,11 +82,10 @@ struct FollowButton: View {
         isLoading = false
     }
 
-    private func toggleFollow() {
+    private func performToggle(wasFollowing: Bool) {
         guard !isProcessing else { return }
-        let wasFollowing = isFollowing
         // 楽観的更新
-        isFollowing.toggle()
+        isFollowing = !wasFollowing
         isProcessing = true
         onChange?(isFollowing)
 

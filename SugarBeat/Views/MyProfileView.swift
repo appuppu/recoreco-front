@@ -311,6 +311,8 @@ struct MyProfileView: View {
                         } else if viewModel.shouldRefreshPosts() {
                             await viewModel.loadPosts(forceRefresh: true)
                         }
+                        // フォロー数・フォロワー数を最新化（他画面でフォロー操作した可能性があるため）
+                        await viewModel.fetchPostCount()
                     }
                 }
             }

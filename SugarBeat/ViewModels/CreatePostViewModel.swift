@@ -35,6 +35,31 @@ class CreatePostViewModel: ObservableObject {
         await musicKitManager.warmupSearch()
     }
 
+    /// 投稿タブを開くたびに、あ〜わ のランダムな1文字（五十音）で検索した結果を初期表示する。
+    /// （検索欄は空のままにし、おすすめ曲として候補を見せる。タブを開くたびに切り替わる）
+    func loadRandomSuggestions() async {
+        // ユーザーが検索入力中・選曲中のときは邪魔しない（それ以外は毎回更新）
+        guard searchQuery.isEmpty, selectedSong == nil else { return }
+
+        // 五十音（あ行〜わ行の代表的な清音）
+        let letters = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわ"
+        guard let randomLetter = letters.randomElement() else { return }
+
+        isSearching = true
+        errorMessage = nil
+        do {
+            let results = try await musicKitManager.searchMusic(query: String(randomLetter), limit: 25)
+            // 取得中にユーザーが入力し始めていたら上書きしない
+            if searchQuery.isEmpty, selectedSong == nil {
+                searchResults = results
+            }
+            print("🎲 loadRandomSuggestions: '\(randomLetter)' → \(results.count) results")
+        } catch {
+            print("⚠️ loadRandomSuggestions failed: \(error)")
+        }
+        isSearching = false
+    }
+
     // Public method to be called when search button is pressed
     func performSearch() async {
         // Cancel any ongoing search

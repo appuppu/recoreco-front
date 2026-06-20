@@ -338,6 +338,8 @@ struct CreatePostView: View {
         .onAppear {
             Task {
                 await viewModel.warmupSearch()
+                // a〜zのランダムな1文字で検索した結果を初期表示
+                await viewModel.loadRandomSuggestions()
             }
         }
     }

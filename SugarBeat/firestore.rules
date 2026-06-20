@@ -21,7 +21,9 @@ service cloud.firestore {
 
     function isValidPost() {
       return isAuthenticated() &&
-             request.resource.data.keys().hasAll(['userId', 'appleMusicTrackId', 'trackName', 'artistName', 'createdAt', 'updatedAt']);
+             request.resource.data.userId is string &&
+             request.resource.data.createdAt is timestamp &&
+             request.resource.data.updatedAt is timestamp;
     }
 
     // ========================================
@@ -40,6 +42,12 @@ service cloud.firestore {
                        // Can only update specific fields
                        request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['displayName', 'profileImageUrl', 'bio', 'isPublic', 'updatedAt', 'followingCount', 'followerCount', 'postCount']);
+
+      // 他ユーザーをフォロー/解除したとき、相手の followerCount のみ更新できる
+      // （フォロー処理のバッチで相手ドキュメントの followerCount を increment するため）
+      allow update: if isAuthenticated() &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['followerCount']);
 
       // Users can delete their own profile
       allow delete: if isOwner(userId);
@@ -101,23 +109,30 @@ service cloud.firestore {
       allow read: if true;
 
       // Users can create posts
+      // channelId is optional (posts are no longer tied to channels)
       allow create: if isAuthenticated() &&
                        isValidPost() &&
                        request.resource.data.userId == request.auth.uid;
 
       // Users can update their own posts (comment only)
-      // Also allow updating commentCount and likeCount (for automated counters)
       allow update: if isAuthenticated() &&
-                       (isOwner(resource.data.userId) &&
-                        request.resource.data.diff(resource.data).affectedKeys()
-                          .hasOnly(['comment', 'updatedAt'])) ||
-                       (request.resource.data.diff(resource.data).affectedKeys()
-                          .hasOnly(['commentCount']) ||
-                        request.resource.data.diff(resource.data).affectedKeys()
-                          .hasOnly(['likeCount']));
+                       isOwner(resource.data.userId) &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['comment', 'updatedAt']);
 
-      // Users can delete their own posts
-      allow delete: if isAuthenticated() && isOwner(resource.data.userId);
+      // Anyone can update like/comment counts
+      allow update: if isAuthenticated() &&
+                       request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['likeCount', 'commentCount']);
+
+      // Users can delete their own posts OR channel owner can delete posts in their channel
+      allow delete: if isAuthenticated() &&
+                       (isOwner(resource.data.userId) ||
+                        // Channel owner can delete any post in their channel
+                        ('channelId' in resource.data &&
+                         resource.data.channelId is string &&
+                         resource.data.channelId.size() > 0 &&
+                         isOwner(get(/databases/$(database)/documents/channels/$(resource.data.channelId)).data.userId)));
 
       // ========================================
       // Likes Subcollection
@@ -157,23 +172,6 @@ service cloud.firestore {
         allow delete: if isAuthenticated() &&
                          (isOwner(resource.data.userId) ||
                           isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.userId));
-
-        // ========================================
-        // Comment Likes Subcollection
-        // ========================================
-        match /likes/{userId} {
-          // Anyone can read comment likes
-          allow read: if isAuthenticated();
-
-          // Users can like comments (their own userId)
-          allow create: if isAuthenticated() && isOwner(userId);
-
-          // Users can unlike comments (their own userId)
-          allow delete: if isAuthenticated() && isOwner(userId);
-
-          // No update
-          allow update: if false;
-        }
       }
     }
 
@@ -246,13 +244,15 @@ service cloud.firestore {
       // Users can create their own channels
       allow create: if isAuthenticated() &&
                        request.resource.data.userId == request.auth.uid &&
-                       request.resource.data.keys().hasAll(['userId', 'name', 'createdAt', 'updatedAt']);
+                       request.resource.data.keys().hasAll(['userId', 'name', 'createdAt', 'updatedAt', 'channelType', 'accessType']) &&
+                       request.resource.data.channelType in ['personal', 'shared'] &&
+                       request.resource.data.accessType in ['public', 'private'];
 
       // Users can update their own channels
       allow update: if isAuthenticated() &&
                        isOwner(resource.data.userId) &&
                        request.resource.data.diff(resource.data).affectedKeys()
-                         .hasOnly(['name', 'updatedAt', 'latestPostId', 'latestPostAt', 'latestPostArtworkUrl']);
+                         .hasOnly(['name', 'updatedAt', 'latestPostId', 'latestPostAt', 'latestPostArtworkUrl', 'channelType', 'accessType']);
 
       // Users can delete their own channels
       allow delete: if isAuthenticated() && isOwner(resource.data.userId);
@@ -264,10 +264,10 @@ service cloud.firestore {
         // Anyone can read channel followers
         allow read: if isAuthenticated();
 
-        // Users can follow channels (only their own userId)
-        allow create: if isAuthenticated() && isOwner(followerId);
+        // Users can follow channels
+        allow create: if isAuthenticated();
 
-        // Channel owner can delete followers when deleting channel, or users can unfollow
+        // Channel owner can delete followers when deleting channel
         allow delete: if isAuthenticated() &&
                          (isOwner(followerId) ||
                           isOwner(get(/databases/$(database)/documents/channels/$(channelId)).data.userId));
@@ -305,6 +305,16 @@ service cloud.firestore {
         // No update
         allow update: if false;
       }
+    }
+
+    // ========================================
+    // Config Collection (アプリ設定: 強制アップデートの最低バージョン等)
+    // ========================================
+    match /config/{document} {
+      // 誰でも読める（未ログイン・起動直後にバージョンチェックするため）
+      allow read: if true;
+      // 書き込みはアプリからは不可（コンソールから管理者が手動更新）
+      allow write: if false;
     }
 
     // ========================================

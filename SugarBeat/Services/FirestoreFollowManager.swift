@@ -46,6 +46,16 @@ class FirestoreFollowManager {
         do {
             try await batch.commit()
             print("✅ Followed user: \(userId)")
+
+            // フォロー通知を作成（自分自身は上のguardで除外済み）
+            if let currentUser = try? await FirestoreUserManager.shared.getUser(userId: currentUserId) {
+                let notification = Notification(
+                    from: currentUser,
+                    recipientId: userId,
+                    type: .follow
+                )
+                try? await FirestoreNotificationManager.shared.createNotification(notification)
+            }
         } catch {
             throw error
         }

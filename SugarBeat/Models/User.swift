@@ -47,4 +47,15 @@ struct User: Codable, Identifiable, Hashable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    /// ユーザー情報が未取得のときに使う仮の User（フィードのカード表示用）
+    static func placeholder(userId: String) -> User {
+        User(
+            id: userId,
+            username: "",
+            email: nil,
+            displayName: "",
+            profileImageUrl: nil
+        )
+    }
 }

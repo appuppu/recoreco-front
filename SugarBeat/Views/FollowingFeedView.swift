@@ -3,9 +3,12 @@ import FirebaseAuth
 
 /// フォロー中タブ - フォローしているユーザーの投稿を縦スワイプ表示
 struct FollowingFeedView: View {
+    var reloadTrigger: Int = 0
     @StateObject private var viewModel = FollowingFeedViewModel()
     @EnvironmentObject private var authManager: AuthManager
     @State private var showingLoginSheet = false
+    @State private var showingLoginPrompt = false
+    @State private var scrollToTopTrigger = 0
 
     var body: some View {
         NavigationStack {
@@ -19,23 +22,27 @@ struct FollowingFeedView: View {
                     // No posts from followed users
                     emptyState
                 } else {
-                    VerticalSwipeFeedView(
+                    ScrollableFeedView(
                         posts: viewModel.posts,
                         isLoading: viewModel.isLoading,
+                        isLoadingMore: viewModel.isLoadingMore,
                         onLoadMore: {
                             await viewModel.loadMorePosts()
                         },
                         onRefresh: {
                             await viewModel.refreshPosts()
-                        }
+                        },
+                        showingLoginPrompt: $showingLoginPrompt,
+                        scrollToTopTrigger: scrollToTopTrigger
                     )
                 }
             }
-            .navigationTitle("フォロー中")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(.black.opacity(0.9), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .navigationBarHidden(true)
+        }
+        .onChange(of: reloadTrigger) { _ in
+            // タブ再タップ: 一番上へスクロール + 更新
+            scrollToTopTrigger += 1
+            Task { await viewModel.refreshPosts() }
         }
         .task {
             if authManager.isAuthenticated && viewModel.posts.isEmpty {
@@ -79,6 +86,7 @@ struct FollowingFeedView: View {
 class FollowingFeedViewModel: ObservableObject {
     @Published var posts: [Post] = []
     @Published var isLoading = false
+    @Published var isLoadingMore = false
     @Published var hasMorePosts = true
 
     private var allPosts: [Post] = []
@@ -123,19 +131,14 @@ class FollowingFeedViewModel: ObservableObject {
                 return
             }
 
-            // Get list of followed user IDs
+            // Get list of followed user IDs, plus the current user themselves
+            // （フォロー中の人 + 自分の投稿を表示する）
             let followedUserIds = try await FirestoreFollowManager.shared.getFollowingIds(userId: currentUserId)
+            let feedUserIds = Array(Set(followedUserIds + [currentUserId]))
 
-            guard !followedUserIds.isEmpty else {
-                allPosts = []
-                posts = []
-                isLoading = false
-                return
-            }
-
-            // Get posts from followed users
+            // Get posts from followed users + self
             let (fetchedPosts, _) = try await FirestorePostManager.shared.getFollowingFeed(
-                userIds: followedUserIds,
+                userIds: feedUserIds,
                 limit: 100
             )
 
@@ -143,14 +146,18 @@ class FollowingFeedViewModel: ObservableObject {
             let blockedUserIds = (try? await FirestoreBlockManager.shared.getAllBlockRelatedUsers()) ?? []
             allPosts = fetchedPosts.filter { !blockedUserIds.contains($0.userId) }
 
-            // Shuffle for random order
-            allPosts.shuffle()
+            // Sort by newest first
+            allPosts.sort { $0.createdAt > $1.createdAt }
 
             // Load first batch
             posts = Array(allPosts.prefix(batchSize))
             hasMorePosts = allPosts.count > batchSize
 
-            print("✅ Loaded \(posts.count) posts from \(followedUserIds.count) followed users (shuffled)")
+            // 投稿者をまとめて事前取得してキャッシュを温める（各カードの個別リクエストを抑制）
+            let authorIds = Array(Set(posts.map { $0.userId }))
+            _ = try? await FirestoreUserManager.shared.getUsers(userIds: authorIds)
+
+            print("✅ Loaded \(posts.count) posts from \(followedUserIds.count) followed users (newest first)")
         } catch {
             print("❌ Failed to load following feed: \(error)")
         }
@@ -159,20 +166,26 @@ class FollowingFeedViewModel: ObservableObject {
     }
 
     func loadMorePosts() async {
-        guard hasMorePosts, !isLoading else { return }
+        guard hasMorePosts, !isLoadingMore, !isLoading else { return }
+        isLoadingMore = true
 
         let currentCount = posts.count
         let nextBatch = Array(allPosts.dropFirst(currentCount).prefix(batchSize))
 
         if nextBatch.isEmpty {
-            // Reached the end, loop back to beginning
-            posts = Array(allPosts.prefix(batchSize))
-            print("🔄 Looped back to beginning of following feed")
+            hasMorePosts = false
+            print("🔄 Reached the end of following feed")
         } else {
+            // 追加分の投稿者も事前取得
+            let authorIds = Array(Set(nextBatch.map { $0.userId }))
+            _ = try? await FirestoreUserManager.shared.getUsers(userIds: authorIds)
+
             posts.append(contentsOf: nextBatch)
             hasMorePosts = posts.count < allPosts.count
             print("✅ Loaded \(nextBatch.count) more posts (total: \(posts.count))")
         }
+
+        isLoadingMore = false
     }
 
     func refreshPosts() async {

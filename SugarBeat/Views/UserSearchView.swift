@@ -102,11 +102,8 @@ struct UserSearchView: View {
         ScrollView {
             LazyVStack(spacing: 12) {
                 ForEach(viewModel.users) { user in
-                    if let userId = user.id {
-                        NavigationLink(destination: UserProfileView(userId: userId)) {
-                            UserSearchRow(user: user)
-                        }
-                        .buttonStyle(PlainButtonStyle())
+                    if user.id != nil {
+                        UserSearchRow(user: user)
                     }
                 }
             }
@@ -121,46 +118,52 @@ struct UserSearchRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            // Profile image
-            AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { phase in
-                if let image = phase.image {
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } else {
-                    Image("recoreco")
-                        .resizable()
-                        .scaledToFill()
+            // プロフィール部分（画像・名前・bio）タップでユーザー詳細へ
+            NavigationLink(destination: Group {
+                if let userId = user.id {
+                    UserProfileView(userId: userId)
+                }
+            }) {
+                HStack(spacing: 12) {
+                    // Profile image
+                    AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { phase in
+                        if let image = phase.image {
+                            image
+                                .resizable()
+                                .scaledToFill()
+                        } else {
+                            Image("recoreco")
+                                .resizable()
+                                .scaledToFill()
+                        }
+                    }
+                    .frame(width: 50, height: 50)
+                    .clipShape(Circle())
+
+                    // User info
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(user.username)
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .lineLimit(1)
+
+                        if let bio = user.bio, !bio.isEmpty {
+                            Text(bio)
+                                .font(.caption)
+                                .foregroundColor(.white.opacity(0.6))
+                                .lineLimit(1)
+                        }
+                    }
+
+                    Spacer()
                 }
             }
-            .frame(width: 50, height: 50)
-            .clipShape(Circle())
+            .buttonStyle(PlainButtonStyle())
 
-            // User info
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 4) {
-                    Image(systemName: "network")
-                        .font(.system(size: 14))
-                        .foregroundColor(.white.opacity(0.6))
-                    Text(user.username)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.white)
-                }
-
-                if let bio = user.bio, !bio.isEmpty {
-                    Text(bio)
-                        .font(.caption)
-                        .foregroundColor(.white.opacity(0.6))
-                        .lineLimit(1)
-                }
+            // フォローボタン
+            if let userId = user.id {
+                FollowButton(userId: userId, compact: true)
             }
-
-            Spacer()
-
-            // Navigate to profile icon
-            Image(systemName: "chevron.right")
-                .font(.system(size: 14))
-                .foregroundColor(.white.opacity(0.4))
         }
         .padding(.vertical, 8)
         .padding(.horizontal, 12)

@@ -156,31 +156,23 @@ class FirestorePostManager {
     private func batchCheckLikes(posts: [Post], userId: String) async throws -> [Post] {
         var updatedPosts = posts
 
-        // Batch check likes and counts to reduce queries
         let postIds = posts.compactMap { $0.id }
-
         guard !postIds.isEmpty else { return updatedPosts }
 
-        // Use Task group for parallel execution
-        await withTaskGroup(of: (Int, Bool, Int, Int).self) { group in
+        // likeCount / commentCount は Post ドキュメントに非正規化保存されているため
+        // サブコレクションを全件カウントせず、ドキュメントの値をそのまま使う。
+        // （旧実装は1投稿につき3クエリ＝N×3だったが、ここでは追加クエリ0）
+        // 「自分がいいね済みか」だけは個別に確認が必要なので、それのみ並列取得する。
+        await withTaskGroup(of: (Int, Bool).self) { group in
             for (index, postId) in postIds.enumerated() {
                 group.addTask {
                     let isLiked = (try? await FirestoreLikeManager.shared.isPostLiked(postId: postId, userId: userId)) ?? false
-
-                    // Get like count
-                    let likeCount = await self.getLikeCount(postId: postId)
-
-                    // Get comment count
-                    let commentCount = await self.getCommentCount(postId: postId)
-
-                    return (index, isLiked, likeCount, commentCount)
+                    return (index, isLiked)
                 }
             }
 
-            for await (index, isLiked, likeCount, commentCount) in group {
+            for await (index, isLiked) in group {
                 updatedPosts[index].isLiked = isLiked
-                updatedPosts[index].likeCount = likeCount
-                updatedPosts[index].commentCount = commentCount
             }
         }
 
@@ -226,6 +218,40 @@ class FirestorePostManager {
             var posts = try snapshot.documents.compactMap { try $0.data(as: Post.self) }
 
             // Batch check likes (optimized with parallel execution)
+            if let currentUserId = Auth.auth().currentUser?.uid {
+                posts = try await batchCheckLikes(posts: posts, userId: currentUserId)
+            }
+
+            let lastDoc = snapshot.documents.last
+            return (posts, lastDoc)
+        } catch {
+            throw FirestorePostError.fetchFailed(error)
+        }
+    }
+
+    // MARK: - Get Posts By Artist
+
+    /// 指定アーティスト名の投稿を新しい順に取得（ページング対応）。
+    /// artistName は完全一致。投稿カードのアーティスト名ボタンから使う。
+    func getPostsByArtist(artistName: String, limit: Int = 30, lastDocument: DocumentSnapshot? = nil) async throws -> ([Post], DocumentSnapshot?) {
+        do {
+            var query = db.collection(postsCollection)
+                .whereField("artistName", isEqualTo: artistName)
+                .order(by: "createdAt", descending: true)
+                .limit(to: limit)
+
+            if let lastDocument = lastDocument {
+                query = query.start(afterDocument: lastDocument)
+            }
+
+            let snapshot = try await query.getDocuments()
+            var posts = try snapshot.documents.compactMap { try $0.data(as: Post.self) }
+
+            // Filter out blocked users
+            let blockedUserIds = (try? await FirestoreBlockManager.shared.getAllBlockRelatedUsers()) ?? []
+            posts = posts.filter { !blockedUserIds.contains($0.userId) }
+
+            // 自分のいいね状態を並列チェック
             if let currentUserId = Auth.auth().currentUser?.uid {
                 posts = try await batchCheckLikes(posts: posts, userId: currentUserId)
             }
@@ -323,32 +349,37 @@ class FirestorePostManager {
         do {
             // Firestore 'in' query supports up to 10 values
             let chunkedUserIds = userIds.chunked(into: 10)
-            var allPosts: [Post] = []
 
-            for chunk in chunkedUserIds {
-                var query = db.collection(postsCollection)
-                    .whereField("userId", in: chunk)
-                    .order(by: "createdAt", descending: true)
-                    .limit(to: limit)
-
-                if let lastDocument = lastDocument {
-                    query = query.start(afterDocument: lastDocument)
+            // チャンクごとのクエリを「並列」実行（直列待ちをなくして高速化）
+            var allPosts: [Post] = try await withThrowingTaskGroup(of: [Post].self) { group in
+                for chunk in chunkedUserIds {
+                    group.addTask {
+                        var query = self.db.collection(self.postsCollection)
+                            .whereField("userId", in: chunk)
+                            .order(by: "createdAt", descending: true)
+                            .limit(to: limit)
+                        if let lastDocument = lastDocument {
+                            query = query.start(afterDocument: lastDocument)
+                        }
+                        let snapshot = try await query.getDocuments()
+                        return try snapshot.documents.compactMap { try $0.data(as: Post.self) }
+                    }
                 }
-
-                let snapshot = try await query.getDocuments()
-                let posts = try snapshot.documents.compactMap { try $0.data(as: Post.self) }
-                allPosts.append(contentsOf: posts)
+                var collected: [Post] = []
+                for try await posts in group {
+                    collected.append(contentsOf: posts)
+                }
+                return collected
             }
 
             // Sort by createdAt descending
             allPosts.sort { $0.createdAt > $1.createdAt }
             allPosts = Array(allPosts.prefix(limit))
 
-            // Check if current user liked these posts
+            // 「自分がいいね済みか」を並列チェック（likeCount/commentCount は
+            // 非正規化済みなので Post のフィールドをそのまま使い、追加クエリ不要）
             if let currentUserId = Auth.auth().currentUser?.uid {
-                for i in 0..<allPosts.count {
-                    allPosts[i].isLiked = try await FirestoreLikeManager.shared.isPostLiked(postId: allPosts[i].id ?? "", userId: currentUserId)
-                }
+                allPosts = try await batchCheckLikes(posts: allPosts, userId: currentUserId)
             }
 
             return (allPosts, nil)

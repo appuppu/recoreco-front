@@ -106,8 +106,8 @@ struct NotificationNavigationWrapper: View {
                     NotificationRow(notification: notification)
                 }
 
-            case .channelFollow:
-                // Navigate to user profile
+            case .channelFollow, .follow:
+                // Navigate to the sender's user profile
                 NavigationLink {
                     UserProfileView(userId: notification.senderId)
                         .task {
@@ -358,6 +358,8 @@ struct NotificationRow: View {
             } else {
                 return "\(displayName)さんがあなたのチャンネルを\(actionText)"
             }
+        case .follow:
+            return "\(displayName)さんがあなたをフォローしました"
         }
     }
 
@@ -369,6 +371,8 @@ struct NotificationRow: View {
             return "bubble.right.fill"
         case .channelFollow:
             return "music.note.house.fill"
+        case .follow:
+            return "person.fill.badge.plus"
         }
     }
 

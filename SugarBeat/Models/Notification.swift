@@ -20,6 +20,7 @@ struct Notification: Codable, Identifiable {
         case like
         case comment
         case channelFollow
+        case follow // ユーザーフォロー
     }
 
     enum CodingKeys: String, CodingKey {

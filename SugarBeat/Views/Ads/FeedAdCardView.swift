@@ -26,7 +26,7 @@ struct FeedAdCardView: View {
                 // Placeholder while loading - auto-hide after timeout
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color.white.opacity(0.05))
-                    .frame(height: 400)
+                    .frame(height: 240)
                     .padding(.horizontal, 16)
                     .overlay(
                         VStack {

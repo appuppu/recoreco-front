@@ -71,6 +71,12 @@ struct SugarBeatApp: App {
     init() {
         // Firebase is configured in AuthManager.init() before any Firebase access
 
+        // 画像キャッシュを拡張（AsyncImage は URLSession.shared = URLCache.shared を使う）。
+        // プロフィール画像・アートワーク等が2回目以降ディスク/メモリから即表示される。
+        let memoryCapacity = 100 * 1024 * 1024   // 100 MB（メモリ）
+        let diskCapacity = 300 * 1024 * 1024     // 300 MB（ディスク）
+        URLCache.shared = URLCache(memoryCapacity: memoryCapacity, diskCapacity: diskCapacity)
+
         // Google Mobile Ads SDKを初期化
         #if DEBUG
         // テストデバイスIDを設定（シミュレータは自動的にテストデバイス扱い）
@@ -117,9 +123,8 @@ struct SugarBeatApp: App {
                 // Launch Screen
                 if showLaunchScreen {
                     ZStack {
-                        // Background
-                        Color.black
-                            .ignoresSafeArea()
+                        // Background - flowing artwork grid
+                        FlowingArtworkBackground()
 
                         // App Name
                         Text("おすすめの音楽を\n紹介しよう！")
@@ -131,6 +136,11 @@ struct SugarBeatApp: App {
                     .transition(.opacity)
                     .zIndex(1)
                 }
+            }
+            .task {
+                // ラウンチスクリーン表示中に背景アートワークの取得を先行開始する
+                // （全てタブが表示されるのを待たずにロードしておく）
+                await ArtworkBackgroundLoader.shared.loadIfNeeded()
             }
             .onAppear {
                 // トラッキング許可をリクエスト

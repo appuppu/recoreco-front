@@ -16,6 +16,9 @@
 		12AC620833BF151FBC58EF26 /* FollowingFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0914B2CB716E6FF21D53C94C /* FollowingFeedView.swift */; };
 		16BA92C92F7746728D9F6E9E /* NativeAdViewWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C05B9D23CC4593A1A77834 /* NativeAdViewWrapper.swift */; };
 		17ADB4A2E07454907F0AFF68 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A92F93301DAFB6745816E80D /* OnboardingView.swift */; };
+		AA0300012F70000000000001 /* FlowingArtworkBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0300002F70000000000001 /* FlowingArtworkBackground.swift */; };
+		AA0400012F70000000000001 /* ArtistPostsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0400002F70000000000001 /* ArtistPostsView.swift */; };
+		AA0500012F70000000000001 /* MiniPlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0500002F70000000000001 /* MiniPlayerBar.swift */; };
 		1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */; };
 		1EFBC98D8DC74E479CBA5E49 /* Report.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6817AA6DB43649AB8739BC1E /* Report.swift */; };
 		218AAA600F834B268CADEF0E /* FirestoreLikeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B4E6C4D8014EB3BF04BBAC /* FirestoreLikeManager.swift */; };
@@ -55,6 +58,7 @@
 		6B5108AB7A294A14AC702616 /* FirestoreNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA80433F581F401CB93DE997 /* FirestoreNotificationManager.swift */; };
 		70EBAD49BB23436FA58C8C77 /* FeedAdCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4441A73EE70A4C1A8DBE7B27 /* FeedAdCardView.swift */; };
 		73E2F498A8429AAF556F2666 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 515336BF320DA0FF93EB8617 /* FollowListView.swift */; };
+		AA0200012F70000000000001 /* FollowButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200002F70000000000001 /* FollowButton.swift */; };
 		7899EBE611E54766AA7BDA02 /* FirestoreChannelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F182774B0DE42D3B8DB0796 /* FirestoreChannelManager.swift */; };
 		7E0D0D7D401DA7C39DFBDF64 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D4536DFDF93BD9B357F9A0D /* LoginView.swift */; };
 		80CB02F5B66A457595F0EC8B /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 94B0F86266FA462086693956 /* GoogleService-Info.plist */; };
@@ -92,7 +96,7 @@
 		D425E03B2F155DC500AC4B7F /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = D425E03A2F155DC500AC4B7F /* GoogleSignIn */; };
 		D425E03D2F155DC500AC4B7F /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = D425E03C2F155DC500AC4B7F /* GoogleSignInSwift */; };
 		D4BCD18F2F62FA2500459896 /* DiscoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4BCD18D2F62FA2500459896 /* DiscoveryView.swift */; };
-		D4BCD1902F62FA2500459896 /* VerticalSwipeFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4BCD18E2F62FA2500459896 /* VerticalSwipeFeedView.swift */; };
+		D4BCD1902F62FA2500459896 /* ScrollableFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4BCD18E2F62FA2500459896 /* ScrollableFeedView.swift */; };
 		D4E527E02F15625800948DCE /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = D4E527DF2F15625800948DCE /* GoogleMobileAds */; };
 		D4FF4B6A7713A74DCB7DC183 /* Post.swift in Sources */ = {isa = PBXBuildFile; fileRef = 183B04A2417F147ACECAFADA /* Post.swift */; };
 		D502C95F7423366F343221A6 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 2C11195FE0D38EC0C1838891 /* Assets.xcassets */; };
@@ -145,6 +149,7 @@
 		4FE9F9756265FB4681327DAF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		50665AC366864756833172F5 /* FirestorePostManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestorePostManager.swift; sourceTree = "<group>"; };
 		515336BF320DA0FF93EB8617 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
+		AA0200002F70000000000001 /* FollowButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowButton.swift; sourceTree = "<group>"; };
 		5553547BD0C745B6ADB18387 /* FirestoreBlockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreBlockManager.swift; sourceTree = "<group>"; };
 		5EC006309F1FF7C328CBEB44 /* SugarBeatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SugarBeatApp.swift; sourceTree = "<group>"; };
 		5F182774B0DE42D3B8DB0796 /* FirestoreChannelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreChannelManager.swift; sourceTree = "<group>"; };
@@ -174,6 +179,9 @@
 		A8CCFD4A0FFF49A5ABC211A7 /* FirestoreListenerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreListenerManager.swift; sourceTree = "<group>"; };
 		A8ECEAF7D9DA47DEA03426EE /* DeepLinkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkManager.swift; sourceTree = "<group>"; };
 		A92F93301DAFB6745816E80D /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		AA0300002F70000000000001 /* FlowingArtworkBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowingArtworkBackground.swift; sourceTree = "<group>"; };
+		AA0400002F70000000000001 /* ArtistPostsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtistPostsView.swift; sourceTree = "<group>"; };
+		AA0500002F70000000000001 /* MiniPlayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerBar.swift; sourceTree = "<group>"; };
 		AB188FDA1D0978E1D3ECA85D /* UserPostsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsView.swift; sourceTree = "<group>"; };
 		ACE0B665A5F1830C3DA11AC2 /* CreatePostRequest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostRequest.swift; sourceTree = "<group>"; };
 		B1AC67B5B53B40D0BECA88CF /* FirestoreReportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreReportManager.swift; sourceTree = "<group>"; };
@@ -194,7 +202,7 @@
 		D34F631468D04C8497FC7263 /* FirestoreNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreNotificationManager.swift; sourceTree = "<group>"; };
 		D46DAA9E2F22662E00122C0E /* SugarBeatRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = SugarBeatRelease.entitlements; sourceTree = "<group>"; };
 		D4BCD18D2F62FA2500459896 /* DiscoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryView.swift; sourceTree = "<group>"; };
-		D4BCD18E2F62FA2500459896 /* VerticalSwipeFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerticalSwipeFeedView.swift; sourceTree = "<group>"; };
+		D4BCD18E2F62FA2500459896 /* ScrollableFeedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollableFeedView.swift; sourceTree = "<group>"; };
 		D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LikeStateManager.swift; sourceTree = "<group>"; };
 		D7B4E6C4D8014EB3BF04BBAC /* FirestoreLikeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreLikeManager.swift; sourceTree = "<group>"; };
 		DC45BE2338DF44DDAF75CC2B /* ReportChannelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportChannelView.swift; sourceTree = "<group>"; };
@@ -362,14 +370,18 @@
 				DD72D37F34C087EDA9BBCBDF /* ContentView.swift */,
 				C415517CCB48A5524C16BEFC /* CreatePostView.swift */,
 				D4BCD18D2F62FA2500459896 /* DiscoveryView.swift */,
-				D4BCD18E2F62FA2500459896 /* VerticalSwipeFeedView.swift */,
+				D4BCD18E2F62FA2500459896 /* ScrollableFeedView.swift */,
 				0914B2CB716E6FF21D53C94C /* FollowingFeedView.swift */,
 				515336BF320DA0FF93EB8617 /* FollowListView.swift */,
+				AA0200002F70000000000001 /* FollowButton.swift */,
 				6D4536DFDF93BD9B357F9A0D /* LoginView.swift */,
 				E05AAEB94588E21479720283 /* MusicPermissionView.swift */,
 				1E7FFC5D62E6356FD7140323 /* MyProfileView.swift */,
 				2200803D3C80571A5A7547AB /* NotificationsView.swift */,
 				A92F93301DAFB6745816E80D /* OnboardingView.swift */,
+				AA0300002F70000000000001 /* FlowingArtworkBackground.swift */,
+				AA0400002F70000000000001 /* ArtistPostsView.swift */,
+				AA0500002F70000000000001 /* MiniPlayerBar.swift */,
 				AA0100002F70000000000002 /* ForceUpdateView.swift */,
 				238FBCE3F4B305379B59F270 /* PostGridView.swift */,
 				6BC5939D8752E981B2440B2C /* ProfileEditView.swift */,
@@ -552,18 +564,22 @@
 				491ADCE154E136D5E192C046 /* EditableImagePicker.swift in Sources */,
 				834B1D11FBBC34645F022B66 /* FeedViewModel.swift in Sources */,
 				73E2F498A8429AAF556F2666 /* FollowListView.swift in Sources */,
+				AA0200012F70000000000001 /* FollowButton.swift in Sources */,
 				12AC620833BF151FBC58EF26 /* FollowingFeedView.swift in Sources */,
 				1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */,
 				7E0D0D7D401DA7C39DFBDF64 /* LoginView.swift in Sources */,
 				4698B03E006E9296A0426AAD /* MusicKitManager.swift in Sources */,
 				5839C234EB4D5E683531E46D /* MusicModels.swift in Sources */,
 				D4BCD18F2F62FA2500459896 /* DiscoveryView.swift in Sources */,
-				D4BCD1902F62FA2500459896 /* VerticalSwipeFeedView.swift in Sources */,
+				D4BCD1902F62FA2500459896 /* ScrollableFeedView.swift in Sources */,
 				9C709029DD57A854F520B5EB /* MusicPermissionView.swift in Sources */,
 				C4A97CB4B122827D67F55494 /* MyProfileView.swift in Sources */,
 				D6FEF7D0C3D16E08FCAE573C /* Notification.swift in Sources */,
 				4CABBE25B7EF099BB3BF10BA /* NotificationsView.swift in Sources */,
 				17ADB4A2E07454907F0AFF68 /* OnboardingView.swift in Sources */,
+				AA0300012F70000000000001 /* FlowingArtworkBackground.swift in Sources */,
+				AA0400012F70000000000001 /* ArtistPostsView.swift in Sources */,
+				AA0500012F70000000000001 /* MiniPlayerBar.swift in Sources */,
 				219FE52D6AF412D066A7E6B6 /* PlaybackStateManager.swift in Sources */,
 				D4FF4B6A7713A74DCB7DC183 /* Post.swift in Sources */,
 				BFB8482B1F830CA2CF275A20 /* PostGridView.swift in Sources */,

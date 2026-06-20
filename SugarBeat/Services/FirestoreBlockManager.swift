@@ -7,7 +7,19 @@ class FirestoreBlockManager {
     private let db = Firestore.firestore()
     private let blocksCollection = "blocks"
 
+    // ブロック関連ユーザーIDの短期キャッシュ。
+    // フィードの初期化やページングのたびに2クエリ走るのを抑える。
+    private var blockRelatedCache: [String]?
+    private var blockRelatedCacheTime: Date?
+    private let blockCacheDuration: TimeInterval = 120 // 2分
+
     private init() {}
+
+    /// ブロック状態が変わったらキャッシュを破棄する
+    private func invalidateBlockCache() {
+        blockRelatedCache = nil
+        blockRelatedCacheTime = nil
+    }
 
     // MARK: - Block User
 
@@ -31,6 +43,8 @@ class FirestoreBlockManager {
         do {
             try await db.collection(blocksCollection).document(blockId).setData(blockData)
             print("✅ Blocked user: \(userId)")
+
+            invalidateBlockCache()
 
             // Optionally: Remove follow relationships
             try? await FirestoreFollowManager.shared.unfollowUser(userId: userId)
@@ -60,6 +74,8 @@ class FirestoreBlockManager {
         do {
             try await db.collection(blocksCollection).document(blockId).delete()
             print("✅ Unblocked user: \(userId)")
+
+            invalidateBlockCache()
         } catch {
             throw error
         }
@@ -156,6 +172,13 @@ class FirestoreBlockManager {
             throw FirestoreUserError.notAuthenticated
         }
 
+        // 短期キャッシュが有効ならそれを返す（フィード初期化のたびの2クエリを回避）
+        if let cached = blockRelatedCache,
+           let time = blockRelatedCacheTime,
+           Date().timeIntervalSince(time) < blockCacheDuration {
+            return cached
+        }
+
         do {
             // Get users I blocked
             let blockedByMe = try await getBlockedUsers()
@@ -164,9 +187,12 @@ class FirestoreBlockManager {
             let blockedMe = try await getUsersWhoBlockedMe()
 
             // Combine both sets
-            let allBlockedUsers = Set(blockedByMe).union(Set(blockedMe))
+            let allBlockedUsers = Array(Set(blockedByMe).union(Set(blockedMe)))
 
-            return Array(allBlockedUsers)
+            blockRelatedCache = allBlockedUsers
+            blockRelatedCacheTime = Date()
+
+            return allBlockedUsers
         } catch {
             throw error
         }

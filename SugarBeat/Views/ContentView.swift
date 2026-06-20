@@ -6,7 +6,11 @@ struct ContentView: View {
     @EnvironmentObject var deepLinkManager: DeepLinkManager
     @StateObject private var screenshotMode = ScreenshotModeManager.shared
     @StateObject private var versionManager = AppVersionManager.shared
+    @StateObject private var playbackState = PlaybackStateManager.shared
     @State private var selectedTab = 0
+    // 同じタブを再タップしたときに「トップへ＋更新」を伝えるトリガー
+    @State private var discoveryReloadTrigger = 0
+    @State private var followingReloadTrigger = 0
     @State private var showingNotifications = false
     @State private var showingUserSearch = false
     @State private var showingLoginSheet = false
@@ -29,10 +33,23 @@ struct ContentView: View {
     var body: some View {
         let _ = print("🏠 ContentView body evaluated - selectedTab: \(selectedTab)")
 
+        // 同じタブの再タップを検知するカスタムバインディング
+        let tabSelection = Binding<Int>(
+            get: { selectedTab },
+            set: { newValue in
+                if newValue == selectedTab {
+                    // 既に選択中のタブを再タップ → そのタブに「トップへ＋更新」を通知
+                    if newValue == 0 { discoveryReloadTrigger += 1 }
+                    if newValue == 1 { followingReloadTrigger += 1 }
+                }
+                selectedTab = newValue
+            }
+        )
+
         ZStack {
-            TabView(selection: $selectedTab) {
+            TabView(selection: tabSelection) {
                 // 発見タブ（ホーム）
-                DiscoveryView()
+                DiscoveryView(reloadTrigger: discoveryReloadTrigger)
                     .tabItem {
                         Image(systemName: "safari")
                         Text("すべて")
@@ -40,7 +57,7 @@ struct ContentView: View {
                     .tag(0)
 
                 // フォロー中タブ
-                FollowingFeedView()
+                FollowingFeedView(reloadTrigger: followingReloadTrigger)
                     .tabItem {
                         Image(systemName: "person.2.fill")
                         Text("フォロー中")
@@ -147,6 +164,12 @@ struct ContentView: View {
                     // フラグをリセット
                     postCreated = false
                 }
+            }
+            // 再生中バー（ミニプレーヤー）をタブバーの少し上に表示
+            .overlay(alignment: .bottom) {
+                MiniPlayerBar()
+                    .padding(.bottom, 56) // タブバーの高さ分上げる
+                    .animation(.easeInOut(duration: 0.25), value: playbackState.currentlyPlayingPostId)
             }
         }
         .onAppear {
@@ -309,7 +332,7 @@ struct LoginRequiredView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            FlowingArtworkBackground()
 
             VStack(spacing: 20) {
                 Image(systemName: "person.crop.circle.badge.exclamationmark")

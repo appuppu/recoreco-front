@@ -89,8 +89,9 @@ struct NativeAdViewWrapper: UIViewRepresentable {
             mediaView.widthAnchor.constraint(greaterThanOrEqualToConstant: 120)
         ])
 
-        // MediaViewにアスペクト比制約を追加（1:1の正方形）
-        let aspectConstraint = mediaView.heightAnchor.constraint(equalTo: mediaView.widthAnchor, multiplier: 1.0)
+        // MediaViewにアスペクト比制約を追加（16:9の横長 = 縦幅を抑える）
+        // 高さ = 幅 × 9/16。最小120pt制約は上で維持しているため規約OK。
+        let aspectConstraint = mediaView.heightAnchor.constraint(equalTo: mediaView.widthAnchor, multiplier: 9.0 / 16.0)
         aspectConstraint.priority = .required
         aspectConstraint.isActive = true
 
@@ -229,7 +230,8 @@ struct NativeAdViewWrapper: UIViewRepresentable {
         )
 
         // 最小高さを保証（コンパクトな広告の場合）
-        let minHeight: CGFloat = 350
+        // メディアを16:9に縮めたぶん、最小高さも下げる
+        let minHeight: CGFloat = 240
         let finalHeight = max(size.height, minHeight)
 
         return CGSize(width: size.width, height: finalHeight)

@@ -27,8 +27,14 @@ class FirestoreLikeManager {
             return // Already liked
         }
 
-        // Add like (no batch needed since we're not updating post document)
-        try await likeRef.setData(["createdAt": FieldValue.serverTimestamp()])
+        // Add like + increment denormalized likeCount on the post (atomic batch)
+        // これにより、フィード表示時に likes サブコレクションを全件カウントせず
+        // Post ドキュメントの likeCount を読むだけで済む（読み取り回数を大幅削減）
+        let postRef = db.collection(postsCollection).document(postId)
+        let batch = db.batch()
+        batch.setData(["createdAt": FieldValue.serverTimestamp()], forDocument: likeRef)
+        batch.updateData(["likeCount": FieldValue.increment(Int64(1))], forDocument: postRef)
+        try await batch.commit()
         print("✅ Liked post: \(postId)")
 
         // Create notification
@@ -58,8 +64,18 @@ class FirestoreLikeManager {
             .collection("likes")
             .document(currentUserId)
 
-        // Remove like (no batch needed since we're not updating post document)
-        try await likeRef.delete()
+        // Only decrement if the like actually exists (avoid double-decrement /負の値)
+        let document = try await likeRef.getDocument()
+        guard document.exists else {
+            return // Not liked
+        }
+
+        // Remove like + decrement denormalized likeCount on the post (atomic batch)
+        let postRef = db.collection(postsCollection).document(postId)
+        let batch = db.batch()
+        batch.deleteDocument(likeRef)
+        batch.updateData(["likeCount": FieldValue.increment(Int64(-1))], forDocument: postRef)
+        try await batch.commit()
         print("✅ Unliked post: \(postId)")
     }
 

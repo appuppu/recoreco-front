@@ -4,7 +4,7 @@ import SwiftUI
 // Need to import Post model
 struct PlayingPostInfo {
     let post: Post
-    let user: User
+    let user: User? // 再生経路によっては未取得なので Optional
 }
 
 @MainActor
@@ -20,9 +20,8 @@ class PlaybackStateManager: ObservableObject {
     func startPlayback(for postId: String, userId: String?, post: Post, user: User?) {
         currentlyPlayingPostId = postId
         currentlyPlayingUserId = userId
-        if let user = user {
-            currentlyPlayingInfo = PlayingPostInfo(post: post, user: user)
-        }
+        // user が nil でも曲情報は表示できるよう、常に info をセットする
+        currentlyPlayingInfo = PlayingPostInfo(post: post, user: user)
     }
 
     func stopPlayback() {

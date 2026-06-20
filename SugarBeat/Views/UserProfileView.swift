@@ -180,7 +180,8 @@ struct UserProfileView: View {
                 }
             }
 
-            HStack(spacing: 12) {
+            // 上段: アイコン + ユーザー名 / bio
+            HStack(alignment: .top, spacing: 12) {
                 // プロフィール画像
                 AsyncImage(url: URL(string: user.profileImageUrl ?? "")) { image in
                     image
@@ -202,17 +203,62 @@ struct UserProfileView: View {
                     Text(user.username)
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
+                        .lineLimit(1)
 
                     if let bio = user.bio, !bio.isEmpty {
                         Text(bio)
                             .font(.system(size: 14))
                             .foregroundColor(.white.opacity(0.7))
+                            .lineLimit(2)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
 
-                Spacer()
+            // 中段: フォロー中 / フォロワー数（独立した行・幅を均等分割）
+            if let userId = user.id {
+                HStack(spacing: 0) {
+                    NavigationLink(destination: FollowListView(userId: userId, listType: .following)) {
+                        countItem(count: user.followingCount ?? 0, label: "フォロー中")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+
+                    Divider()
+                        .frame(height: 24)
+                        .overlay(Color.white.opacity(0.2))
+
+                    NavigationLink(destination: FollowListView(userId: userId, listType: .followers)) {
+                        countItem(count: user.followerCount ?? 0, label: "フォロワー")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+
+            // 下段: フォローボタン（自分以外）
+            if !isOwnProfile, let userId = user.id {
+                FollowButton(userId: userId, onChange: { _ in
+                    Task { await viewModel.loadUser(userId: userId) }
+                })
+                .frame(maxWidth: .infinity)
             }
         }
+    }
+
+    @ViewBuilder
+    private func countItem(count: Int, label: String) -> some View {
+        // 数字とラベルを横1行で表示。文字数で崩れないよう lineLimit(1) + fixedSize。
+        HStack(spacing: 4) {
+            Text("\(count)")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(.white)
+            Text(label)
+                .font(.system(size: 12))
+                .foregroundColor(.white.opacity(0.6))
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 
     // MARK: - Helper Views

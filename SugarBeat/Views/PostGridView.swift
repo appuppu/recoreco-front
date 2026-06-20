@@ -335,6 +335,11 @@ struct PostGridView: View {
             // Featured cellを完全に再作成するためにキーを更新
             featuredCellKey = UUID()
         }
+        .onChange(of: screenshotMode.isScreenshotMode) { _ in
+            // スクショモードの切り替え時（特に終了時）にFeatured cellを再作成し、
+            // アートワークがローディング状態のまま固まるのを防ぐ
+            featuredCellKey = UUID()
+        }
     }
 
     // MARK: - Grid Layout
@@ -709,6 +714,7 @@ struct FeaturedPostCellSimple: View {
     @Binding var showingLoginPrompt: Bool
     var isScreenshotMode: Bool = false
     var showUserInfo: Bool = true
+    var showDate: Bool = true // 投稿日時を表示するか（フィードでは非表示にする）
     let safeAreaTop: CGFloat
     @EnvironmentObject var authManager: AuthManager
     @StateObject private var musicKit = MusicKitManager.shared
@@ -795,14 +801,29 @@ struct FeaturedPostCellSimple: View {
             .background(Color.black.opacity(0.5))
             .cornerRadius(6)
 
-            Text(post.contentDescription ?? post.artistName ?? "")
-                .font(.system(size: 14))
-                .foregroundColor(.white.opacity(0.95))
-                .lineLimit(1)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Color.black.opacity(0.5))
-                .cornerRadius(6)
+            HStack(spacing: 6) {
+                Text(post.contentDescription ?? post.artistName ?? "")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.95))
+                    .lineLimit(1)
+
+                // アーティスト名で検索するボタン（artistName がある場合のみ）
+                if let artist = post.artistName, !artist.isEmpty {
+                    NavigationLink(destination: ArtistPostsView(artistName: artist)) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding(4)
+                            .background(Color.white.opacity(0.15))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.black.opacity(0.5))
+            .cornerRadius(6)
 
             // User info + post date (showUserInfoがtrueの場合のみ)
             if showUserInfo {
@@ -842,12 +863,14 @@ struct FeaturedPostCellSimple: View {
                                 .foregroundColor(.white.opacity(0.9))
                         }
 
-                        Text("・")
-                            .foregroundColor(.white.opacity(0.5))
+                        if showDate {
+                            Text("・")
+                                .foregroundColor(.white.opacity(0.5))
 
-                        Text(formatPostDate(post.createdAt))
-                            .font(.system(size: 11))
-                            .foregroundColor(.white.opacity(0.6))
+                            Text(formatPostDate(post.createdAt))
+                                .font(.system(size: 11))
+                                .foregroundColor(.white.opacity(0.6))
+                        }
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
@@ -1547,6 +1570,11 @@ struct ArtworkImageView: View {
         }
         .onAppear {
             setupInitialUrl()
+            // ビューが再表示されたとき（スクショモード終了後など）に
+            // AsyncImageがローディング状態のまま固まらないよう、強制的に作り直す
+            if currentUrl != nil, !hasError {
+                loadId = UUID()
+            }
         }
         .onChange(of: artworkUrl) { newUrl in
             // artworkUrlが実際に変わった場合のみ処理

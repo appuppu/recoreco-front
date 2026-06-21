@@ -16,9 +16,6 @@
 		12AC620833BF151FBC58EF26 /* FollowingFeedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0914B2CB716E6FF21D53C94C /* FollowingFeedView.swift */; };
 		16BA92C92F7746728D9F6E9E /* NativeAdViewWrapper.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3C05B9D23CC4593A1A77834 /* NativeAdViewWrapper.swift */; };
 		17ADB4A2E07454907F0AFF68 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A92F93301DAFB6745816E80D /* OnboardingView.swift */; };
-		AA0300012F70000000000001 /* FlowingArtworkBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0300002F70000000000001 /* FlowingArtworkBackground.swift */; };
-		AA0400012F70000000000001 /* ArtistPostsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0400002F70000000000001 /* ArtistPostsView.swift */; };
-		AA0500012F70000000000001 /* MiniPlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0500002F70000000000001 /* MiniPlayerBar.swift */; };
 		1BAC1A4AAB4C36BB2497768F /* LikeStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6EA5CCB0C2932678DC51B1B /* LikeStateManager.swift */; };
 		1EFBC98D8DC74E479CBA5E49 /* Report.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6817AA6DB43649AB8739BC1E /* Report.swift */; };
 		218AAA600F834B268CADEF0E /* FirestoreLikeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B4E6C4D8014EB3BF04BBAC /* FirestoreLikeManager.swift */; };
@@ -39,8 +36,6 @@
 		491FE0B773339BE0A5BE1522 /* AdBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3EB603CD42D8CCE67308F60 /* AdBannerView.swift */; };
 		4CABBE25B7EF099BB3BF10BA /* NotificationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2200803D3C80571A5A7547AB /* NotificationsView.swift */; };
 		4DFA5E2032F7D459A2F331C0 /* AuthManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */; };
-		AA0100012F70000000000001 /* AppVersionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100002F70000000000001 /* AppVersionManager.swift */; };
-		AA0100012F70000000000002 /* ForceUpdateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100002F70000000000002 /* ForceUpdateView.swift */; };
 		500539CDF61D417F811B0300 /* FirebaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0039B45C8875427DBFAABAC0 /* FirebaseConfig.swift */; };
 		5293E5DCAF836184BA11806E /* CommentStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA3351B47836AD31B921B1AA /* CommentStateManager.swift */; };
 		54E4C722674ADCAC481A8229 /* UserProfileViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C81162C40CE0C846263B8F88 /* UserProfileViewModel.swift */; };
@@ -58,7 +53,6 @@
 		6B5108AB7A294A14AC702616 /* FirestoreNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA80433F581F401CB93DE997 /* FirestoreNotificationManager.swift */; };
 		70EBAD49BB23436FA58C8C77 /* FeedAdCardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4441A73EE70A4C1A8DBE7B27 /* FeedAdCardView.swift */; };
 		73E2F498A8429AAF556F2666 /* FollowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 515336BF320DA0FF93EB8617 /* FollowListView.swift */; };
-		AA0200012F70000000000001 /* FollowButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200002F70000000000001 /* FollowButton.swift */; };
 		7899EBE611E54766AA7BDA02 /* FirestoreChannelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F182774B0DE42D3B8DB0796 /* FirestoreChannelManager.swift */; };
 		7E0D0D7D401DA7C39DFBDF64 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D4536DFDF93BD9B357F9A0D /* LoginView.swift */; };
 		80CB02F5B66A457595F0EC8B /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 94B0F86266FA462086693956 /* GoogleService-Info.plist */; };
@@ -77,6 +71,12 @@
 		A08CE987CDC74749AE99FB24 /* DeepLinkManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8ECEAF7D9DA47DEA03426EE /* DeepLinkManager.swift */; };
 		A39E64E77FC6445AB1A308F4 /* FirestoreCommentManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06E956426FBC4CD38102C6FC /* FirestoreCommentManager.swift */; };
 		A7E3C9F245B8D6E71F3A298C /* UsernameSetupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4D2F8A1C3E6B9D4F7A5C821E /* UsernameSetupView.swift */; };
+		AA0100012F70000000000001 /* AppVersionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100002F70000000000001 /* AppVersionManager.swift */; };
+		AA0100012F70000000000002 /* ForceUpdateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0100002F70000000000002 /* ForceUpdateView.swift */; };
+		AA0200012F70000000000001 /* FollowButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0200002F70000000000001 /* FollowButton.swift */; };
+		AA0300012F70000000000001 /* FlowingArtworkBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0300002F70000000000001 /* FlowingArtworkBackground.swift */; };
+		AA0400012F70000000000001 /* ArtistPostsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0400002F70000000000001 /* ArtistPostsView.swift */; };
+		AA0500012F70000000000001 /* MiniPlayerBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0500002F70000000000001 /* MiniPlayerBar.swift */; };
 		AA1B69BE32110332D191F683 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD72D37F34C087EDA9BBCBDF /* ContentView.swift */; };
 		AA9CC3D52A6C4F22A418DB4A /* ProfileShareView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C0A5F9CF0CC4A9FA02FF35A /* ProfileShareView.swift */; };
 		AB8F0D4566B742878A0E179E /* FirebaseConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 770CE8E7CBC94E1095B2F917 /* FirebaseConfig.swift */; };
@@ -149,7 +149,6 @@
 		4FE9F9756265FB4681327DAF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		50665AC366864756833172F5 /* FirestorePostManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestorePostManager.swift; sourceTree = "<group>"; };
 		515336BF320DA0FF93EB8617 /* FollowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowListView.swift; sourceTree = "<group>"; };
-		AA0200002F70000000000001 /* FollowButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowButton.swift; sourceTree = "<group>"; };
 		5553547BD0C745B6ADB18387 /* FirestoreBlockManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreBlockManager.swift; sourceTree = "<group>"; };
 		5EC006309F1FF7C328CBEB44 /* SugarBeatApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SugarBeatApp.swift; sourceTree = "<group>"; };
 		5F182774B0DE42D3B8DB0796 /* FirestoreChannelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreChannelManager.swift; sourceTree = "<group>"; };
@@ -179,6 +178,9 @@
 		A8CCFD4A0FFF49A5ABC211A7 /* FirestoreListenerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreListenerManager.swift; sourceTree = "<group>"; };
 		A8ECEAF7D9DA47DEA03426EE /* DeepLinkManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeepLinkManager.swift; sourceTree = "<group>"; };
 		A92F93301DAFB6745816E80D /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		AA0100002F70000000000001 /* AppVersionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersionManager.swift; sourceTree = "<group>"; };
+		AA0100002F70000000000002 /* ForceUpdateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForceUpdateView.swift; sourceTree = "<group>"; };
+		AA0200002F70000000000001 /* FollowButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FollowButton.swift; sourceTree = "<group>"; };
 		AA0300002F70000000000001 /* FlowingArtworkBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowingArtworkBackground.swift; sourceTree = "<group>"; };
 		AA0400002F70000000000001 /* ArtistPostsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtistPostsView.swift; sourceTree = "<group>"; };
 		AA0500002F70000000000001 /* MiniPlayerBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniPlayerBar.swift; sourceTree = "<group>"; };
@@ -191,8 +193,6 @@
 		B67DBDFBDE6E03EEC51C977B /* UserPostsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserPostsListView.swift; sourceTree = "<group>"; };
 		B9B44FE0D813461990375E22 /* FirestoreUserManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirestoreUserManager.swift; sourceTree = "<group>"; };
 		BEF833FDBBEE9FB9BFB18595 /* AuthManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthManager.swift; sourceTree = "<group>"; };
-		AA0100002F70000000000001 /* AppVersionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersionManager.swift; sourceTree = "<group>"; };
-		AA0100002F70000000000002 /* ForceUpdateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForceUpdateView.swift; sourceTree = "<group>"; };
 		C378DB4AD0334A309B2C6297 /* FeedAdManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedAdManager.swift; sourceTree = "<group>"; };
 		C415517CCB48A5524C16BEFC /* CreatePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostView.swift; sourceTree = "<group>"; };
 		C81162C40CE0C846263B8F88 /* UserProfileViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileViewModel.swift; sourceTree = "<group>"; };

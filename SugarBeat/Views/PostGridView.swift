@@ -1604,8 +1604,34 @@ struct ArtworkImageView: View {
             return
         }
 
-        // 元のURLをそのまま使用（最初のリトライ）
-        currentUrl = URL(string: urlString)
+        // パフォーマンス改善: 表示するセルのサイズに合わせてアートワークを縮小して要求する。
+        // 保存されているURLは600x600などの高解像度だが、小さなグリッドセルでは
+        // フルサイズ画像を展開するとメモリ・CPU・帯域を浪費するため、
+        // セルサイズ × 画面スケールに合わせたサイズのURLに書き換える。
+        if let targetSize = optimalPixelSize() {
+            currentUrl = URL(string: processArtworkUrl(urlString, size: targetSize))
+        } else {
+            // サイズ指定がない場合は元のURLをそのまま使用
+            currentUrl = URL(string: urlString)
+        }
+    }
+
+    /// 表示サイズ（pt）と画面スケールから、要求すべきアートワークのピクセルサイズを算出する。
+    /// width/height のどちらも指定がない場合は nil（＝オリジナルサイズを使う）。
+    private func optimalPixelSize() -> Int? {
+        let points = max(width ?? 0, height ?? 0)
+        guard points > 0 else { return nil }
+
+        let scale = UIScreen.main.scale
+        let pixels = points * scale
+
+        // 小刻みなサイズ変更でCDNキャッシュが分散しないよう、代表的なバケットに丸める。
+        let buckets = [100, 150, 200, 300, 400, 600]
+        for bucket in buckets where CGFloat(bucket) >= pixels {
+            return bucket
+        }
+        // セルが大きい場合は元の保存サイズ（最大600想定）で十分
+        return nil
     }
 
     private func retryWithDifferentSize() {

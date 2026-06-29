@@ -12,8 +12,6 @@ struct Compose42View: View {
     @Environment(\.dismiss) var dismiss
 
     @State private var showingCloseConfirmation = false
-    @State private var showingLoginPromotion = false
-    @State private var isLoadingAd = false
 
     var body: some View {
         ZStack {
@@ -32,20 +30,11 @@ struct Compose42View: View {
                 SelectionView(
                     viewModel: viewModel,
                     onClose: {
-                        // 編集画面のバツボタン: 直接広告を表示して閉じる
+                        // 編集画面のバツボタン: 即座に閉じる
                         print("🎬 [Compose42View] SelectionView close button pressed")
                         handleClose()
                     }
                 )
-            }
-
-            // Loading indicator
-            if isLoadingAd {
-                Color.black.opacity(0.5)
-                    .ignoresSafeArea()
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.5)
             }
         }
         .confirmationDialog("", isPresented: $showingCloseConfirmation, titleVisibility: .hidden) {
@@ -58,73 +47,12 @@ struct Compose42View: View {
                 handleClose()
             }
         }
-        .alert("ログインすると便利！", isPresented: $showingLoginPromotion) {
-            Button("OK") {
-                showAdAndDismiss()
-            }
-        } message: {
-            Text("ログインすると投稿した音楽から私を構成する42枚が作成できます！")
-        }
     }
 
     private func handleClose() {
-        print("🎬 [Compose42View] handleClose called, isAuthenticated: \(authManager.isAuthenticated)")
-        if authManager.isAuthenticated {
-            // ログイン済み: 直接広告表示
-            showAdAndDismiss()
-        } else {
-            // 未ログイン: ログイン促進メッセージ表示
-            print("🎬 [Compose42View] Showing login promotion alert")
-            showingLoginPromotion = true
-        }
-    }
-
-    private func showAdAndDismiss() {
-        print("🎬 [Compose42View] showAdAndDismiss called")
-        let adManager = InterstitialAdManager.shared
-        print("🎬 [Compose42View] Ad manager isLoading: \(adManager.isLoading), isAdReady: \(adManager.isAdReady)")
-
-        // ローディング表示
-        isLoadingAd = true
-        print("🎬 [Compose42View] Loading indicator shown")
-
-        // 0.3秒後に画面を閉じる
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            print("🎬 [Compose42View] Dismissing view")
-            self.dismiss()
-        }
-
-        // 画面が完全に閉じるのを待ってから広告を表示（1.5秒待機）
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-            print("🎬 [Compose42View] Attempting to show ad after dismiss")
-
-            // 広告が既にロード済みの場合はすぐに表示
-            if adManager.isAdReady {
-                print("🎬 [Compose42View] Ad is ready, showing immediately")
-                if let rootVC = adManager.getRootViewController() {
-                    adManager.show(from: rootVC)
-                    print("🎬 [Compose42View] Ad show requested")
-                } else {
-                    print("🎬 [Compose42View] ❌ rootViewController is nil")
-                }
-            } else {
-                // 広告をロードして表示
-                print("🎬 [Compose42View] Ad not ready, loading...")
-                adManager.load()
-
-                // ロード完了を待って表示
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                    print("🎬 [Compose42View] After load wait, isAdReady: \(adManager.isAdReady)")
-
-                    if adManager.isAdReady, let rootVC = adManager.getRootViewController() {
-                        adManager.show(from: rootVC)
-                        print("🎬 [Compose42View] Ad show requested after load")
-                    } else {
-                        print("🎬 [Compose42View] ❌ Ad not ready after load or rootVC is nil")
-                    }
-                }
-            }
-        }
+        // 広告は表示せず即座に閉じる（プロフィール経由のためログイン済み前提）
+        print("🎬 [Compose42View] handleClose - dismissing without ad")
+        dismiss()
     }
 }
 
@@ -139,34 +67,73 @@ struct SelectionView: View {
                 Color.black.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    // Search Bar
-                    SearchBarView(
-                        searchQuery: $viewModel.searchQuery,
-                        onSearch: {
-                            Task {
-                                await viewModel.searchMusic()
-                            }
+                    // Source picker: 検索 / 自分の投稿
+                    Picker("取得元", selection: $viewModel.source) {
+                        ForEach(ComposeSource.allCases, id: \.self) { src in
+                            Text(src.rawValue).tag(src)
                         }
-                    )
-                    .padding()
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .padding(.top)
+                    .onChange(of: viewModel.source) { newSource in
+                        if newSource == .myPosts {
+                            Task { await viewModel.loadMyPosts() }
+                        }
+                    }
 
-                    // Search Results
-                    if !viewModel.searchResults.isEmpty {
-                        SearchResultsListView(
-                            results: viewModel.searchResults,
+                    if viewModel.source == .search {
+                        // Search Bar
+                        SearchBarView(
+                            searchQuery: $viewModel.searchQuery,
+                            onSearch: {
+                                Task {
+                                    await viewModel.searchMusic()
+                                }
+                            }
+                        )
+                        .padding()
+
+                        // Search Results
+                        if !viewModel.searchResults.isEmpty {
+                            SearchResultsListView(
+                                results: viewModel.searchResults,
+                                selectedTracks: viewModel.selectedTracks,
+                                currentPlayingId: viewModel.currentPlayingTrackId,
+                                onAdd: { song in
+                                    viewModel.addTrack(song)
+                                },
+                                onPlay: { song in
+                                    let track = SelectedTrack(from: song)
+                                    Task {
+                                        await viewModel.playPreview(for: track)
+                                    }
+                                },
+                                onStopPlay: {
+                                    viewModel.stopPreview()
+                                }
+                            )
+                            .frame(height: 250)
+                        }
+                    } else {
+                        // My posts list
+                        MyPostsListView(
+                            posts: viewModel.myPosts,
+                            isLoading: viewModel.isLoadingMyPosts,
                             selectedTracks: viewModel.selectedTracks,
                             currentPlayingId: viewModel.currentPlayingTrackId,
-                            onAdd: { song in
-                                viewModel.addTrack(song)
+                            onAdd: { post in
+                                viewModel.addTrack(from: post)
                             },
-                            onPlay: { song in
-                                let track = SelectedTrack(from: song)
+                            onPlay: { post in
+                                let track = SelectedTrack(from: post)
                                 Task {
-                                    await viewModel.playPreview(for: track)
+                                    if viewModel.currentPlayingTrackId == track.id {
+                                        viewModel.stopPreview()
+                                    } else {
+                                        await viewModel.playPreview(for: track)
+                                    }
                                 }
-                            },
-                            onStopPlay: {
-                                viewModel.stopPreview()
                             }
                         )
                         .frame(height: 250)
@@ -326,6 +293,126 @@ struct SearchResultsListView: View {
                 }
             }
             .background(Color.white.opacity(0.05))
+        }
+    }
+}
+
+// MARK: - My Posts List View
+struct MyPostsListView: View {
+    let posts: [Post]
+    let isLoading: Bool
+    let selectedTracks: [SelectedTrack]
+    let currentPlayingId: String?
+    let onAdd: (Post) -> Void
+    let onPlay: (Post) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("自分の投稿")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.white.opacity(0.7))
+                .padding(.horizontal)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+
+            if isLoading {
+                Spacer()
+                HStack { Spacer(); ProgressView().tint(.white); Spacer() }
+                Spacer()
+            } else if posts.isEmpty {
+                Spacer()
+                Text("投稿がありません")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.5))
+                    .frame(maxWidth: .infinity)
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(posts) { post in
+                            let trackId = post.appleMusicTrackId ?? (post.id ?? "")
+                            let isAdded = selectedTracks.contains(where: { $0.id == trackId })
+                            MyPostRow(
+                                post: post,
+                                isAdded: isAdded,
+                                isPlaying: currentPlayingId == trackId,
+                                onAdd: { onAdd(post) },
+                                onPlay: { onPlay(post) }
+                            )
+                            .padding(.horizontal)
+                            .padding(.vertical, 8)
+                        }
+                    }
+                }
+                .background(Color.white.opacity(0.05))
+            }
+        }
+    }
+}
+
+// MARK: - My Post Row
+struct MyPostRow: View {
+    let post: Post
+    let isAdded: Bool
+    let isPlaying: Bool
+    let onAdd: () -> Void
+    let onPlay: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Artwork（最適化済みのArtworkImageViewで小さく要求）
+            ArtworkImageView(
+                artworkUrl: post.artworkUrl,
+                placeholder: "music.note",
+                width: 50,
+                height: 50
+            )
+            .frame(width: 50, height: 50)
+            .cornerRadius(6)
+            .clipped()
+
+            // Info
+            VStack(alignment: .leading, spacing: 4) {
+                Text(post.trackName ?? "(タイトルなし)")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+
+                Text(post.artistName ?? "")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.6))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            // Play Button（プレビューがある場合のみ）
+            if post.previewUrl != nil {
+                Button {
+                    onPlay()
+                } label: {
+                    Image(systemName: isPlaying ? "stop.fill" : "play.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white)
+                        .frame(width: 36, height: 36)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(18)
+                }
+            }
+
+            // Add Button
+            Button {
+                onAdd()
+            } label: {
+                Image(systemName: isAdded ? "checkmark.circle.fill" : "plus.circle.fill")
+                    .font(.system(size: 24))
+                    .foregroundStyle(
+                        isAdded
+                        ? LinearGradient(colors: [Color.gray, Color.gray], startPoint: .leading, endPoint: .trailing)
+                        : LinearGradient(colors: [Color.purple, Color.pink], startPoint: .leading, endPoint: .trailing)
+                    )
+            }
+            .disabled(isAdded)
         }
     }
 }

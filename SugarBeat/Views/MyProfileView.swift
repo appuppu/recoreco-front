@@ -16,6 +16,7 @@ struct MyProfileView: View {
     @State private var showingScreenshotTip = false
     @State private var showingSettings = false
     @State private var showingShareScreen = false
+    @State private var showingCompose42 = false
     @State private var isArtworkOnlyMode = false
     @State private var scrollOffset: CGFloat = 0
     @State private var headerHeight: CGFloat = 0
@@ -359,6 +360,10 @@ struct MyProfileView: View {
             .sheet(isPresented: $showingShareScreen) {
                 ProfileShareView(authManager: authManager)
             }
+            .fullScreenCover(isPresented: $showingCompose42) {
+                Compose42View()
+                    .environmentObject(authManager)
+            }
             .onChange(of: isArtworkOnlyMode) { newValue in
                 // スクショモードを終了した時に選択状態をリセット
                 if !newValue {
@@ -497,6 +502,33 @@ struct MyProfileView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
+            }
+
+            // 「私を構成する42枚」ボタン（ログイン必須）
+            Button(action: {
+                if authManager.isAuthenticated {
+                    showingCompose42 = true
+                } else {
+                    showingLoginPrompt = true
+                }
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "square.grid.3x3.fill")
+                        .font(.system(size: 14))
+                    Text("私を構成する42枚")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [Color(hex: "cc208e"), Color(hex: "6713d2")]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(10)
             }
         }
         .background(

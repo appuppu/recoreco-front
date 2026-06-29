@@ -5,10 +5,17 @@
 
 import Foundation
 import MusicKit
+import FirebaseAuth
 
 enum LayoutType: String, CaseIterable {
     case vertical = "縦画面(Instagramなど)"
     case horizontal = "横画面(Xなど)"
+}
+
+/// 選曲の取得元
+enum ComposeSource: String, CaseIterable {
+    case search = "検索"
+    case myPosts = "自分の投稿"
 }
 
 struct SelectedTrack: Identifiable, Equatable {
@@ -16,7 +23,10 @@ struct SelectedTrack: Identifiable, Equatable {
     let title: String
     let artist: String
     let artworkURL: URL?
-    let song: Song
+    /// 検索由来の場合はMusicKitのSong（プレビュー再生に使用）。自分の投稿由来の場合はnil。
+    let song: Song?
+    /// 自分の投稿由来の場合に保持するプレビューURL（MusicKit再解決を避ける）。
+    let previewUrlString: String?
 
     init(from song: Song) {
         self.id = song.id.rawValue
@@ -24,6 +34,23 @@ struct SelectedTrack: Identifiable, Equatable {
         self.artist = song.artistName
         self.artworkURL = song.artwork?.url(width: 600, height: 600)
         self.song = song
+        self.previewUrlString = song.previewAssets?.first?.url?.absoluteString
+    }
+
+    /// 自分の投稿（Post）からトラックを生成する。
+    /// 保存済みの artworkUrl をそのまま使い、MusicKitでの再解決は行わない（パフォーマンス維持のため）。
+    init(from post: Post) {
+        // appleMusicTrackId があればそれをID、なければ投稿IDで一意化
+        self.id = post.appleMusicTrackId ?? (post.id ?? UUID().uuidString)
+        self.title = post.trackName ?? "(タイトルなし)"
+        self.artist = post.artistName ?? ""
+        self.artworkURL = post.artworkUrl.flatMap { URL(string: $0) }
+        self.song = nil
+        self.previewUrlString = post.previewUrl
+    }
+
+    static func == (lhs: SelectedTrack, rhs: SelectedTrack) -> Bool {
+        lhs.id == rhs.id
     }
 }
 
@@ -41,10 +68,18 @@ class Compose42ViewModel: ObservableObject {
         }
     }
 
+    // Source toggle: 検索 or 自分の投稿
+    @Published var source: ComposeSource = .search
+
     // Search
     @Published var searchQuery: String = ""
     @Published var searchResults: [Song] = []
     @Published var isSearching: Bool = false
+
+    // My posts
+    @Published var myPosts: [Post] = []
+    @Published var isLoadingMyPosts: Bool = false
+    private var myPostsLoaded = false
 
     // Playback
     @Published var currentPlayingTrackId: String? = nil
@@ -96,13 +131,48 @@ class Compose42ViewModel: ObservableObject {
         }
     }
 
+    /// 自分の投稿一覧を取得する。保存済みの artworkUrl をそのまま使うため、
+    /// MusicKitでの再解決は行わない（アルバムアート表示のパフォーマンス維持）。
+    func loadMyPosts(forceRefresh: Bool = false) async {
+        guard !isLoadingMyPosts else { return }
+        if myPostsLoaded && !forceRefresh { return }
+
+        guard let currentUserId = Auth.auth().currentUser?.uid else {
+            print("⚠️ [Compose42] loadMyPosts: not authenticated")
+            return
+        }
+
+        isLoadingMyPosts = true
+        defer { isLoadingMyPosts = false }
+
+        do {
+            // 多めに取得して42枚を選びやすくする（音楽投稿のみ対象）
+            let (fetchedPosts, _) = try await FirestorePostManager.shared.getUserPosts(userId: currentUserId, limit: 100)
+            myPosts = fetchedPosts
+                .filter { ($0.contentType ?? ContentType.music.rawValue) == ContentType.music.rawValue }
+                .filter { $0.artworkUrl != nil }
+                .sorted { $0.createdAt > $1.createdAt }
+            myPostsLoaded = true
+            print("✅ [Compose42] Loaded \(myPosts.count) of my music posts")
+        } catch {
+            print("❌ [Compose42] Failed to load my posts: \(error)")
+        }
+    }
+
     func addTrack(_ song: Song) {
+        appendTrack(SelectedTrack(from: song))
+    }
+
+    /// 自分の投稿からトラックを追加する。
+    func addTrack(from post: Post) {
+        appendTrack(SelectedTrack(from: post))
+    }
+
+    private func appendTrack(_ track: SelectedTrack) {
         guard selectedTracks.count < maxTracks else {
             print("⚠️ [Compose42] Cannot add more tracks, limit reached")
             return
         }
-
-        let track = SelectedTrack(from: song)
 
         // Check if already added
         guard !selectedTracks.contains(where: { $0.id == track.id }) else {
@@ -128,7 +198,8 @@ class Compose42ViewModel: ObservableObject {
     }
 
     func playPreview(for track: SelectedTrack) async {
-        guard let previewURL = track.song.previewAssets?.first?.url?.absoluteString else {
+        // 検索由来はSongから、自分の投稿由来は保存済みのpreviewUrlから取得
+        guard let previewURL = track.previewUrlString ?? track.song?.previewAssets?.first?.url?.absoluteString else {
             print("⚠️ [Compose42] No preview available for: \(track.title)")
             return
         }
@@ -164,6 +235,7 @@ class Compose42ViewModel: ObservableObject {
         searchResults = []
         isShowingPreview = false
         stopPreview()
+        // 自分の投稿・取得元はリセットしない（再取得コストを避けるため保持）
         print("🔄 [Compose42] Reset")
     }
 }
